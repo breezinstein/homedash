@@ -104,6 +104,45 @@
             color: var(--text-secondary);
         }
 
+        .sync-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0.75rem;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            font-size: 0.75rem;
+            min-width: 200px;
+        }
+
+        .sync-text {
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sync-button {
+            background: none;
+            border: none;
+            color: inherit;
+            cursor: pointer;
+            padding: 0.25rem;
+            border-radius: 0.25rem;
+            transition: background-color 0.2s;
+        }
+
+        .sync-button:hover {
+            background: var(--border-color);
+        }
+
+        .text-green-400 { color: #10b981; }
+        .text-yellow-400 { color: #f59e0b; }
+        .text-blue-400 { color: #3b82f6; }
+        .text-red-400 { color: #ef4444; }
+        .text-gray-400 { color: #9ca3af; }
+
         .btn {
             padding: 0.75rem 1.5rem;
             border: none;
@@ -527,6 +566,25 @@
         <header class="header">
             <h1>🏠 Homelab Dashboard</h1>
             <div class="header-controls">
+                <!-- Sync Status -->
+                <div class="sync-status" :class="syncStatusClass" x-show="syncStatus !== 'checking'">
+                    <i class="fas" :class="{
+                        'fa-cloud-upload-alt': syncStatus === 'online',
+                        'fa-wifi': syncStatus === 'offline',
+                        'fa-sync fa-spin': syncStatus === 'syncing',
+                        'fa-exclamation-triangle': syncStatus === 'error'
+                    }"></i>
+                    <span x-text="syncStatusText" class="sync-text"></span>
+                    <button 
+                        x-show="serverAvailable" 
+                        @click="forceSync()" 
+                        class="sync-button"
+                        title="Force sync"
+                    >
+                        <i class="fas fa-refresh"></i>
+                    </button>
+                </div>
+                
                 <!-- Search -->
                 <div class="search-container">
                     <i class="fas fa-search search-icon"></i>
@@ -772,6 +830,15 @@
                 currentDate: '',
                 gridColumns: 4,
                 
+                // Server connection state
+                serverAvailable: false,
+                serverUrl: window.location.origin,
+                syncStatus: 'checking', // 'checking', 'online', 'offline', 'syncing', 'error'
+                lastSync: null,
+                autoSync: true,
+                syncInterval: 30000, // 30 seconds
+                syncTimer: null,
+                
                 // Context menu
                 contextMenu: {
                     show: false,
@@ -820,12 +887,39 @@
                     );
                 },
                 
+                get syncStatusText() {
+                    switch (this.syncStatus) {
+                        case 'checking': return 'Checking server...';
+                        case 'online': return `Server connected${this.lastSync ? ' • Last sync: ' + new Date(this.lastSync).toLocaleTimeString() : ''}`;
+                        case 'offline': return 'Using local storage';
+                        case 'syncing': return 'Syncing...';
+                        case 'error': return 'Sync error';
+                        default: return 'Unknown status';
+                    }
+                },
+                
+                get syncStatusClass() {
+                    switch (this.syncStatus) {
+                        case 'online': return 'text-green-400';
+                        case 'offline': return 'text-yellow-400';
+                        case 'syncing': return 'text-blue-400';
+                        case 'error': return 'text-red-400';
+                        default: return 'text-gray-400';
+                    }
+                },
+                
                 // Initialization
-                init() {
-                    this.loadData();
+                async init() {
+                    await this.checkServerAvailability();
+                    await this.loadData();
                     this.updateTime();
                     this.updateGridColumns();
                     setInterval(() => this.updateTime(), 1000);
+                    
+                    // Setup auto-sync if server is available
+                    if (this.serverAvailable && this.autoSync) {
+                        this.startAutoSync();
+                    }
                     
                     // Keyboard shortcuts
                     document.addEventListener('keydown', (e) => {
@@ -842,10 +936,76 @@
                     // Hide context menu on scroll or click
                     document.addEventListener('click', () => this.hideContextMenu());
                     document.addEventListener('scroll', () => this.hideContextMenu());
+                    
+                    // Handle online/offline events
+                    window.addEventListener('online', () => this.handleConnectionChange());
+                    window.addEventListener('offline', () => this.handleConnectionChange());
                 },
                 
-                // Data management
-                loadData() {
+                // Server availability check
+                async checkServerAvailability() {
+                    try {
+                        this.syncStatus = 'checking';
+                        const response = await fetch(`${this.serverUrl}/api/health`, {
+                            method: 'GET',
+                            headers: { 'Content-Type': 'application/json' }
+                        });
+                        
+                        if (response.ok) {
+                            this.serverAvailable = true;
+                            this.syncStatus = 'online';
+                            console.log('✅ Server connection established');
+                            return true;
+                        } else {
+                            throw new Error(`Server responded with ${response.status}`);
+                        }
+                    } catch (error) {
+                        this.serverAvailable = false;
+                        this.syncStatus = 'offline';
+                        console.log('🔸 Server not available, using local storage:', error.message);
+                        return false;
+                    }
+                },
+                
+                // Data management with hybrid storage
+                async loadData() {
+                    if (this.serverAvailable) {
+                        try {
+                            await this.loadFromServer();
+                        } catch (error) {
+                            console.warn('Failed to load from server, falling back to localStorage:', error);
+                            this.loadFromLocalStorage();
+                        }
+                    } else {
+                        this.loadFromLocalStorage();
+                    }
+                },
+                
+                async loadFromServer() {
+                    this.syncStatus = 'syncing';
+                    const response = await fetch(`${this.serverUrl}/api/config`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server error: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        const config = result.data;
+                        this.services = config.services || [];
+                        this.collapsedCategories = config.collapsedCategories || [];
+                        this.gridColumns = config.gridColumns || 4;
+                        this.lastSync = Date.now();
+                        this.syncStatus = 'online';
+                        
+                        // Also save to localStorage as backup
+                        this.saveToLocalStorage();
+                    } else {
+                        throw new Error(result.error || 'Unknown server error');
+                    }
+                },
+                
+                loadFromLocalStorage() {
                     const saved = localStorage.getItem('homedash-config');
                     if (saved) {
                         const config = JSON.parse(saved);
@@ -930,13 +1090,110 @@
                     }
                 },
                 
-                saveData() {
+                async saveData() {
+                    if (this.serverAvailable) {
+                        try {
+                            await this.saveToServer();
+                        } catch (error) {
+                            console.warn('Failed to save to server, saving locally:', error);
+                            this.saveToLocalStorage();
+                        }
+                    } else {
+                        this.saveToLocalStorage();
+                    }
+                },
+                
+                async saveToServer() {
+                    this.syncStatus = 'syncing';
+                    const config = {
+                        services: this.services,
+                        collapsedCategories: this.collapsedCategories,
+                        gridColumns: this.gridColumns,
+                        metadata: {
+                            lastModified: new Date().toISOString(),
+                            version: '1.0.0'
+                        }
+                    };
+                    
+                    const response = await fetch(`${this.serverUrl}/api/config`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(config)
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`Server error: ${response.status}`);
+                    }
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        this.lastSync = Date.now();
+                        this.syncStatus = 'online';
+                        
+                        // Also save to localStorage as backup
+                        this.saveToLocalStorage();
+                    } else {
+                        throw new Error(result.error || 'Unknown server error');
+                    }
+                },
+                
+                saveToLocalStorage() {
                     const config = {
                         services: this.services,
                         collapsedCategories: this.collapsedCategories,
                         gridColumns: this.gridColumns
                     };
                     localStorage.setItem('homedash-config', JSON.stringify(config));
+                },
+                
+                // Auto-sync functionality
+                startAutoSync() {
+                    if (this.syncTimer) {
+                        clearInterval(this.syncTimer);
+                    }
+                    
+                    this.syncTimer = setInterval(async () => {
+                        if (this.serverAvailable && this.autoSync) {
+                            try {
+                                await this.checkServerAvailability();
+                                if (this.serverAvailable) {
+                                    await this.loadFromServer();
+                                }
+                            } catch (error) {
+                                console.warn('Auto-sync failed:', error);
+                            }
+                        }
+                    }, this.syncInterval);
+                },
+                
+                stopAutoSync() {
+                    if (this.syncTimer) {
+                        clearInterval(this.syncTimer);
+                        this.syncTimer = null;
+                    }
+                },
+                
+                async handleConnectionChange() {
+                    if (navigator.onLine) {
+                        await this.checkServerAvailability();
+                        if (this.serverAvailable && this.autoSync) {
+                            this.startAutoSync();
+                        }
+                    } else {
+                        this.serverAvailable = false;
+                        this.syncStatus = 'offline';
+                        this.stopAutoSync();
+                    }
+                },
+                
+                async forceSync() {
+                    if (!this.serverAvailable) {
+                        await this.checkServerAvailability();
+                    }
+                    
+                    if (this.serverAvailable) {
+                        await this.loadFromServer();
+                    }
                 },
                 
                 // Service management

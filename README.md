@@ -25,10 +25,77 @@ A modern, responsive dashboard for managing homelab services with a clean and in
 
 ## Quick Start
 
+### Option 1: Client-Only Mode (Static Files)
 1. **Open the dashboard**: Simply open `index.html` in any modern web browser
 2. **Add services**: Click "Add Service" to add your homelab services
 3. **Organize**: Create categories and organize your services
 4. **Customize**: Adjust grid columns and export your configuration
+
+### Option 2: Server Mode (Multi-Device Sync)
+1. **Install dependencies**: `cd server && npm install`
+2. **Start the server**: `npm start`
+3. **Access dashboard**: Open `http://localhost:3001` in your browser
+4. **Enjoy sync**: Your configuration automatically syncs across all devices
+
+## 🌐 Server-Side Storage
+
+Homedash supports **hybrid storage** with automatic fallback between server and local storage:
+
+### Features
+- **🔄 Multi-Device Sync**: Configuration syncs across all your devices
+- **📱 Hybrid Mode**: Automatically detects server availability
+- **💾 Local Backup**: Always maintains localStorage backup
+- **🔒 Secure**: Rate-limited API with security headers
+- **📊 Backup System**: Automatic configuration backups
+- **⚡ Real-time Status**: Live sync status indicator
+
+### Server API
+The server provides a REST API for configuration management:
+
+```bash
+# Health check
+GET /api/health
+
+# Configuration management
+GET /api/config           # Get current configuration
+POST /api/config          # Save complete configuration
+
+# Service management
+GET /api/services         # List all services
+POST /api/services        # Add new service
+PUT /api/services/:name   # Update existing service
+DELETE /api/services/:name # Delete service
+
+# Backup management
+GET /api/backups          # List available backups
+GET /api/backups/:file    # Download backup file
+POST /api/backup          # Create manual backup
+
+# Settings
+PATCH /api/settings       # Update settings only
+```
+
+### Docker Deployment
+
+```bash
+# Using Docker Compose (recommended)
+docker-compose up -d
+
+# Or build manually
+docker build -t homedash .
+docker run -p 3001:3001 -v homedash-data:/app/server/data homedash
+```
+
+### Environment Configuration
+
+Copy `.env.example` to `.env` and configure:
+
+```bash
+NODE_ENV=production
+PORT=3001
+MAX_BACKUPS=10
+AUTO_BACKUP=true
+```
 
 ## Default Services
 
