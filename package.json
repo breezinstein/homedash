@@ -1,0 +1,31 @@
+{
+  "name": "homedash",
+  "version": "1.0.0",
+  "description": "A modern, responsive dashboard for managing homelab services",
+  "main": "index.html",
+  "scripts": {
+    "start": "python -m http.server 8000",
+    "serve": "python -m http.server 8000",
+    "dev": "python -m http.server 8000"
+  },
+  "keywords": [
+    "homelab",
+    "dashboard",
+    "self-hosted",
+    "services",
+    "alpine.js",
+    "responsive"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "homepage": "https://github.com/yourusername/homedash#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yourusername/homedash.git"
+  },
+  "bugs": {
+    "url": "https://github.com/yourusername/homedash/issues"
+  },
+  "devDependencies": {},
+  "dependencies": {}
+}

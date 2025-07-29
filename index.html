@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homelab Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏠</text></svg>">
+    
+    <!-- Icon Libraries -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
+    <!-- Alpine.js -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
+    
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #64748b;
+            --background-color: #0f172a;
+            --surface-color: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --border-color: #334155;
+            --accent-color: #3b82f6;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            
+            --grid-columns: 4;
+            --card-gap: 1.5rem;
+            --border-radius: 0.75rem;
+            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--background-color);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            flex-wrap: wrap;
+            gap: 1rem;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .search-container {
+            position: relative;
+            min-width: 300px;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 0.75rem 1rem 0.75rem 2.5rem;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 0.75rem;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--surface-color);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .widgets-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: var(--card-gap);
+            margin-bottom: 2rem;
+        }
+
+        .widget {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+        }
+
+        .widget h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .clock {
+            text-align: center;
+        }
+
+        .clock-time {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .clock-date {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .weather-placeholder {
+            text-align: center;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .bookmarks {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .bookmark-link {
+            color: var(--accent-color);
+            text-decoration: none;
+            padding: 0.5rem;
+            border-radius: 0.5rem;
+            transition: background 0.2s;
+        }
+
+        .bookmark-link:hover {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .services-section {
+            margin-bottom: 2rem;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+            cursor: pointer;
+            padding: 0.5rem 0;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-toggle {
+            color: var(--text-secondary);
+            transition: transform 0.2s;
+        }
+
+        .section-toggle.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .services-grid {
+            display: grid;
+            grid-template-columns: repeat(var(--grid-columns), 1fr);
+            gap: var(--card-gap);
+            transition: all 0.3s ease;
+            width: 100%;
+        }
+
+        .services-grid.collapsed {
+            display: none !important;
+        }
+
+        /* Fallback for older browsers */
+        @supports not (display: grid) {
+            .services-grid {
+                display: flex;
+                flex-wrap: wrap;
+            }
+            
+            .service-card-wrapper {
+                flex: 1 1 calc(25% - var(--card-gap));
+                margin: calc(var(--card-gap) / 2);
+            }
+        }
+
+        .service-card {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            text-decoration: none;
+            color: var(--text-primary);
+            transition: all 0.2s;
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+            display: block;
+            width: 100%;
+            min-height: 200px;
+        }
+
+        .service-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--accent-color);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
+        }
+
+        .service-icon {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            color: var(--accent-color);
+            display: block;
+        }
+
+        .service-icon img {
+            width: 2.5rem;
+            height: 2.5rem;
+            object-fit: contain;
+        }
+
+        .service-name {
+            font-size: 1.125rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .service-description {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            line-height: 1.4;
+        }
+
+        .service-url {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            opacity: 0.7;
+        }
+
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 1rem;
+        }
+
+        .modal-content {
+            background: var(--surface-color);
+            border-radius: var(--border-radius);
+            padding: 2rem;
+            width: 100%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            border: 1px solid var(--border-color);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .modal-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.5rem;
+            cursor: pointer;
+            padding: 0.25rem;
+        }
+
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.75rem;
+            background: var(--background-color);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 3rem;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 1.5rem;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            opacity: 0.5;
+        }
+
+        .context-menu {
+            position: fixed;
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            box-shadow: var(--shadow);
+            z-index: 1001;
+            min-width: 150px;
+            overflow: hidden;
+        }
+
+        .context-menu-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            transition: background 0.2s;
+            border: none;
+            background: none;
+            width: 100%;
+            text-align: left;
+            color: var(--text-primary);
+            font-size: 0.875rem;
+        }
+
+        .context-menu-item:hover {
+            background: var(--border-color);
+        }
+
+        .context-menu-item.danger {
+            color: var(--error-color);
+        }
+
+        .context-menu-item.danger:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        .service-card-wrapper {
+            position: relative;
+            width: 100%;
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1200px) {
+            :root {
+                --grid-columns: 3;
+            }
+        }
+
+        @media (max-width: 768px) {
+            :root {
+                --grid-columns: 2;
+                --card-gap: 1rem;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+            
+            .header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            
+            .search-container {
+                min-width: auto;
+            }
+            
+            .header-controls {
+                justify-content: center;
+            }
+        }
+
+        @media (max-width: 480px) {
+            :root {
+                --grid-columns: 1;
+            }
+            
+            .widgets-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Animations */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .service-card {
+            animation: fadeIn 0.3s ease forwards;
+        }
+
+        /* Theme variants */
+        .theme-light {
+            --background-color: #f8fafc;
+            --surface-color: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+        }
+
+        .theme-dark {
+            --background-color: #0f172a;
+            --surface-color: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #cbd5e1;
+            --border-color: #334155;
+        }
+    </style>
+</head>
+<body x-data="dashboard()" x-init="init()" class="theme-dark">
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🏠 Homelab Dashboard</h1>
+            <div class="header-controls">
+                <!-- Search -->
+                <div class="search-container">
+                    <i class="fas fa-search search-icon"></i>
+                    <input 
+                        type="text" 
+                        class="search-input" 
+                        placeholder="Search services... (Ctrl+K)"
+                        x-model="searchQuery"
+                        @keydown.escape="searchQuery = ''"
+                        @keydown.ctrl.k.prevent="$el.focus()"
+                    >
+                </div>
+                
+                <!-- Controls -->
+                <button class="btn btn-primary" @click="showAddServiceModal = true">
+                    <i class="fas fa-plus"></i>
+                    Add Service
+                </button>
+                
+                <button class="btn btn-secondary" @click="showSettingsModal = true">
+                    <i class="fas fa-cog"></i>
+                    Settings
+                </button>
+            </div>
+        </header>
+
+        <!-- Widgets -->
+        <div class="widgets-grid">
+            <!-- Clock Widget -->
+            <div class="widget clock">
+                <h3><i class="fas fa-clock"></i> Clock</h3>
+                <div class="clock-time" x-text="currentTime"></div>
+                <div class="clock-date" x-text="currentDate"></div>
+            </div>
+
+            <!-- Weather Widget -->
+            <div class="widget">
+                <h3><i class="fas fa-cloud-sun"></i> Weather</h3>
+                <div class="weather-placeholder">
+                    Configure weather API in settings
+                </div>
+            </div>
+
+            <!-- Quick Bookmarks -->
+            <div class="widget">
+                <h3><i class="fas fa-bookmark"></i> Quick Links</h3>
+                <div class="bookmarks">
+                    <a href="https://github.com" class="bookmark-link" target="_blank">
+                        <i class="fab fa-github"></i> GitHub
+                    </a>
+                    <a href="https://reddit.com/r/homelab" class="bookmark-link" target="_blank">
+                        <i class="fab fa-reddit"></i> r/homelab
+                    </a>
+                    <a href="https://docker.com" class="bookmark-link" target="_blank">
+                        <i class="fab fa-docker"></i> Docker Hub
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- Services -->
+        <template x-for="category in filteredCategories" :key="category.name">
+            <div class="services-section">
+                <div class="section-header" @click="toggleCategory(category.name)">
+                    <h2 class="section-title">
+                        <span x-text="category.name"></span>
+                        <span class="text-secondary">(<span x-text="category.services.length"></span>)</span>
+                    </h2>
+                    <i class="fas fa-chevron-down section-toggle" 
+                       :class="{ 'collapsed': collapsedCategories.includes(category.name) }"></i>
+                </div>
+                
+                <div class="services-grid" 
+                     :class="{ 'collapsed': collapsedCategories.includes(category.name) }"
+                     x-show="!collapsedCategories.includes(category.name)">
+                    <template x-for="service in category.services" :key="service.name">
+                        <div class="service-card-wrapper" 
+                             @contextmenu.prevent="showContextMenu($event, service)">
+                            <a :href="service.url" 
+                               target="_blank" 
+                               class="service-card"
+                               @click="updateLastUsed(service)">
+                                <div class="service-url" x-text="getHostname(service.url)"></div>
+                                <div class="service-icon">
+                                    <template x-if="service.icon && service.icon.startsWith('http')">
+                                        <img :src="service.icon" :alt="service.name">
+                                    </template>
+                                    <template x-if="service.icon && !service.icon.startsWith('http')">
+                                        <i :class="service.icon"></i>
+                                    </template>
+                                    <template x-if="!service.icon">
+                                        <i class="fas fa-globe"></i>
+                                    </template>
+                                </div>
+                                <h3 class="service-name" x-text="service.name"></h3>
+                                <p class="service-description" x-text="service.description"></p>
+                            </a>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
+
+        <!-- Empty State -->
+        <div x-show="filteredCategories.length === 0" class="empty-state">
+            <div class="empty-state-icon">
+                <i class="fas fa-search"></i>
+            </div>
+            <h3>No services found</h3>
+            <p>Try adjusting your search or add some services to get started.</p>
+        </div>
+
+        <!-- Context Menu -->
+        <div x-show="contextMenu.show" 
+             class="context-menu" 
+             :style="`top: ${contextMenu.y}px; left: ${contextMenu.x}px`"
+             @click.away="hideContextMenu()"
+             x-transition:enter="transition ease-out duration-200"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100">
+            <button class="context-menu-item" @click="editContextService()">
+                <i class="fas fa-edit"></i>
+                Edit Service
+            </button>
+            <button class="context-menu-item" @click="duplicateContextService()">
+                <i class="fas fa-copy"></i>
+                Duplicate Service
+            </button>
+            <button class="context-menu-item danger" @click="deleteContextService()">
+                <i class="fas fa-trash"></i>
+                Delete Service
+            </button>
+        </div>
+    </div>
+
+    <!-- Add/Edit Service Modal -->
+    <div x-show="showAddServiceModal || showEditServiceModal" 
+         class="modal" 
+         @click.self="closeModals()"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title" x-text="editingService ? 'Edit Service' : 'Add Service'"></h3>
+                <button class="close-btn" @click="closeModals()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <form @submit.prevent="saveService()">
+                <div class="form-group">
+                    <label class="form-label">Service Name</label>
+                    <input type="text" class="form-input" x-model="serviceForm.name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">URL</label>
+                    <input type="url" class="form-input" x-model="serviceForm.url" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Icon (FontAwesome class or URL)</label>
+                    <input type="text" class="form-input" x-model="serviceForm.icon" 
+                           placeholder="e.g. fas fa-tv or https://example.com/icon.png">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Category</label>
+                    <input type="text" class="form-input" x-model="serviceForm.category" required>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-input form-textarea" x-model="serviceForm.description"></textarea>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" @click="closeModals()">
+                        Cancel
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <span x-text="editingService ? 'Update' : 'Add'"></span> Service
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div x-show="showSettingsModal" 
+         class="modal" 
+         @click.self="showSettingsModal = false"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 class="modal-title">Settings</h3>
+                <button class="close-btn" @click="showSettingsModal = false">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Export Configuration</label>
+                <button class="btn btn-secondary" @click="exportConfig()">
+                    <i class="fas fa-download"></i>
+                    Download JSON
+                </button>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Import Configuration</label>
+                <input type="file" class="form-input" accept=".json" @change="importConfig($event)">
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Grid Columns</label>
+                <input type="range" min="2" max="6" x-model="gridColumns" 
+                       @input="updateGridColumns()" class="form-input">
+                <div x-text="gridColumns + ' columns'"></div>
+            </div>
+            
+            <div class="form-group">
+                <button class="btn btn-secondary" @click="resetData()" 
+                        style="background: var(--error-color);">
+                    <i class="fas fa-trash"></i>
+                    Reset All Data
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function dashboard() {
+            return {
+                // State
+                services: [],
+                searchQuery: '',
+                collapsedCategories: [],
+                currentTime: '',
+                currentDate: '',
+                gridColumns: 4,
+                
+                // Context menu
+                contextMenu: {
+                    show: false,
+                    x: 0,
+                    y: 0,
+                    service: null
+                },
+                
+                // Modals
+                showAddServiceModal: false,
+                showEditServiceModal: false,
+                showSettingsModal: false,
+                editingService: null,
+                
+                // Forms
+                serviceForm: {
+                    name: '',
+                    url: '',
+                    icon: '',
+                    category: '',
+                    description: ''
+                },
+                
+                // Computed
+                get filteredCategories() {
+                    const filtered = this.services.filter(service => 
+                        !this.searchQuery || 
+                        service.name.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                        service.description.toLowerCase().includes(this.searchQuery.toLowerCase()) ||
+                        service.category.toLowerCase().includes(this.searchQuery.toLowerCase())
+                    );
+                    
+                    const categories = {};
+                    filtered.forEach(service => {
+                        if (!categories[service.category]) {
+                            categories[service.category] = {
+                                name: service.category,
+                                services: []
+                            };
+                        }
+                        categories[service.category].services.push(service);
+                    });
+                    
+                    return Object.values(categories).sort((a, b) => 
+                        a.name.localeCompare(b.name)
+                    );
+                },
+                
+                // Initialization
+                init() {
+                    this.loadData();
+                    this.updateTime();
+                    this.updateGridColumns();
+                    setInterval(() => this.updateTime(), 1000);
+                    
+                    // Keyboard shortcuts
+                    document.addEventListener('keydown', (e) => {
+                        if (e.ctrlKey && e.key === 'k') {
+                            e.preventDefault();
+                            document.querySelector('.search-input').focus();
+                        }
+                        if (e.key === 'Escape') {
+                            this.closeModals();
+                            this.hideContextMenu();
+                        }
+                    });
+
+                    // Hide context menu on scroll or click
+                    document.addEventListener('click', () => this.hideContextMenu());
+                    document.addEventListener('scroll', () => this.hideContextMenu());
+                },
+                
+                // Data management
+                loadData() {
+                    const saved = localStorage.getItem('homedash-config');
+                    if (saved) {
+                        const config = JSON.parse(saved);
+                        this.services = config.services || [];
+                        this.collapsedCategories = config.collapsedCategories || [];
+                        this.gridColumns = config.gridColumns || 4;
+                    } else {
+                        // Default services
+                        this.services = [
+                            {
+                                name: 'Jellyfin',
+                                url: 'http://jellyfin.local:8096',
+                                icon: 'fas fa-tv',
+                                category: 'Media',
+                                description: 'Media Server & Streaming'
+                            },
+                            {
+                                name: 'Emby',
+                                url: 'http://emby.local:8096',
+                                icon: 'fas fa-film',
+                                category: 'Media',
+                                description: 'Personal Media Server'
+                            },
+                            {
+                                name: 'Sonarr',
+                                url: 'http://sonarr.local:8989',
+                                icon: 'fas fa-tv',
+                                category: 'Media Management',
+                                description: 'TV Series Management'
+                            },
+                            {
+                                name: 'Radarr',
+                                url: 'http://radarr.local:7878',
+                                icon: 'fas fa-film',
+                                category: 'Media Management',
+                                description: 'Movie Management'
+                            },
+                            {
+                                name: 'Prowlarr',
+                                url: 'http://prowlarr.local:9696',
+                                icon: 'fas fa-search',
+                                category: 'Media Management',
+                                description: 'Indexer Manager'
+                            },
+                            {
+                                name: 'qBittorrent',
+                                url: 'http://qbittorrent.local:8080',
+                                icon: 'fas fa-download',
+                                category: 'Downloads',
+                                description: 'BitTorrent Client'
+                            },
+                            {
+                                name: 'Portainer',
+                                url: 'http://portainer.local:9000',
+                                icon: 'fab fa-docker',
+                                category: 'Infrastructure',
+                                description: 'Docker Management'
+                            },
+                            {
+                                name: 'Pi-hole',
+                                url: 'http://pihole.local/admin',
+                                icon: 'fas fa-shield-alt',
+                                category: 'Infrastructure',
+                                description: 'Network Ad Blocker'
+                            },
+                            {
+                                name: 'Home Assistant',
+                                url: 'http://homeassistant.local:8123',
+                                icon: 'fas fa-home',
+                                category: 'Home Automation',
+                                description: 'Smart Home Hub'
+                            },
+                            {
+                                name: 'Grafana',
+                                url: 'http://grafana.local:3000',
+                                icon: 'fas fa-chart-line',
+                                category: 'Monitoring',
+                                description: 'Analytics & Monitoring'
+                            }
+                        ];
+                        this.saveData();
+                    }
+                },
+                
+                saveData() {
+                    const config = {
+                        services: this.services,
+                        collapsedCategories: this.collapsedCategories,
+                        gridColumns: this.gridColumns
+                    };
+                    localStorage.setItem('homedash-config', JSON.stringify(config));
+                },
+                
+                // Service management
+                saveService() {
+                    if (this.editingService) {
+                        const index = this.services.findIndex(s => s === this.editingService);
+                        this.services[index] = { ...this.serviceForm };
+                    } else {
+                        this.services.push({ ...this.serviceForm });
+                    }
+                    this.saveData();
+                    this.closeModals();
+                },
+                
+                editService(service) {
+                    this.editingService = service;
+                    this.serviceForm = { ...service };
+                    this.showEditServiceModal = true;
+                },
+                
+                deleteService(service) {
+                    if (confirm('Are you sure you want to delete this service?')) {
+                        this.services = this.services.filter(s => s !== service);
+                        this.saveData();
+                    }
+                },
+                
+                // UI helpers
+                closeModals() {
+                    this.showAddServiceModal = false;
+                    this.showEditServiceModal = false;
+                    this.showSettingsModal = false;
+                    this.editingService = null;
+                    this.serviceForm = {
+                        name: '',
+                        url: '',
+                        icon: '',
+                        category: '',
+                        description: ''
+                    };
+                },
+                
+                toggleCategory(categoryName) {
+                    const index = this.collapsedCategories.indexOf(categoryName);
+                    if (index > -1) {
+                        this.collapsedCategories.splice(index, 1);
+                    } else {
+                        this.collapsedCategories.push(categoryName);
+                    }
+                    this.saveData();
+                },
+                
+                updateTime() {
+                    const now = new Date();
+                    this.currentTime = now.toLocaleTimeString([], { 
+                        hour: '2-digit', 
+                        minute: '2-digit' 
+                    });
+                    this.currentDate = now.toLocaleDateString([], { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                    });
+                },
+                
+                updateGridColumns() {
+                    document.documentElement.style.setProperty('--grid-columns', this.gridColumns);
+                    this.saveData();
+                },
+                
+                getHostname(url) {
+                    try {
+                        return new URL(url).hostname;
+                    } catch {
+                        return url;
+                    }
+                },
+                
+                updateLastUsed(service) {
+                    // Could track usage statistics here
+                },
+
+                // Context menu functions
+                showContextMenu(event, service) {
+                    this.contextMenu.service = service;
+                    this.contextMenu.x = event.clientX;
+                    this.contextMenu.y = event.clientY;
+                    this.contextMenu.show = true;
+
+                    // Adjust position if menu would go off screen
+                    this.$nextTick(() => {
+                        const menu = document.querySelector('.context-menu');
+                        if (menu) {
+                            const rect = menu.getBoundingClientRect();
+                            const viewportWidth = window.innerWidth;
+                            const viewportHeight = window.innerHeight;
+
+                            if (rect.right > viewportWidth) {
+                                this.contextMenu.x = viewportWidth - rect.width - 10;
+                            }
+                            if (rect.bottom > viewportHeight) {
+                                this.contextMenu.y = viewportHeight - rect.height - 10;
+                            }
+                        }
+                    });
+                },
+
+                hideContextMenu() {
+                    this.contextMenu.show = false;
+                    this.contextMenu.service = null;
+                },
+
+                editContextService() {
+                    if (this.contextMenu.service) {
+                        this.editService(this.contextMenu.service);
+                        this.hideContextMenu();
+                    }
+                },
+
+                duplicateContextService() {
+                    if (this.contextMenu.service) {
+                        const service = this.contextMenu.service;
+                        this.serviceForm = {
+                            name: service.name + ' (Copy)',
+                            url: service.url,
+                            icon: service.icon,
+                            category: service.category,
+                            description: service.description
+                        };
+                        this.showAddServiceModal = true;
+                        this.hideContextMenu();
+                    }
+                },
+
+                deleteContextService() {
+                    if (this.contextMenu.service) {
+                        this.deleteService(this.contextMenu.service);
+                        this.hideContextMenu();
+                    }
+                },
+                
+                // Import/Export
+                exportConfig() {
+                    const config = {
+                        services: this.services,
+                        collapsedCategories: this.collapsedCategories,
+                        gridColumns: this.gridColumns,
+                        exportDate: new Date().toISOString()
+                    };
+                    
+                    const blob = new Blob([JSON.stringify(config, null, 2)], 
+                        { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `homedash-config-${new Date().toISOString().split('T')[0]}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                },
+                
+                importConfig(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            const config = JSON.parse(e.target.result);
+                            if (config.services) {
+                                this.services = config.services;
+                                this.collapsedCategories = config.collapsedCategories || [];
+                                this.gridColumns = config.gridColumns || 4;
+                                this.updateGridColumns();
+                                this.saveData();
+                                alert('Configuration imported successfully!');
+                                this.showSettingsModal = false;
+                            } else {
+                                alert('Invalid configuration file');
+                            }
+                        } catch (error) {
+                            alert('Error reading configuration file');
+                        }
+                    };
+                    reader.readAsText(file);
+                },
+                
+                resetData() {
+                    if (confirm('This will delete all your services and settings. Are you sure?')) {
+                        localStorage.removeItem('homedash-config');
+                        location.reload();
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>
