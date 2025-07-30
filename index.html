@@ -250,6 +250,38 @@
             margin-bottom: 1rem;
             cursor: pointer;
             padding: 0.5rem 0;
+            transition: background-color 0.2s;
+            border-radius: 0.5rem;
+        }
+
+        .section-header:hover {
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .section-header.dragging {
+            opacity: 0.5;
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .section-header.drag-over {
+            background: rgba(59, 130, 246, 0.2);
+            border: 2px dashed var(--accent-color);
+        }
+
+        .drag-handle {
+            cursor: grab;
+            padding: 0.25rem;
+            margin-right: 0.5rem;
+            color: var(--text-secondary);
+            transition: color 0.2s;
+        }
+
+        .drag-handle:hover {
+            color: var(--accent-color);
+        }
+
+        .drag-handle:active {
+            cursor: grabbing;
         }
 
         .section-title {
@@ -646,10 +678,22 @@
         </div>
 
         <!-- Services -->
-        <template x-for="category in filteredCategories" :key="category.name">
-            <div class="services-section">
-                <div class="section-header" @click="toggleCategory(category.name)">
+        <template x-for="(category, index) in filteredCategories" :key="category.name">
+            <div class="services-section" 
+                 :draggable="searchQuery === ''"
+                 @dragstart="handleCategoryDragStart($event, category, index)"
+                 @dragend="handleCategoryDragEnd($event)"
+                 @dragover.prevent="handleCategoryDragOver($event, index)"
+                 @dragleave="handleCategoryDragLeave($event)"
+                 @drop="handleCategoryDrop($event, index)">
+                <div class="section-header" 
+                     :class="{ 'dragging': dragState.dragging && dragState.draggedIndex === index, 'drag-over': dragState.dragOverIndex === index }"
+                     @click="toggleCategory(category.name)">
                     <h2 class="section-title">
+                        <i class="fas fa-grip-vertical drag-handle" 
+                           x-show="searchQuery === ''"
+                           @click.stop
+                           title="Drag to reorder"></i>
                         <span x-text="category.name"></span>
                         <span class="text-secondary">(<span x-text="category.services.length"></span>)</span>
                     </h2>
@@ -810,6 +854,17 @@
             </div>
             
             <div class="form-group">
+                <label class="form-label">Category Order</label>
+                <button class="btn btn-secondary" @click="resetCategoryOrder()">
+                    <i class="fas fa-sort"></i>
+                    Reset Category Order
+                </button>
+                <div class="text-secondary" style="font-size: 0.75rem; margin-top: 0.5rem;">
+                    Drag category headers to reorder them
+                </div>
+            </div>
+            
+            <div class="form-group">
                 <button class="btn btn-secondary" @click="resetData()" 
                         style="background: var(--error-color);">
                     <i class="fas fa-trash"></i>
@@ -829,6 +884,7 @@
                 currentTime: '',
                 currentDate: '',
                 gridColumns: 4,
+                categoryOrder: [], // Track category order
                 
                 // Server connection state
                 serverAvailable: false,
@@ -838,6 +894,13 @@
                 autoSync: true,
                 syncInterval: 30000, // 30 seconds
                 syncTimer: null,
+                
+                // Drag and drop state
+                dragState: {
+                    dragging: false,
+                    draggedIndex: null,
+                    dragOverIndex: null
+                },
                 
                 // Context menu
                 contextMenu: {
@@ -882,9 +945,30 @@
                         categories[service.category].services.push(service);
                     });
                     
-                    return Object.values(categories).sort((a, b) => 
-                        a.name.localeCompare(b.name)
-                    );
+                    const categoryList = Object.values(categories);
+                    
+                    // If searching, don't apply custom order
+                    if (this.searchQuery) {
+                        return categoryList.sort((a, b) => a.name.localeCompare(b.name));
+                    }
+                    
+                    // Apply custom category order
+                    return categoryList.sort((a, b) => {
+                        const aIndex = this.categoryOrder.indexOf(a.name);
+                        const bIndex = this.categoryOrder.indexOf(b.name);
+                        
+                        // If both categories are in the order array, sort by their positions
+                        if (aIndex !== -1 && bIndex !== -1) {
+                            return aIndex - bIndex;
+                        }
+                        
+                        // If only one is in the order array, prioritize it
+                        if (aIndex !== -1) return -1;
+                        if (bIndex !== -1) return 1;
+                        
+                        // If neither is in the order array, sort alphabetically
+                        return a.name.localeCompare(b.name);
+                    });
                 },
                 
                 get syncStatusText() {
@@ -995,6 +1079,7 @@
                         this.services = config.services || [];
                         this.collapsedCategories = config.collapsedCategories || [];
                         this.gridColumns = config.gridColumns || 4;
+                        this.categoryOrder = config.categoryOrder || [];
                         this.lastSync = Date.now();
                         this.syncStatus = 'online';
                         
@@ -1012,6 +1097,7 @@
                         this.services = config.services || [];
                         this.collapsedCategories = config.collapsedCategories || [];
                         this.gridColumns = config.gridColumns || 4;
+                        this.categoryOrder = config.categoryOrder || [];
                     } else {
                         // Default services
                         this.services = [
@@ -1109,6 +1195,7 @@
                         services: this.services,
                         collapsedCategories: this.collapsedCategories,
                         gridColumns: this.gridColumns,
+                        categoryOrder: this.categoryOrder,
                         metadata: {
                             lastModified: new Date().toISOString(),
                             version: '1.0.0'
@@ -1141,7 +1228,8 @@
                     const config = {
                         services: this.services,
                         collapsedCategories: this.collapsedCategories,
-                        gridColumns: this.gridColumns
+                        gridColumns: this.gridColumns,
+                        categoryOrder: this.categoryOrder
                     };
                     localStorage.setItem('homedash-config', JSON.stringify(config));
                 },
@@ -1246,6 +1334,87 @@
                     this.saveData();
                 },
                 
+                // Category drag and drop functionality
+                handleCategoryDragStart(event, category, index) {
+                    if (this.searchQuery !== '') return;
+                    
+                    this.dragState.dragging = true;
+                    this.dragState.draggedIndex = index;
+                    
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', category.name);
+                    
+                    // Add dragging class
+                    event.target.classList.add('dragging');
+                },
+                
+                handleCategoryDragEnd(event) {
+                    this.dragState.dragging = false;
+                    this.dragState.draggedIndex = null;
+                    this.dragState.dragOverIndex = null;
+                    
+                    // Remove all drag-related classes
+                    event.target.classList.remove('dragging');
+                    document.querySelectorAll('.drag-over').forEach(el => {
+                        el.classList.remove('drag-over');
+                    });
+                },
+                
+                handleCategoryDragOver(event, index) {
+                    if (!this.dragState.dragging || this.dragState.draggedIndex === index) return;
+                    
+                    event.preventDefault();
+                    this.dragState.dragOverIndex = index;
+                },
+                
+                handleCategoryDragLeave(event) {
+                    // Only remove drag-over if we're actually leaving the element
+                    const rect = event.target.getBoundingClientRect();
+                    const x = event.clientX;
+                    const y = event.clientY;
+                    
+                    if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) {
+                        this.dragState.dragOverIndex = null;
+                    }
+                },
+                
+                handleCategoryDrop(event, dropIndex) {
+                    event.preventDefault();
+                    
+                    if (!this.dragState.dragging || this.dragState.draggedIndex === dropIndex) return;
+                    
+                    const draggedIndex = this.dragState.draggedIndex;
+                    const categories = this.filteredCategories;
+                    
+                    // Update category order
+                    this.updateCategoryOrder(categories, draggedIndex, dropIndex);
+                    
+                    // Reset drag state
+                    this.dragState.dragging = false;
+                    this.dragState.draggedIndex = null;
+                    this.dragState.dragOverIndex = null;
+                    
+                    // Save the new order
+                    this.saveData();
+                },
+                
+                updateCategoryOrder(categories, fromIndex, toIndex) {
+                    // Get current category names in display order
+                    const currentOrder = categories.map(cat => cat.name);
+                    
+                    // Move the category
+                    const movedCategory = currentOrder.splice(fromIndex, 1)[0];
+                    currentOrder.splice(toIndex, 0, movedCategory);
+                    
+                    // Update the category order array
+                    this.categoryOrder = currentOrder;
+                },
+                
+                resetCategoryOrder() {
+                    this.categoryOrder = [];
+                    this.saveData();
+                },
+                
                 updateTime() {
                     const now = new Date();
                     this.currentTime = now.toLocaleTimeString([], { 
@@ -1342,6 +1511,7 @@
                         services: this.services,
                         collapsedCategories: this.collapsedCategories,
                         gridColumns: this.gridColumns,
+                        categoryOrder: this.categoryOrder,
                         exportDate: new Date().toISOString()
                     };
                     
@@ -1367,6 +1537,7 @@
                                 this.services = config.services;
                                 this.collapsedCategories = config.collapsedCategories || [];
                                 this.gridColumns = config.gridColumns || 4;
+                                this.categoryOrder = config.categoryOrder || [];
                                 this.updateGridColumns();
                                 this.saveData();
                                 alert('Configuration imported successfully!');
