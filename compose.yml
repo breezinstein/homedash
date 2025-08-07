@@ -2,7 +2,8 @@ version: '3.8'
 
 services:
   homedash:
-    build: .
+    # Use pre-built multi-architecture image from GitHub Container Registry
+    image: ghcr.io/breezinstein/homedash:latest
     container_name: homedash
     ports:
       - "3001:3001"
@@ -10,9 +11,11 @@ services:
       - NODE_ENV=production
       - PORT=3001
     volumes:
-      - homedash_data:/app/server/data
-      - homedash_backups:/app/server/data/backups
+      # Using bind mounts instead of named volumes for better permission control
+      - ./data:/app/server/data
+      - ./data/backups:/app/server/data/backups
     restart: unless-stopped
+    user: "1001:1001"  # Explicitly set user to match homedash user in container
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/health', (res) => { process.exit(res.statusCode === 200 ? 0 : 1); }).on('error', () => process.exit(1));"]
       interval: 30s
@@ -37,12 +40,6 @@ services:
   #   restart: unless-stopped
   #   networks:
   #     - homedash_network
-
-volumes:
-  homedash_data:
-    driver: local
-  homedash_backups:
-    driver: local
 
 networks:
   homedash_network:

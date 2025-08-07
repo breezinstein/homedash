@@ -31,7 +31,7 @@ COPY --from=builder --chown=homedash:nodejs /app/server/node_modules ./server/no
 # Copy source code
 COPY --chown=homedash:nodejs . .
 
-# Create data directories
+# Create data directories with proper permissions
 RUN mkdir -p server/data server/data/backups && \
     chown -R homedash:nodejs server/data
 
