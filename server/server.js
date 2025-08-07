@@ -2,7 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
-const rateLimit = require('express-rate-limit');
 const fs = require('fs-extra');
 const path = require('path');
 
@@ -15,13 +14,6 @@ const BACKUP_DIR = path.join(CONFIG_DIR, 'backups');
 // Ensure directories exist
 fs.ensureDirSync(CONFIG_DIR);
 fs.ensureDirSync(BACKUP_DIR);
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: 'Too many requests from this IP, please try again later.'
-});
 
 // Middleware
 app.use(helmet({
@@ -38,7 +30,6 @@ app.use(helmet({
 }));
 app.use(compression());
 app.use(cors());
-app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 
 // Serve static files (frontend)
