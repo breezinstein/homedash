@@ -1,15 +1,16 @@
 :root {
-    --primary-color: #2563eb;
-    --secondary-color: #64748b;
-    --background-color: #0f172a;
-    --surface-color: #1e293b;
-    --text-primary: #f8fafc;
-    --text-secondary: #cbd5e1;
-    --border-color: #334155;
-    --accent-color: #3b82f6;
-    --success-color: #10b981;
-    --warning-color: #f59e0b;
-    --error-color: #ef4444;
+    /* Professional Dark Theme - Default Colors */
+    --primary-color: #6366f1;
+    --secondary-color: #475569;
+    --background-color: #0a0a0a;
+    --surface-color: #1a1a1a;
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --border-color: #27272a;
+    --accent-color: #8b5cf6;
+    --success-color: #22c55e;
+    --warning-color: #eab308;
+    --error-color: #f87171;
     
     --grid-columns: 4;
     --card-gap: 1.5rem;

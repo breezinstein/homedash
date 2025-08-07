@@ -381,20 +381,8 @@
                 gridColumns: 4,
                 categoryOrder: [], // Track category order
                 
-                // Theme colors
-                colors: {
-                    primary: '#2563eb',
-                    secondary: '#64748b',
-                    background: '#0f172a',
-                    surface: '#1e293b',
-                    textPrimary: '#f8fafc',
-                    textSecondary: '#cbd5e1',
-                    border: '#334155',
-                    accent: '#3b82f6',
-                    success: '#10b981',
-                    warning: '#f59e0b',
-                    error: '#ef4444'
-                },
+                // Theme colors - will be initialized from CSS defaults
+                colors: {},
                 
                 // Server connection state
                 serverAvailable: false,
@@ -504,6 +492,9 @@
                 
                 // Initialization
                 async init() {
+                    // Initialize colors from CSS defaults
+                    this.colors = this.getDefaultColors();
+                    
                     await this.checkServerAvailability();
                     await this.loadData();
                     this.updateTime();
@@ -591,7 +582,7 @@
                         this.collapsedCategories = config.collapsedCategories || [];
                         this.gridColumns = config.gridColumns || 4;
                         this.categoryOrder = config.categoryOrder || [];
-                        this.colors = config.colors || this.colors;
+                        this.colors = config.colors || this.getDefaultColors();
                         this.lastSync = Date.now();
                         this.syncStatus = 'online';
                         
@@ -611,7 +602,7 @@
                         this.collapsedCategories = config.collapsedCategories || [];
                         this.gridColumns = config.gridColumns || 4;
                         this.categoryOrder = config.categoryOrder || [];
-                        this.colors = config.colors || this.colors;
+                        this.colors = config.colors || this.getDefaultColors();
                         this.applyColors();
                     } else {
                         // Default services
@@ -953,6 +944,48 @@
                 },
                 
                 // Color management
+                getDefaultColors() {
+                    // Read default colors from CSS custom properties
+                    const computedStyles = getComputedStyle(document.documentElement);
+                    const colors = {
+                        primary: computedStyles.getPropertyValue('--primary-color').trim(),
+                        secondary: computedStyles.getPropertyValue('--secondary-color').trim(),
+                        background: computedStyles.getPropertyValue('--background-color').trim(),
+                        surface: computedStyles.getPropertyValue('--surface-color').trim(),
+                        textPrimary: computedStyles.getPropertyValue('--text-primary').trim(),
+                        textSecondary: computedStyles.getPropertyValue('--text-secondary').trim(),
+                        border: computedStyles.getPropertyValue('--border-color').trim(),
+                        accent: computedStyles.getPropertyValue('--accent-color').trim(),
+                        success: computedStyles.getPropertyValue('--success-color').trim(),
+                        warning: computedStyles.getPropertyValue('--warning-color').trim(),
+                        error: computedStyles.getPropertyValue('--error-color').trim()
+                    };
+                    
+                    // Fallback to hardcoded defaults if CSS values aren't available
+                    const defaults = {
+                        primary: '#6366f1',
+                        secondary: '#475569',
+                        background: '#0a0a0a',
+                        surface: '#1a1a1a',
+                        textPrimary: '#ffffff',
+                        textSecondary: '#a1a1aa',
+                        border: '#27272a',
+                        accent: '#8b5cf6',
+                        success: '#22c55e',
+                        warning: '#eab308',
+                        error: '#f87171'
+                    };
+                    
+                    // Use CSS values if available, otherwise use hardcoded defaults
+                    Object.keys(defaults).forEach(key => {
+                        if (!colors[key] || colors[key] === '') {
+                            colors[key] = defaults[key];
+                        }
+                    });
+                    
+                    return colors;
+                },
+
                 applyColors() {
                     const root = document.documentElement;
                     root.style.setProperty('--primary-color', this.colors.primary);
@@ -1003,21 +1036,31 @@
                 },
                 
                 resetColors() {
-                    this.colors = {
-                        primary: '#2563eb',
-                        secondary: '#64748b',
-                        background: '#0f172a',
-                        surface: '#1e293b',
-                        textPrimary: '#f8fafc',
-                        textSecondary: '#cbd5e1',
-                        border: '#334155',
-                        accent: '#3b82f6',
-                        success: '#10b981',
-                        warning: '#f59e0b',
-                        error: '#ef4444'
-                    };
+                    console.log('Resetting colors to defaults...');
+                    
+                    // First, remove any custom color overrides by clearing the inline styles
+                    const root = document.documentElement;
+                    root.style.removeProperty('--primary-color');
+                    root.style.removeProperty('--secondary-color');
+                    root.style.removeProperty('--background-color');
+                    root.style.removeProperty('--surface-color');
+                    root.style.removeProperty('--text-primary');
+                    root.style.removeProperty('--text-secondary');
+                    root.style.removeProperty('--border-color');
+                    root.style.removeProperty('--accent-color');
+                    root.style.removeProperty('--success-color');
+                    root.style.removeProperty('--warning-color');
+                    root.style.removeProperty('--error-color');
+                    
+                    // Now read the original CSS defaults
+                    this.colors = this.getDefaultColors();
+                    console.log('Default colors loaded:', this.colors);
+                    
+                    // Apply the default colors (which will set them as inline styles again)
                     this.applyColors();
                     this.saveData();
+                    
+                    console.log('Colors reset complete');
                 },
                 
                 getHostname(url) {
@@ -1125,7 +1168,7 @@
                                 this.collapsedCategories = config.collapsedCategories || [];
                                 this.gridColumns = config.gridColumns || 4;
                                 this.categoryOrder = config.categoryOrder || [];
-                                this.colors = config.colors || this.colors;
+                                this.colors = config.colors || this.getDefaultColors();
                                 this.updateGridColumns();
                                 this.applyColors();
                                 this.saveData();
