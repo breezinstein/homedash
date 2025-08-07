@@ -13,586 +13,10 @@
     <!-- Alpine.js -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     
-    <style>
-        :root {
-            --primary-color: #2563eb;
-            --secondary-color: #64748b;
-            --background-color: #0f172a;
-            --surface-color: #1e293b;
-            --text-primary: #f8fafc;
-            --text-secondary: #cbd5e1;
-            --border-color: #334155;
-            --accent-color: #3b82f6;
-            --success-color: #10b981;
-            --warning-color: #f59e0b;
-            --error-color: #ef4444;
-            
-            --grid-columns: 4;
-            --card-gap: 1.5rem;
-            --border-radius: 0.75rem;
-            --shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
-        }
-
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--background-color);
-            color: var(--text-primary);
-            line-height: 1.6;
-            min-height: 100vh;
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 2rem;
-        }
-
-        .header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 2rem;
-            flex-wrap: wrap;
-            gap: 1rem;
-        }
-
-        .header h1 {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--text-primary);
-        }
-
-        .header-controls {
-            display: flex;
-            gap: 1rem;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .search-container {
-            position: relative;
-            min-width: 300px;
-        }
-
-        .search-input {
-            width: 100%;
-            padding: 0.75rem 1rem 0.75rem 2.5rem;
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius);
-            color: var(--text-primary);
-            font-size: 0.875rem;
-        }
-
-        .search-input:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        .search-icon {
-            position: absolute;
-            left: 0.75rem;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-secondary);
-        }
-
-        .sync-status {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 0.75rem;
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius);
-            font-size: 0.75rem;
-            min-width: 200px;
-        }
-
-        .sync-text {
-            flex: 1;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-
-        .sync-button {
-            background: none;
-            border: none;
-            color: inherit;
-            cursor: pointer;
-            padding: 0.25rem;
-            border-radius: 0.25rem;
-            transition: background-color 0.2s;
-        }
-
-        .sync-button:hover {
-            background: var(--border-color);
-        }
-
-        .text-green-400 { color: #10b981; }
-        .text-yellow-400 { color: #f59e0b; }
-        .text-blue-400 { color: #3b82f6; }
-        .text-red-400 { color: #ef4444; }
-        .text-gray-400 { color: #9ca3af; }
-
-        .btn {
-            padding: 0.75rem 1.5rem;
-            border: none;
-            border-radius: var(--border-radius);
-            cursor: pointer;
-            font-weight: 500;
-            transition: all 0.2s;
-            text-decoration: none;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            font-size: 0.875rem;
-        }
-
-        .btn-primary {
-            background: var(--primary-color);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #1d4ed8;
-            transform: translateY(-1px);
-        }
-
-        .btn-secondary {
-            background: var(--surface-color);
-            color: var(--text-primary);
-            border: 1px solid var(--border-color);
-        }
-
-        .btn-secondary:hover {
-            background: var(--border-color);
-        }
-
-        .widgets-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: var(--card-gap);
-            margin-bottom: 2rem;
-        }
-
-        .widget {
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius);
-            padding: 1.5rem;
-            box-shadow: var(--shadow);
-        }
-
-        .widget h3 {
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-bottom: 1rem;
-            color: var(--text-primary);
-        }
-
-        .clock {
-            text-align: center;
-        }
-
-        .clock-time {
-            font-size: 2rem;
-            font-weight: 700;
-            color: var(--accent-color);
-            margin-bottom: 0.5rem;
-        }
-
-        .clock-date {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-        }
-
-        .weather-placeholder {
-            text-align: center;
-            color: var(--text-secondary);
-            font-style: italic;
-        }
-
-        .bookmarks {
-            display: flex;
-            flex-direction: column;
-            gap: 0.5rem;
-        }
-
-        .bookmark-link {
-            color: var(--accent-color);
-            text-decoration: none;
-            padding: 0.5rem;
-            border-radius: 0.5rem;
-            transition: background 0.2s;
-        }
-
-        .bookmark-link:hover {
-            background: rgba(59, 130, 246, 0.1);
-        }
-
-        .services-section {
-            margin-bottom: 2rem;
-        }
-
-        .section-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-            cursor: pointer;
-            padding: 0.5rem 0;
-            transition: background-color 0.2s;
-            border-radius: 0.5rem;
-        }
-
-        .section-header:hover {
-            background: rgba(59, 130, 246, 0.05);
-        }
-
-        .section-header.dragging {
-            opacity: 0.5;
-            background: rgba(59, 130, 246, 0.1);
-        }
-
-        .section-header.drag-over {
-            background: rgba(59, 130, 246, 0.2);
-            border: 2px dashed var(--accent-color);
-        }
-
-        .drag-handle {
-            cursor: grab;
-            padding: 0.25rem;
-            margin-right: 0.5rem;
-            color: var(--text-secondary);
-            transition: color 0.2s;
-        }
-
-        .drag-handle:hover {
-            color: var(--accent-color);
-        }
-
-        .drag-handle:active {
-            cursor: grabbing;
-        }
-
-        .section-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .section-toggle {
-            color: var(--text-secondary);
-            transition: transform 0.2s;
-        }
-
-        .section-toggle.collapsed {
-            transform: rotate(-90deg);
-        }
-
-        .services-grid {
-            display: grid;
-            grid-template-columns: repeat(var(--grid-columns), 1fr);
-            gap: var(--card-gap);
-            transition: all 0.3s ease;
-            width: 100%;
-        }
-
-        .services-grid.collapsed {
-            display: none !important;
-        }
-
-        /* Fallback for older browsers */
-        @supports not (display: grid) {
-            .services-grid {
-                display: flex;
-                flex-wrap: wrap;
-            }
-            
-            .service-card-wrapper {
-                flex: 1 1 calc(25% - var(--card-gap));
-                margin: calc(var(--card-gap) / 2);
-            }
-        }
-
-        .service-card {
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius);
-            padding: 1.5rem;
-            text-decoration: none;
-            color: var(--text-primary);
-            transition: all 0.2s;
-            box-shadow: var(--shadow);
-            position: relative;
-            overflow: hidden;
-            display: block;
-            width: 100%;
-            min-height: 200px;
-        }
-
-        .service-card:hover {
-            transform: translateY(-2px);
-            border-color: var(--accent-color);
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4);
-        }
-
-        .service-icon {
-            font-size: 2.5rem;
-            margin-bottom: 1rem;
-            color: var(--accent-color);
-            display: block;
-        }
-
-        .service-icon img {
-            width: 2.5rem;
-            height: 2.5rem;
-            object-fit: contain;
-        }
-
-        .service-name {
-            font-size: 1.125rem;
-            font-weight: 600;
-            margin-bottom: 0.5rem;
-        }
-
-        .service-description {
-            color: var(--text-secondary);
-            font-size: 0.875rem;
-            line-height: 1.4;
-        }
-
-        .service-url {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-            font-size: 0.75rem;
-            color: var(--text-secondary);
-            opacity: 0.7;
-        }
-
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.8);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-            padding: 1rem;
-        }
-
-        .modal-content {
-            background: var(--surface-color);
-            border-radius: var(--border-radius);
-            padding: 2rem;
-            width: 100%;
-            max-width: 500px;
-            max-height: 90vh;
-            overflow-y: auto;
-            border: 1px solid var(--border-color);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .modal-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-        }
-
-        .close-btn {
-            background: none;
-            border: none;
-            color: var(--text-secondary);
-            font-size: 1.5rem;
-            cursor: pointer;
-            padding: 0.25rem;
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: var(--text-primary);
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.75rem;
-            background: var(--background-color);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-        }
-
-        .form-textarea {
-            resize: vertical;
-            min-height: 3rem;
-        }
-
-        .form-actions {
-            display: flex;
-            gap: 1rem;
-            justify-content: flex-end;
-            margin-top: 1.5rem;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: var(--text-secondary);
-        }
-
-        .empty-state-icon {
-            font-size: 3rem;
-            margin-bottom: 1rem;
-            opacity: 0.5;
-        }
-
-        .context-menu {
-            position: fixed;
-            background: var(--surface-color);
-            border: 1px solid var(--border-color);
-            border-radius: 0.5rem;
-            box-shadow: var(--shadow);
-            z-index: 1001;
-            min-width: 150px;
-            overflow: hidden;
-        }
-
-        .context-menu-item {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.75rem 1rem;
-            cursor: pointer;
-            transition: background 0.2s;
-            border: none;
-            background: none;
-            width: 100%;
-            text-align: left;
-            color: var(--text-primary);
-            font-size: 0.875rem;
-        }
-
-        .context-menu-item:hover {
-            background: var(--border-color);
-        }
-
-        .context-menu-item.danger {
-            color: var(--error-color);
-        }
-
-        .context-menu-item.danger:hover {
-            background: rgba(239, 68, 68, 0.1);
-        }
-
-        .service-card-wrapper {
-            position: relative;
-            width: 100%;
-        }
-
-        /* Responsive Design */
-        @media (max-width: 1200px) {
-            :root {
-                --grid-columns: 3;
-            }
-        }
-
-        @media (max-width: 768px) {
-            :root {
-                --grid-columns: 2;
-                --card-gap: 1rem;
-            }
-            
-            .container {
-                padding: 1rem;
-            }
-            
-            .header {
-                flex-direction: column;
-                align-items: stretch;
-            }
-            
-            .search-container {
-                min-width: auto;
-            }
-            
-            .header-controls {
-                justify-content: center;
-            }
-        }
-
-        @media (max-width: 480px) {
-            :root {
-                --grid-columns: 1;
-            }
-            
-            .widgets-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Animations */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .service-card {
-            animation: fadeIn 0.3s ease forwards;
-        }
-
-        /* Theme variants */
-        .theme-light {
-            --background-color: #f8fafc;
-            --surface-color: #ffffff;
-            --text-primary: #1e293b;
-            --text-secondary: #64748b;
-            --border-color: #e2e8f0;
-        }
-
-        .theme-dark {
-            --background-color: #0f172a;
-            --surface-color: #1e293b;
-            --text-primary: #f8fafc;
-            --text-secondary: #cbd5e1;
-            --border-color: #334155;
-        }
-    </style>
+    <!-- Styles -->
+    <link rel="stylesheet" href="assets/css/styles.css">
 </head>
-<body x-data="dashboard()" x-init="init()" class="theme-dark">
+<body x-data="dashboard()" x-init="init()">
     <div class="container">
         <!-- Header -->
         <header class="header">
@@ -853,6 +277,77 @@
                 <div x-text="gridColumns + ' columns'"></div>
             </div>
             
+            <!-- Color Customization Section -->
+            <div class="form-group">
+                <label class="form-label">Theme Colors</label>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 0.5rem;">
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Primary Color</label>
+                        <input type="color" x-model="colors.primary" 
+                               @input="updateColor('primary', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Accent Color</label>
+                        <input type="color" x-model="colors.accent" 
+                               @input="updateColor('accent', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Background Color</label>
+                        <input type="color" x-model="colors.background" 
+                               @input="updateColor('background', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Surface Color</label>
+                        <input type="color" x-model="colors.surface" 
+                               @input="updateColor('surface', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Text Primary</label>
+                        <input type="color" x-model="colors.textPrimary" 
+                               @input="updateColor('textPrimary', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Text Secondary</label>
+                        <input type="color" x-model="colors.textSecondary" 
+                               @input="updateColor('textSecondary', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Border Color</label>
+                        <input type="color" x-model="colors.border" 
+                               @input="updateColor('border', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Success Color</label>
+                        <input type="color" x-model="colors.success" 
+                               @input="updateColor('success', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Warning Color</label>
+                        <input type="color" x-model="colors.warning" 
+                               @input="updateColor('warning', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                    <div>
+                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Error Color</label>
+                        <input type="color" x-model="colors.error" 
+                               @input="updateColor('error', $event.target.value)" 
+                               class="form-input" style="height: 2.5rem;">
+                    </div>
+                </div>
+                <button class="btn btn-secondary" @click="resetColors()" style="margin-top: 1rem;">
+                    <i class="fas fa-undo"></i>
+                    Reset to Default Colors
+                </button>
+            </div>
+            
             <div class="form-group">
                 <label class="form-label">Category Order</label>
                 <button class="btn btn-secondary" @click="resetCategoryOrder()">
@@ -885,6 +380,21 @@
                 currentDate: '',
                 gridColumns: 4,
                 categoryOrder: [], // Track category order
+                
+                // Theme colors
+                colors: {
+                    primary: '#2563eb',
+                    secondary: '#64748b',
+                    background: '#0f172a',
+                    surface: '#1e293b',
+                    textPrimary: '#f8fafc',
+                    textSecondary: '#cbd5e1',
+                    border: '#334155',
+                    accent: '#3b82f6',
+                    success: '#10b981',
+                    warning: '#f59e0b',
+                    error: '#ef4444'
+                },
                 
                 // Server connection state
                 serverAvailable: false,
@@ -998,6 +508,7 @@
                     await this.loadData();
                     this.updateTime();
                     this.updateGridColumns();
+                    this.applyColors(); // Apply color theme
                     setInterval(() => this.updateTime(), 1000);
                     
                     // Setup auto-sync if server is available
@@ -1080,10 +591,12 @@
                         this.collapsedCategories = config.collapsedCategories || [];
                         this.gridColumns = config.gridColumns || 4;
                         this.categoryOrder = config.categoryOrder || [];
+                        this.colors = config.colors || this.colors;
                         this.lastSync = Date.now();
                         this.syncStatus = 'online';
                         
-                        // Also save to localStorage as backup
+                        // Apply colors and save to localStorage as backup
+                        this.applyColors();
                         this.saveToLocalStorage();
                     } else {
                         throw new Error(result.error || 'Unknown server error');
@@ -1098,6 +611,8 @@
                         this.collapsedCategories = config.collapsedCategories || [];
                         this.gridColumns = config.gridColumns || 4;
                         this.categoryOrder = config.categoryOrder || [];
+                        this.colors = config.colors || this.colors;
+                        this.applyColors();
                     } else {
                         // Default services
                         this.services = [
@@ -1172,6 +687,7 @@
                                 description: 'Analytics & Monitoring'
                             }
                         ];
+                        this.applyColors();
                         this.saveData();
                     }
                 },
@@ -1196,6 +712,7 @@
                         collapsedCategories: this.collapsedCategories,
                         gridColumns: this.gridColumns,
                         categoryOrder: this.categoryOrder,
+                        colors: this.colors,
                         metadata: {
                             lastModified: new Date().toISOString(),
                             version: '1.0.0'
@@ -1229,7 +746,8 @@
                         services: this.services,
                         collapsedCategories: this.collapsedCategories,
                         gridColumns: this.gridColumns,
-                        categoryOrder: this.categoryOrder
+                        categoryOrder: this.categoryOrder,
+                        colors: this.colors
                     };
                     localStorage.setItem('homedash-config', JSON.stringify(config));
                 },
@@ -1434,6 +952,74 @@
                     this.saveData();
                 },
                 
+                // Color management
+                applyColors() {
+                    const root = document.documentElement;
+                    root.style.setProperty('--primary-color', this.colors.primary);
+                    root.style.setProperty('--secondary-color', this.colors.secondary);
+                    root.style.setProperty('--background-color', this.colors.background);
+                    root.style.setProperty('--surface-color', this.colors.surface);
+                    root.style.setProperty('--text-primary', this.colors.textPrimary);
+                    root.style.setProperty('--text-secondary', this.colors.textSecondary);
+                    root.style.setProperty('--border-color', this.colors.border);
+                    root.style.setProperty('--accent-color', this.colors.accent);
+                    root.style.setProperty('--success-color', this.colors.success);
+                    root.style.setProperty('--warning-color', this.colors.warning);
+                    root.style.setProperty('--error-color', this.colors.error);
+                    
+                    // Update derived colors that depend on the main colors
+                    if (CSS.supports('color', 'color-mix(in srgb, red 10%, transparent)')) {
+                        // Modern browsers with color-mix support
+                        root.style.setProperty('--accent-color-10', `color-mix(in srgb, ${this.colors.accent} 10%, transparent)`);
+                        root.style.setProperty('--accent-color-5', `color-mix(in srgb, ${this.colors.accent} 5%, transparent)`);
+                        root.style.setProperty('--accent-color-20', `color-mix(in srgb, ${this.colors.accent} 20%, transparent)`);
+                        root.style.setProperty('--error-color-10', `color-mix(in srgb, ${this.colors.error} 10%, transparent)`);
+                        root.style.setProperty('--primary-hover', `color-mix(in srgb, ${this.colors.primary} 90%, black)`);
+                        root.style.setProperty('--modal-backdrop', `color-mix(in srgb, ${this.colors.background} 80%, black)`);
+                        root.style.setProperty('--shadow-hover', `color-mix(in srgb, ${this.colors.background} 60%, black)`);
+                    } else {
+                        // Fallback for older browsers using rgba
+                        const hexToRgba = (hex, alpha) => {
+                            const r = parseInt(hex.slice(1, 3), 16);
+                            const g = parseInt(hex.slice(3, 5), 16);
+                            const b = parseInt(hex.slice(5, 7), 16);
+                            return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+                        };
+                        
+                        root.style.setProperty('--accent-color-10', hexToRgba(this.colors.accent, 0.1));
+                        root.style.setProperty('--accent-color-5', hexToRgba(this.colors.accent, 0.05));
+                        root.style.setProperty('--accent-color-20', hexToRgba(this.colors.accent, 0.2));
+                        root.style.setProperty('--error-color-10', hexToRgba(this.colors.error, 0.1));
+                        root.style.setProperty('--primary-hover', this.colors.primary); // Simple fallback
+                        root.style.setProperty('--modal-backdrop', 'rgba(0, 0, 0, 0.8)');
+                        root.style.setProperty('--shadow-hover', 'rgba(0, 0, 0, 0.4)');
+                    }
+                },
+                
+                updateColor(colorKey, value) {
+                    this.colors[colorKey] = value;
+                    this.applyColors();
+                    this.saveData();
+                },
+                
+                resetColors() {
+                    this.colors = {
+                        primary: '#2563eb',
+                        secondary: '#64748b',
+                        background: '#0f172a',
+                        surface: '#1e293b',
+                        textPrimary: '#f8fafc',
+                        textSecondary: '#cbd5e1',
+                        border: '#334155',
+                        accent: '#3b82f6',
+                        success: '#10b981',
+                        warning: '#f59e0b',
+                        error: '#ef4444'
+                    };
+                    this.applyColors();
+                    this.saveData();
+                },
+                
                 getHostname(url) {
                     try {
                         return new URL(url).hostname;
@@ -1512,6 +1098,7 @@
                         collapsedCategories: this.collapsedCategories,
                         gridColumns: this.gridColumns,
                         categoryOrder: this.categoryOrder,
+                        colors: this.colors,
                         exportDate: new Date().toISOString()
                     };
                     
@@ -1538,7 +1125,9 @@
                                 this.collapsedCategories = config.collapsedCategories || [];
                                 this.gridColumns = config.gridColumns || 4;
                                 this.categoryOrder = config.categoryOrder || [];
+                                this.colors = config.colors || this.colors;
                                 this.updateGridColumns();
+                                this.applyColors();
                                 this.saveData();
                                 alert('Configuration imported successfully!');
                                 this.showSettingsModal = false;
