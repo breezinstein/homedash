@@ -77,14 +77,35 @@ PATCH /api/settings       # Update settings only
 
 ### Docker Deployment
 
+#### Pre-built Images (Multi-Architecture)
+
+Pre-built images are automatically available for both AMD64 and ARM64 architectures:
+
 ```bash
+# Pull from GitHub Container Registry
+docker pull ghcr.io/yourusername/homedash:latest
+
+# Run the container
+docker run -p 3001:3001 -v homedash-data:/app/server/data ghcr.io/yourusername/homedash:latest
+
 # Using Docker Compose (recommended)
 docker-compose up -d
+```
 
-# Or build manually
+#### Manual Build
+
+```bash
+# Build for current architecture
 docker build -t homedash .
 docker run -p 3001:3001 -v homedash-data:/app/server/data homedash
+
+# Build for multiple architectures (requires buildx)
+docker buildx build --platform linux/amd64,linux/arm64 -t homedash .
 ```
+
+#### Available Platforms
+- `linux/amd64` - Standard x86_64 systems
+- `linux/arm64` - ARM64 systems (Raspberry Pi 4+, Apple Silicon, etc.)
 
 ### Environment Configuration
 
