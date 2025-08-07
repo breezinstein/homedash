@@ -7,7 +7,7 @@ A modern, responsive dashboard for managing homelab services with a clean and in
 ### 🎯 Core Features
 - **Service Management**: Add, edit, and organize your homelab services
 - **Category Groups**: Collapsible sections to organize services by type
-- **Icon Support**: FontAwesome, Material Icons, and custom image URLs
+- **Icon Support**: FontAwesome, Material Icons, custom image URLs, and **image uploads**
 - **Search**: Real-time filtering with keyboard shortcuts (Ctrl+K)
 - **Responsive Design**: Works great on desktop, tablet, and mobile
 
@@ -22,6 +22,7 @@ A modern, responsive dashboard for managing homelab services with a clean and in
 - **Smooth Animations**: CSS-only transitions and hover effects
 - **Touch Optimized**: Great mobile and tablet experience
 - **Keyboard Shortcuts**: Quick navigation and search
+- **Image Upload**: Upload custom icons/logos with automatic management
 
 ## Quick Start
 
@@ -30,12 +31,14 @@ A modern, responsive dashboard for managing homelab services with a clean and in
 2. **Add services**: Click "Add Service" to add your homelab services
 3. **Organize**: Create categories and organize your services
 4. **Customize**: Adjust grid columns and export your configuration
+5. **Note**: Image upload requires server mode (Option 2)
 
-### Option 2: Server Mode (Multi-Device Sync)
+### Option 2: Server Mode (Multi-Device Sync + Image Upload)
 1. **Install dependencies**: `cd server && npm install`
 2. **Start the server**: `npm start`
 3. **Access dashboard**: Open `http://localhost:3001` in your browser
 4. **Enjoy sync**: Your configuration automatically syncs across all devices
+5. **Upload images**: Upload custom icons and logos for your services
 
 ## 🌐 Server-Side Storage
 
@@ -65,6 +68,12 @@ GET /api/services         # List all services
 POST /api/services        # Add new service
 PUT /api/services/:name   # Update existing service
 DELETE /api/services/:name # Delete service
+
+# Image upload and management
+POST /api/upload-icon     # Upload image file for icons
+GET /api/uploads          # List uploaded images
+DELETE /api/uploads/:file # Delete uploaded image
+POST /api/uploads/cleanup # Clean up unused images
 
 # Backup management
 GET /api/backups          # List available backups
@@ -151,9 +160,20 @@ The dashboard comes pre-configured with common homelab services:
 2. Fill in the service details:
    - **Name**: Display name for your service
    - **URL**: The web interface URL
-   - **Icon**: FontAwesome class (e.g., `fas fa-tv`) or image URL
+   - **Icon**: Choose from:
+     - FontAwesome class (e.g., `fas fa-tv`)
+     - Image URL (e.g., `https://example.com/icon.png`)
+     - **Upload custom image** (JPG, PNG, GIF, SVG, WebP, ICO up to 5MB)
    - **Category**: Group your services (e.g., "Media", "Infrastructure")
    - **Description**: Brief description of the service
+
+### Image Upload Features
+- **Upload custom icons**: Support for JPG, PNG, GIF, SVG, WebP, and ICO formats
+- **File size limit**: Maximum 5MB per image
+- **Image gallery**: View and select from previously uploaded images
+- **Automatic cleanup**: Remove unused uploaded images
+- **Preview support**: Live preview of selected icons
+- **Secure storage**: Images stored securely on the server
 
 ### Managing Services
 - **Right-click** any service card to see options:
@@ -170,6 +190,7 @@ The dashboard comes pre-configured with common homelab services:
 - **Export**: Download your configuration as JSON
 - **Import**: Upload a JSON configuration file
 - **Reset**: Clear all data and start fresh
+- **Image Management**: Clean up unused uploaded images
 
 ## Technical Details
 

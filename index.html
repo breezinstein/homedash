@@ -55,7 +55,7 @@
                 </div>
                 
                 <!-- Controls -->
-                <button class="btn btn-primary" @click="showAddServiceModal = true">
+                <button class="btn btn-primary" @click="showAddServiceModal = true; loadUploadedImages()">
                     <i class="fas fa-plus"></i>
                     Add Service
                 </button>
@@ -121,10 +121,10 @@
                                @click="updateLastUsed(service)">
                                 <div class="service-url" x-text="getHostname(service.url)"></div>
                                 <div class="service-icon">
-                                    <template x-if="service.icon && service.icon.startsWith('http')">
+                                    <template x-if="service.icon && (service.icon.startsWith('http') || service.icon.startsWith('/uploads'))">
                                         <img :src="service.icon" :alt="service.name">
                                     </template>
-                                    <template x-if="service.icon && !service.icon.startsWith('http')">
+                                    <template x-if="service.icon && !service.icon.startsWith('http') && !service.icon.startsWith('/uploads')">
                                         <i :class="service.icon"></i>
                                     </template>
                                     <template x-if="!service.icon">
@@ -199,9 +199,63 @@
                 </div>
                 
                 <div class="form-group">
-                    <label class="form-label">Icon (FontAwesome class or URL)</label>
-                    <input type="text" class="form-input" x-model="serviceForm.icon" 
-                           placeholder="e.g. fas fa-tv or https://example.com/icon.png">
+                    <label class="form-label">Icon</label>
+                    <div class="icon-input-container">
+                        <!-- Icon Preview -->
+                        <div class="icon-preview" x-show="serviceForm.icon">
+                            <template x-if="serviceForm.icon && (serviceForm.icon.startsWith('http') || serviceForm.icon.startsWith('/uploads'))">
+                                <img :src="serviceForm.icon" alt="Icon preview" style="width: 32px; height: 32px; object-fit: contain;">
+                            </template>
+                            <template x-if="serviceForm.icon && !serviceForm.icon.startsWith('http') && !serviceForm.icon.startsWith('/uploads')">
+                                <i :class="serviceForm.icon" style="font-size: 24px;"></i>
+                            </template>
+                        </div>
+                        
+                        <!-- Icon URL Input -->
+                        <input type="text" class="form-input" x-model="serviceForm.icon" 
+                               placeholder="e.g. fas fa-tv or https://example.com/icon.png or upload an image below"
+                               style="margin-bottom: 0.5rem;">
+                        
+                        <!-- File Upload -->
+                        <div class="file-upload-container">
+                            <input type="file" 
+                                   class="file-input" 
+                                   x-ref="iconUpload"
+                                   accept="image/*"
+                                   @change="handleIconUpload($event)"
+                                   style="display: none;">
+                            <button type="button" 
+                                    class="btn btn-secondary btn-sm" 
+                                    @click="$refs.iconUpload.click()"
+                                    :disabled="uploadingIcon">
+                                <i class="fas" :class="uploadingIcon ? 'fa-spinner fa-spin' : 'fa-upload'"></i>
+                                <span x-text="uploadingIcon ? 'Uploading...' : 'Upload Image'"></span>
+                            </button>
+                            <span class="file-upload-hint">Max 5MB • JPG, PNG, GIF, SVG, WebP, ICO</span>
+                        </div>
+                        
+                        <!-- Uploaded Images Gallery -->
+                        <div class="uploaded-images-gallery" x-show="uploadedImages.length > 0">
+                            <label class="form-label-sm">Previously Uploaded:</label>
+                            <div class="image-gallery">
+                                <template x-for="image in uploadedImages" :key="image.filename">
+                                    <div class="image-gallery-item" 
+                                         :class="{ 'selected': serviceForm.icon === image.url }"
+                                         @click="serviceForm.icon = image.url">
+                                        <img :src="image.url" :alt="image.filename">
+                                        <div class="image-overlay">
+                                            <button type="button" 
+                                                    class="btn-icon-small btn-danger" 
+                                                    @click.stop="deleteUploadedImage(image)"
+                                                    title="Delete image">
+                                                <i class="fas fa-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
                 </div>
                 
                 <div class="form-group">
@@ -333,7 +387,17 @@
             </div>
             
             <div class="form-group">
-                <label class="form-label">Category Order</label>
+                <label class="form-label">Image Management</label>
+                <button class="btn btn-secondary" @click="cleanupUnusedImages()">
+                    <i class="fas fa-broom"></i>
+                    Clean Up Unused Images
+                </button>
+                <div class="text-secondary" style="font-size: 0.75rem; margin-top: 0.5rem;">
+                    Remove uploaded images that are not being used by any services
+                </div>
+            </div>
+            
+            <div class="form-group">
                 <button class="btn btn-secondary" @click="resetCategoryOrder()">
                     <i class="fas fa-sort"></i>
                     Reset Category Order
@@ -397,6 +461,10 @@
                 showEditServiceModal: false,
                 showSettingsModal: false,
                 editingService: null,
+                
+                // Image upload
+                uploadingIcon: false,
+                uploadedImages: [],
                 
                 // Forms
                 serviceForm: {
@@ -481,6 +549,7 @@
                     
                     await this.checkServerAvailability();
                     await this.loadData();
+                    await this.loadUploadedImages();
                     this.updateTime();
                     this.updateGridColumns();
                     this.applyColors(); // Apply color theme
@@ -793,6 +862,7 @@
                     this.editingService = service;
                     this.serviceForm = { ...service };
                     this.showEditServiceModal = true;
+                    this.loadUploadedImages(); // Refresh uploaded images when editing
                 },
                 
                 deleteService(service) {
@@ -1057,6 +1127,140 @@
                 
                 updateLastUsed(service) {
                     // Could track usage statistics here
+                },
+
+                // Image upload methods
+                async loadUploadedImages() {
+                    if (!this.serverAvailable) return;
+                    
+                    try {
+                        const response = await fetch(`${this.serverUrl}/api/uploads`);
+                        if (response.ok) {
+                            const result = await response.json();
+                            if (result.success) {
+                                this.uploadedImages = result.data;
+                            }
+                        }
+                    } catch (error) {
+                        console.warn('Failed to load uploaded images:', error);
+                    }
+                },
+
+                async handleIconUpload(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    // Validate file type
+                    if (!file.type.startsWith('image/')) {
+                        alert('Please select an image file.');
+                        return;
+                    }
+
+                    // Validate file size (5MB)
+                    if (file.size > 5 * 1024 * 1024) {
+                        alert('File size must be less than 5MB.');
+                        return;
+                    }
+
+                    if (!this.serverAvailable) {
+                        alert('Server is not available. Cannot upload images.');
+                        return;
+                    }
+
+                    this.uploadingIcon = true;
+
+                    try {
+                        const formData = new FormData();
+                        formData.append('icon', file);
+
+                        const response = await fetch(`${this.serverUrl}/api/upload-icon`, {
+                            method: 'POST',
+                            body: formData
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            // Set the uploaded image URL as the icon
+                            this.serviceForm.icon = result.data.url;
+                            
+                            // Refresh the uploaded images list
+                            await this.loadUploadedImages();
+                            
+                            // Clear the file input
+                            event.target.value = '';
+                        } else {
+                            alert('Upload failed: ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('Upload error:', error);
+                        alert('Upload failed: ' + error.message);
+                    } finally {
+                        this.uploadingIcon = false;
+                    }
+                },
+
+                async deleteUploadedImage(image) {
+                    if (!confirm(`Delete ${image.filename}? This action cannot be undone.`)) {
+                        return;
+                    }
+
+                    if (!this.serverAvailable) {
+                        alert('Server is not available. Cannot delete images.');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`${this.serverUrl}/api/uploads/${encodeURIComponent(image.filename)}`, {
+                            method: 'DELETE'
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            // If this image was being used as the current icon, clear it
+                            if (this.serviceForm.icon === image.url) {
+                                this.serviceForm.icon = '';
+                            }
+                            
+                            // Refresh the uploaded images list
+                            await this.loadUploadedImages();
+                        } else {
+                            alert('Delete failed: ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('Delete error:', error);
+                        alert('Delete failed: ' + error.message);
+                    }
+                },
+
+                async cleanupUnusedImages() {
+                    if (!this.serverAvailable) {
+                        alert('Server is not available. Cannot cleanup images.');
+                        return;
+                    }
+
+                    if (!confirm('This will delete all uploaded images that are not currently being used by any services. Continue?')) {
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`${this.serverUrl}/api/uploads/cleanup`, {
+                            method: 'POST'
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            alert(`Cleaned up ${result.deletedFiles.length} unused images.`);
+                            await this.loadUploadedImages();
+                        } else {
+                            alert('Cleanup failed: ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('Cleanup error:', error);
+                        alert('Cleanup failed: ' + error.message);
+                    }
                 },
 
                 // Context menu functions

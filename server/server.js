@@ -4,16 +4,50 @@ const helmet = require('helmet');
 const compression = require('compression');
 const fs = require('fs-extra');
 const path = require('path');
+const multer = require('multer');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 const CONFIG_DIR = path.join(__dirname, 'data');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const BACKUP_DIR = path.join(CONFIG_DIR, 'backups');
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
 
 // Ensure directories exist
 fs.ensureDirSync(CONFIG_DIR);
 fs.ensureDirSync(BACKUP_DIR);
+fs.ensureDirSync(UPLOADS_DIR);
+
+// Multer configuration for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOADS_DIR);
+  },
+  filename: (req, file, cb) => {
+    // Generate unique filename with timestamp
+    const timestamp = Date.now();
+    const ext = path.extname(file.originalname);
+    const name = path.basename(file.originalname, ext).replace(/[^a-zA-Z0-9]/g, '_');
+    cb(null, `${timestamp}-${name}${ext}`);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  // Accept only image files
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed!'), false);
+  }
+};
+
+const upload = multer({
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB limit
+  }
+});
 
 // Middleware
 app.use(helmet({
@@ -23,7 +57,7 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://fonts.googleapis.com"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://cdn.jsdelivr.net"],
       fontSrc: ["'self'", "https://cdnjs.cloudflare.com", "https://fonts.gstatic.com"],
-      imgSrc: ["'self'", "data:", "https:"],
+      imgSrc: ["'self'", "data:", "https:", "http://localhost:*"],
       connectSrc: ["'self'"]
     }
   }
@@ -34,6 +68,9 @@ app.use(express.json({ limit: '10mb' }));
 
 // Serve static files (frontend)
 app.use(express.static(path.join(__dirname, '../')));
+
+// Serve uploaded files
+app.use('/uploads', express.static(UPLOADS_DIR));
 
 // Default configuration
 const defaultConfig = {
@@ -213,6 +250,161 @@ function validateService(service) {
 }
 
 // API Routes
+
+// Upload image endpoint
+app.post('/api/upload-icon', upload.single('icon'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded',
+        timestamp: new Date().toISOString()
+      });
+    }
+
+    const fileUrl = `/uploads/${req.file.filename}`;
+    
+    res.json({
+      success: true,
+      message: 'File uploaded successfully',
+      data: {
+        filename: req.file.filename,
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        url: fileUrl
+      },
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Upload error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'Failed to upload file',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Delete uploaded image endpoint
+app.delete('/api/uploads/:filename', async (req, res) => {
+  try {
+    const filename = req.params.filename;
+    
+    // Security check - ensure filename doesn't contain path traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid filename',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    const filePath = path.join(UPLOADS_DIR, filename);
+    
+    if (await fs.pathExists(filePath)) {
+      await fs.remove(filePath);
+      res.json({
+        success: true,
+        message: 'File deleted successfully',
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(404).json({
+        success: false,
+        error: 'File not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('Delete file error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete file',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// List uploaded images endpoint
+app.get('/api/uploads', async (req, res) => {
+  try {
+    const files = await fs.readdir(UPLOADS_DIR);
+    const imageFiles = [];
+    
+    for (const file of files) {
+      const filePath = path.join(UPLOADS_DIR, file);
+      const stats = await fs.stat(filePath);
+      
+      if (stats.isFile() && /\.(jpg|jpeg|png|gif|svg|webp|ico)$/i.test(file)) {
+        imageFiles.push({
+          filename: file,
+          url: `/uploads/${file}`,
+          size: stats.size,
+          created: stats.birthtime.toISOString(),
+          modified: stats.mtime.toISOString()
+        });
+      }
+    }
+    
+    // Sort by creation date, newest first
+    imageFiles.sort((a, b) => new Date(b.created) - new Date(a.created));
+    
+    res.json({
+      success: true,
+      data: imageFiles,
+      count: imageFiles.length,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('List uploads error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to list uploaded files',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Clean up unused images endpoint
+app.post('/api/uploads/cleanup', async (req, res) => {
+  try {
+    const config = await loadConfig();
+    const usedImages = new Set();
+    
+    // Collect all used image URLs
+    config.services.forEach(service => {
+      if (service.icon && service.icon.startsWith('/uploads/')) {
+        usedImages.add(service.icon.replace('/uploads/', ''));
+      }
+    });
+    
+    const files = await fs.readdir(UPLOADS_DIR);
+    const deletedFiles = [];
+    
+    for (const file of files) {
+      if (/\.(jpg|jpeg|png|gif|svg|webp|ico)$/i.test(file) && !usedImages.has(file)) {
+        const filePath = path.join(UPLOADS_DIR, file);
+        await fs.remove(filePath);
+        deletedFiles.push(file);
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: `Cleaned up ${deletedFiles.length} unused images`,
+      deletedFiles: deletedFiles,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Cleanup error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to cleanup unused images',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -620,6 +812,32 @@ app.get('*', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
+  
+  // Handle multer errors
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        error: 'File too large. Maximum size is 5MB.',
+        timestamp: new Date().toISOString()
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      error: err.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+  
+  // Handle other file upload errors
+  if (err.message === 'Only image files are allowed!') {
+    return res.status(400).json({
+      success: false,
+      error: 'Only image files are allowed. Supported formats: JPG, PNG, GIF, SVG, WebP, ICO',
+      timestamp: new Date().toISOString()
+    });
+  }
+  
   res.status(500).json({
     success: false,
     error: 'Internal server error',
