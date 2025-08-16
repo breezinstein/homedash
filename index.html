@@ -161,8 +161,12 @@
                 <i class="fas fa-edit"></i>
                 Edit Service
             </button>
-            <button class="context-menu-item" @click="duplicateContextService()">
+            <button class="context-menu-item" @click="copyContextServiceUrl()">
                 <i class="fas fa-copy"></i>
+                Copy URL
+            </button>
+            <button class="context-menu-item" @click="duplicateContextService()">
+                <i class="fas fa-clone"></i>
                 Duplicate Service
             </button>
             <button class="context-menu-item danger" @click="deleteContextService()">
@@ -1685,6 +1689,49 @@
                         this.editService(this.contextMenu.service);
                         this.hideContextMenu();
                     }
+                },
+
+                copyContextServiceUrl() {
+                    if (this.contextMenu.service) {
+                        const url = this.contextMenu.service.url;
+                        
+                        // Try using the modern Clipboard API first
+                        if (navigator.clipboard && window.isSecureContext) {
+                            navigator.clipboard.writeText(url).then(() => {
+                                // You could add a toast notification here
+                                console.log('URL copied to clipboard:', url);
+                            }).catch(err => {
+                                console.error('Failed to copy URL:', err);
+                                this.fallbackCopyToClipboard(url);
+                            });
+                        } else {
+                            // Fallback for older browsers or non-secure contexts
+                            this.fallbackCopyToClipboard(url);
+                        }
+                        
+                        this.hideContextMenu();
+                    }
+                },
+
+                fallbackCopyToClipboard(text) {
+                    // Create a temporary textarea element
+                    const textArea = document.createElement('textarea');
+                    textArea.value = text;
+                    textArea.style.position = 'fixed';
+                    textArea.style.left = '-999999px';
+                    textArea.style.top = '-999999px';
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    
+                    try {
+                        document.execCommand('copy');
+                        console.log('URL copied to clipboard (fallback):', text);
+                    } catch (err) {
+                        console.error('Fallback copy failed:', err);
+                    }
+                    
+                    document.body.removeChild(textArea);
                 },
 
                 duplicateContextService() {
