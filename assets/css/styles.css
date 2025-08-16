@@ -880,3 +880,35 @@ body {
     display: block;
     font-weight: 500;
 }
+
+/* Checkbox Styles */
+.checkbox-container {
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: var(--text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.checkbox-container input[type="checkbox"] {
+    margin-right: 0.5rem;
+    width: 16px;
+    height: 16px;
+    accent-color: var(--primary-color);
+}
+
+.checkbox-container .checkmark {
+    margin-left: 0.5rem;
+}
+
+.backup-settings {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius);
+    background: var(--surface-color);
+}
+
+.backup-status {
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+}

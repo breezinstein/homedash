@@ -60,7 +60,7 @@
                     Add Service
                 </button>
                 
-                <button class="btn btn-secondary" @click="showSettingsModal = true; loadBackupsList()">
+                <button class="btn btn-secondary" @click="showSettingsModal = true; loadBackupsList(); loadBackupSettings()">
                     <i class="fas fa-cog"></i>
                     Settings
                 </button>
@@ -311,6 +311,36 @@
             <!-- Backup Management Section -->
             <div class="form-group">
                 <label class="form-label">Backup Management</label>
+                
+                <!-- Backup Settings -->
+                <div class="backup-settings" style="margin-bottom: 1rem; padding: 1rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--border-radius);">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                        <div>
+                            <label class="form-label-sm">Automatic Backups</label>
+                            <label class="checkbox-container">
+                                <input type="checkbox" x-model="backupSettings.enabled" @change="updateBackupSettings()">
+                                <span class="checkmark"></span>
+                                Enable automatic backups
+                            </label>
+                        </div>
+                        <div>
+                            <label class="form-label-sm">Backup Cadence (minutes)</label>
+                            <input type="number" min="5" max="1440" x-model="backupSettings.cadenceMinutes" 
+                                   @change="updateBackupSettings()" class="form-input" style="height: 2rem;">
+                            <div class="text-secondary" style="font-size: 0.75rem; margin-top: 0.25rem;">
+                                Only backup if changes exist and time has elapsed
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="backup-status" x-show="lastBackupInfo">
+                        <div class="text-secondary" style="font-size: 0.75rem;">
+                            <strong>Last backup:</strong> 
+                            <span x-text="lastBackupInfo"></span>
+                        </div>
+                    </div>
+                </div>
+                
                 <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
                     <button class="btn btn-secondary" @click="createManualBackup()">
                         <i class="fas fa-save"></i>
@@ -533,6 +563,7 @@
             return {
                 // State
                 services: [],
+                configMetadata: {},
                 searchQuery: '',
                 collapsedCategories: [],
                 currentTime: '',
@@ -579,6 +610,11 @@
                 loadingBackups: false,
                 selectedBackup: null,
                 restoringBackup: false,
+                backupSettings: {
+                    enabled: true,
+                    cadenceMinutes: 60
+                },
+                lastBackupInfo: null,
                 
                 // Image upload
                 uploadingIcon: false,
@@ -754,8 +790,12 @@
                         this.gridColumns = config.gridColumns || 4;
                         this.categoryOrder = config.categoryOrder || [];
                         this.colors = config.colors || this.getDefaultColors();
+                        this.configMetadata = config.metadata || {};
                         this.lastSync = Date.now();
                         this.syncStatus = 'online';
+                        
+                        // Update backup settings from loaded config
+                        this.updateBackupSettingsFromConfig();
                         
                         // Apply colors and save to localStorage as backup
                         this.applyColors();
@@ -774,6 +814,8 @@
                         this.gridColumns = config.gridColumns || 4;
                         this.categoryOrder = config.categoryOrder || [];
                         this.colors = config.colors || this.getDefaultColors();
+                        this.configMetadata = config.metadata || {};
+                        this.updateBackupSettingsFromConfig();
                         this.applyColors();
                     } else {
                         // Default services
@@ -909,7 +951,8 @@
                         collapsedCategories: this.collapsedCategories,
                         gridColumns: this.gridColumns,
                         categoryOrder: this.categoryOrder,
-                        colors: this.colors
+                        colors: this.colors,
+                        metadata: this.configMetadata
                     };
                     localStorage.setItem('homedash-config', JSON.stringify(config));
                 },
@@ -1492,6 +1535,71 @@
                     const sizes = ['B', 'KB', 'MB', 'GB'];
                     const i = Math.floor(Math.log(bytes) / Math.log(k));
                     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+                },
+
+                async updateBackupSettings() {
+                    if (!this.serverAvailable) {
+                        console.warn('Server not available, cannot update backup settings');
+                        return;
+                    }
+
+                    try {
+                        const settings = {
+                            backupEnabled: this.backupSettings.enabled,
+                            backupCadenceMinutes: this.backupSettings.cadenceMinutes
+                        };
+
+                        const response = await fetch(`${this.serverUrl}/api/settings`, {
+                            method: 'PATCH',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify(settings)
+                        });
+
+                        const result = await response.json();
+
+                        if (!result.success) {
+                            console.error('Failed to update backup settings:', result.error);
+                        }
+                    } catch (error) {
+                        console.error('Error updating backup settings:', error);
+                    }
+                },
+
+                loadBackupSettings() {
+                    // Load backup settings from the current config
+                    const config = this.services.length > 0 ? this.services : null; // Use existing data if available
+                    
+                    if (this.serverAvailable) {
+                        // Load from server
+                        this.loadFromServer().then(() => {
+                            this.updateBackupSettingsFromConfig();
+                        });
+                    } else {
+                        // Load from local storage
+                        this.loadFromLocalStorage();
+                        this.updateBackupSettingsFromConfig();
+                    }
+                },
+
+                updateBackupSettingsFromConfig() {
+                    // This will be called after loading config to update UI
+                    const metadata = this.configMetadata || {};
+                    
+                    this.backupSettings.enabled = metadata.backupEnabled !== false;
+                    this.backupSettings.cadenceMinutes = metadata.backupCadenceMinutes || 60;
+                    
+                    if (metadata.lastBackup) {
+                        try {
+                            const lastBackupDate = new Date(metadata.lastBackup);
+                            this.lastBackupInfo = lastBackupDate.toLocaleString();
+                        } catch (e) {
+                            this.lastBackupInfo = 'Unknown';
+                        }
+                    } else {
+                        this.lastBackupInfo = 'No automatic backup yet';
+                    }
                 },
 
                 // Context menu functions

@@ -5,6 +5,7 @@ const compression = require('compression');
 const fs = require('fs-extra');
 const path = require('path');
 const multer = require('multer');
+const crypto = require('crypto');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -159,11 +160,57 @@ const defaultConfig = {
   metadata: {
     version: '1.0.0',
     lastModified: new Date().toISOString(),
-    backupEnabled: true
+    backupEnabled: true,
+    lastBackup: null,
+    backupCadenceMinutes: 60, // Only create backups every 60 minutes if changes exist
+    configHash: null // Track if config has actually changed
   }
 };
 
 // Helper functions
+function generateConfigHash(config) {
+  // Create a hash of the important parts of the config (excluding metadata)
+  const configForHashing = {
+    services: config.services,
+    collapsedCategories: config.collapsedCategories,
+    gridColumns: config.gridColumns,
+    theme: config.theme,
+    settings: config.settings,
+    categoryOrder: config.categoryOrder
+  };
+  
+  const configString = JSON.stringify(configForHashing, Object.keys(configForHashing).sort());
+  return crypto.createHash('sha256').update(configString).digest('hex');
+}
+
+function shouldCreateBackup(config) {
+  // Don't backup if backups are disabled
+  if (!config.metadata?.backupEnabled) {
+    return false;
+  }
+  
+  // Always create backup if no previous backup exists
+  if (!config.metadata?.lastBackup) {
+    return true;
+  }
+  
+  // Check if enough time has passed since last backup
+  const lastBackupTime = new Date(config.metadata.lastBackup);
+  const now = new Date();
+  const minutesSinceLastBackup = (now - lastBackupTime) / (1000 * 60);
+  const cadenceMinutes = config.metadata?.backupCadenceMinutes || 60;
+  
+  if (minutesSinceLastBackup < cadenceMinutes) {
+    return false;
+  }
+  
+  // Check if config has actually changed
+  const currentHash = generateConfigHash(config);
+  const lastHash = config.metadata?.configHash;
+  
+  return currentHash !== lastHash;
+}
+
 async function loadConfig() {
   try {
     if (await fs.pathExists(CONFIG_FILE)) {
@@ -179,15 +226,36 @@ async function loadConfig() {
 
 async function saveConfig(config) {
   try {
-    // Create backup before saving
+    // Generate hash of the new config
+    const newConfigHash = generateConfigHash(config);
+    
+    // Load existing config to check if backup is needed
+    let existingConfig = null;
     if (await fs.pathExists(CONFIG_FILE)) {
+      try {
+        existingConfig = await fs.readJson(CONFIG_FILE);
+      } catch (error) {
+        console.warn('Could not read existing config for backup check:', error.message);
+      }
+    }
+    
+    // Create backup if needed (before saving new config)
+    if (existingConfig && shouldCreateBackup({ ...existingConfig, metadata: { ...existingConfig.metadata, configHash: newConfigHash } })) {
+      console.log('Creating backup due to configuration changes...');
       await createBackup();
     }
     
+    // Update metadata
     config.metadata = {
       ...config.metadata,
-      lastModified: new Date().toISOString()
+      lastModified: new Date().toISOString(),
+      configHash: newConfigHash
     };
+    
+    // If we created a backup, update the lastBackup timestamp
+    if (existingConfig && shouldCreateBackup({ ...existingConfig, metadata: { ...existingConfig.metadata, configHash: newConfigHash } })) {
+      config.metadata.lastBackup = new Date().toISOString();
+    }
     
     await fs.writeJson(CONFIG_FILE, config, { spaces: 2 });
     return true;
@@ -199,9 +267,34 @@ async function saveConfig(config) {
 
 async function createBackup() {
   try {
+    // Ensure the source config file exists and is not empty
+    if (!(await fs.pathExists(CONFIG_FILE))) {
+      console.warn('Cannot create backup: config file does not exist');
+      return null;
+    }
+    
+    // Read and validate the config before backing it up
+    let config;
+    try {
+      config = await fs.readJson(CONFIG_FILE);
+    } catch (error) {
+      console.error('Cannot create backup: config file is corrupted or empty:', error.message);
+      return null;
+    }
+    
+    // Safety check: ensure config has services array to prevent backing up empty/invalid configs
+    if (!config || !config.services || !Array.isArray(config.services)) {
+      console.error('Cannot create backup: config is missing services array or is invalid');
+      return null;
+    }
+    
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const backupFile = path.join(BACKUP_DIR, `config-backup-${timestamp}.json`);
+    
+    // Copy the validated config to backup
     await fs.copy(CONFIG_FILE, backupFile);
+    
+    console.log(`Backup created: ${path.basename(backupFile)} (${config.services.length} services)`);
     
     // Clean old backups (keep last 10)
     const backups = await fs.readdir(BACKUP_DIR);
@@ -213,6 +306,7 @@ async function createBackup() {
     if (sortedBackups.length > 10) {
       for (let i = 10; i < sortedBackups.length; i++) {
         await fs.remove(path.join(BACKUP_DIR, sortedBackups[i]));
+        console.log(`Removed old backup: ${sortedBackups[i]}`);
       }
     }
     
@@ -733,8 +827,14 @@ app.get('/api/backups/:filename', async (req, res) => {
 // Create manual backup
 app.post('/api/backup', async (req, res) => {
   try {
+    // For manual backups, always create backup but still validate the config
     const backupFile = await createBackup();
     if (backupFile) {
+      // Update the lastBackup timestamp in config
+      const config = await loadConfig();
+      config.metadata.lastBackup = new Date().toISOString();
+      await fs.writeJson(CONFIG_FILE, config, { spaces: 2 });
+      
       res.json({
         success: true,
         message: 'Backup created successfully',
@@ -744,7 +844,7 @@ app.post('/api/backup', async (req, res) => {
     } else {
       res.status(500).json({
         success: false,
-        error: 'Failed to create backup',
+        error: 'Failed to create backup - configuration may be invalid or empty',
         timestamp: new Date().toISOString()
       });
     }
@@ -871,7 +971,20 @@ app.patch('/api/settings', async (req, res) => {
     const newSettings = req.body;
     const config = await loadConfig();
     
+    // Handle backup-specific settings in metadata
+    if (newSettings.backupEnabled !== undefined) {
+      config.metadata.backupEnabled = newSettings.backupEnabled;
+      delete newSettings.backupEnabled;
+    }
+    
+    if (newSettings.backupCadenceMinutes !== undefined) {
+      config.metadata.backupCadenceMinutes = Math.max(5, Math.min(1440, parseInt(newSettings.backupCadenceMinutes) || 60));
+      delete newSettings.backupCadenceMinutes;
+    }
+    
+    // Update regular settings
     config.settings = { ...config.settings, ...newSettings };
+    
     const saved = await saveConfig(config);
     
     if (saved) {
@@ -879,6 +992,7 @@ app.patch('/api/settings', async (req, res) => {
         success: true,
         message: 'Settings updated successfully',
         settings: config.settings,
+        metadata: config.metadata,
         timestamp: new Date().toISOString()
       });
     } else {
