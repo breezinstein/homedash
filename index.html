@@ -286,8 +286,9 @@
          @click.self="showSettingsModal = false"
          x-transition:enter="transition ease-out duration-300"
          x-transition:enter-start="opacity-0"
-         x-transition:enter-end="opacity-100">
-        <div class="modal-content">
+         x-transition:enter-end="opacity-100"
+         x-data="{ activeTab: 'general' }">
+        <div class="modal-content settings-modal">
             <div class="modal-header">
                 <h3 class="modal-title">Settings</h3>
                 <button class="close-btn" @click="showSettingsModal = false">
@@ -295,207 +296,254 @@
                 </button>
             </div>
             
-            <div class="form-group">
-                <label class="form-label">Export Configuration</label>
-                <button class="btn btn-secondary" @click="exportConfig()">
-                    <i class="fas fa-download"></i>
-                    Download JSON
+            <!-- Settings Tabs -->
+            <div class="settings-tabs">
+                <button class="tab-btn" 
+                        :class="{ 'active': activeTab === 'general' }" 
+                        @click="activeTab = 'general'">
+                    <i class="fas fa-cog"></i>
+                    General
+                </button>
+                <button class="tab-btn" 
+                        :class="{ 'active': activeTab === 'appearance' }" 
+                        @click="activeTab = 'appearance'">
+                    <i class="fas fa-palette"></i>
+                    Appearance
+                </button>
+                <button class="tab-btn" 
+                        :class="{ 'active': activeTab === 'data' }" 
+                        @click="activeTab = 'data'">
+                    <i class="fas fa-database"></i>
+                    Data
+                </button>
+                <button class="tab-btn" 
+                        :class="{ 'active': activeTab === 'server' }" 
+                        @click="activeTab = 'server'"
+                        x-show="serverAvailable">
+                    <i class="fas fa-server"></i>
+                    Server
                 </button>
             </div>
             
-            <div class="form-group">
-                <label class="form-label">Import Configuration</label>
-                <input type="file" class="form-input" accept=".json" @change="importConfig($event)">
-            </div>
-            
-            <!-- Backup Management Section -->
-            <div class="form-group">
-                <label class="form-label">Backup Management</label>
-                
-                <!-- Backup Settings -->
-                <div class="backup-settings" style="margin-bottom: 1rem; padding: 1rem; background: var(--surface-color); border: 1px solid var(--border-color); border-radius: var(--border-radius);">
-                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
-                        <div>
-                            <label class="form-label-sm">Automatic Backups</label>
-                            <label class="checkbox-container">
-                                <input type="checkbox" x-model="backupSettings.enabled" @change="updateBackupSettings()">
-                                <span class="checkmark"></span>
-                                Enable automatic backups
-                            </label>
+            <!-- Tab Content -->
+            <div class="settings-content">
+                <!-- General Tab -->
+                <div x-show="activeTab === 'general'" class="tab-content">
+                    <div class="form-group">
+                        <label class="form-label">Grid Layout</label>
+                        <div class="grid-controls">
+                            <label class="form-label-sm">Columns: <span x-text="gridColumns"></span></label>
+                            <input type="range" min="2" max="6" x-model="gridColumns" 
+                                   @input="updateGridColumns()" class="form-input range-input">
                         </div>
-                        <div>
-                            <label class="form-label-sm">Backup Cadence (minutes)</label>
-                            <input type="number" min="5" max="1440" x-model="backupSettings.cadenceMinutes" 
-                                   @change="updateBackupSettings()" class="form-input" style="height: 2rem;">
-                            <div class="text-secondary" style="font-size: 0.75rem; margin-top: 0.25rem;">
-                                Only backup if changes exist and time has elapsed
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Category Management</label>
+                        <button class="btn btn-secondary" @click="resetCategoryOrder()">
+                            <i class="fas fa-sort"></i>
+                            Reset Category Order
+                        </button>
+                        <div class="help-text">
+                            Drag category headers to reorder them
+                        </div>
+                    </div>
+                    
+                    <!-- Server Connection Status -->
+                    <div class="form-group">
+                        <label class="form-label">Server Connection</label>
+                        <div class="connection-status">
+                            <div class="status-indicator" :class="serverAvailable ? 'online' : 'offline'">
+                                <i class="fas" :class="serverAvailable ? 'fa-check-circle' : 'fa-times-circle'"></i>
+                                <span x-text="serverAvailable ? 'Connected' : 'Offline'"></span>
+                            </div>
+                            <div class="help-text">
+                                <span x-show="serverAvailable">Server features are available</span>
+                                <span x-show="!serverAvailable">Some features require server connection</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Appearance Tab -->
+                <div x-show="activeTab === 'appearance'" class="tab-content">
+                    <div class="form-group">
+                        <label class="form-label">Theme Colors</label>
+                        <div class="color-grid">
+                            <div class="color-control">
+                                <label class="color-label">Primary Color</label>
+                                <input type="color" x-model="colors.primary" @input="updateColor('primary', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Accent Color</label>
+                                <input type="color" x-model="colors.accent" @input="updateColor('accent', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Background Color</label>
+                                <input type="color" x-model="colors.background" @input="updateColor('background', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Surface Color</label>
+                                <input type="color" x-model="colors.surface" @input="updateColor('surface', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Text Primary</label>
+                                <input type="color" x-model="colors.textPrimary" @input="updateColor('textPrimary', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Text Secondary</label>
+                                <input type="color" x-model="colors.textSecondary" @input="updateColor('textSecondary', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Border Color</label>
+                                <input type="color" x-model="colors.border" @input="updateColor('border', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Success Color</label>
+                                <input type="color" x-model="colors.success" @input="updateColor('success', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Warning Color</label>
+                                <input type="color" x-model="colors.warning" @input="updateColor('warning', $event.target.value)" class="color-input">
+                            </div>
+                            <div class="color-control">
+                                <label class="color-label">Error Color</label>
+                                <input type="color" x-model="colors.error" @input="updateColor('error', $event.target.value)" class="color-input">
+                            </div>
+                        </div>
+                        <button class="btn btn-secondary reset-btn" @click="resetColors()">
+                            <i class="fas fa-undo"></i>
+                            Reset to Default Colors
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Data Tab -->
+                <div x-show="activeTab === 'data'" class="tab-content">
+                    <div class="form-group">
+                        <label class="form-label">Configuration Backup</label>
+                        <div class="data-actions">
+                            <button class="btn btn-secondary" @click="exportConfig()">
+                                <i class="fas fa-download"></i>
+                                Export Configuration
+                            </button>
+                            <div class="help-text">Download your configuration as a JSON file</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label">Configuration Restore</label>
+                        <div class="data-actions">
+                            <input type="file" class="form-input" accept=".json" @change="importConfig($event)" id="config-import">
+                            <label for="config-import" class="btn btn-secondary file-input-label">
+                                <i class="fas fa-upload"></i>
+                                Import Configuration
+                            </label>
+                            <div class="help-text">Upload a JSON configuration file to restore</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Image Management (only show if server available) -->
+                    <div class="form-group" x-show="serverAvailable">
+                        <label class="form-label">Image Management</label>
+                        <div class="data-actions">
+                            <button class="btn btn-secondary" @click="cleanupUnusedImages()">
+                                <i class="fas fa-broom"></i>
+                                Clean Up Unused Images
+                            </button>
+                            <div class="help-text">Remove uploaded images that are not being used by any services</div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group danger-zone">
+                        <label class="form-label">Danger Zone</label>
+                        <div class="data-actions">
+                            <button class="btn btn-danger" @click="resetData()">
+                                <i class="fas fa-trash"></i>
+                                Reset All Data
+                            </button>
+                            <div class="help-text">This will permanently delete all your services and settings</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Server Tab (only visible when server is available) -->
+                <div x-show="activeTab === 'server' && serverAvailable" class="tab-content">
+                    <div class="form-group">
+                        <label class="form-label">Automatic Backups</label>
+                        
+                        <!-- Backup Settings -->
+                        <div class="backup-settings">
+                            <div class="backup-controls">
+                                <div class="checkbox-control">
+                                    <input type="checkbox" id="backup-enabled" x-model="backupSettings.enabled" @change="updateBackupSettings()">
+                                    <label for="backup-enabled">Enable automatic backups</label>
+                                </div>
+                                <div class="time-control">
+                                    <label class="form-label-sm">Backup every (minutes)</label>
+                                    <input type="number" min="5" max="1440" x-model="backupSettings.cadenceMinutes" @change="updateBackupSettings()" class="form-input time-input">
+                                </div>
+                            </div>
+                            
+                            <div class="backup-status" x-show="lastBackupInfo">
+                                <div class="status-text">
+                                    Last backup: <span x-text="lastBackupInfo"></span>
+                                </div>
                             </div>
                         </div>
                     </div>
                     
-                    <div class="backup-status" x-show="lastBackupInfo">
-                        <div class="text-secondary" style="font-size: 0.75rem;">
-                            <strong>Last backup:</strong> 
-                            <span x-text="lastBackupInfo"></span>
+                    <div class="form-group">
+                        <label class="form-label">Manual Backup</label>
+                        <div class="backup-actions">
+                            <button class="btn btn-secondary" @click="createManualBackup()">
+                                <i class="fas fa-save"></i>
+                                Create Backup Now
+                            </button>
+                            <button class="btn btn-secondary" @click="loadBackupsList()">
+                                <i class="fas fa-sync"></i>
+                                Refresh List
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Backups List -->
+                    <div class="form-group">
+                        <label class="form-label">Available Backups</label>
+                        
+                        <div x-show="backups.length > 0" class="backups-list">
+                            <div class="backups-container">
+                                <template x-for="backup in backups" :key="backup.filename">
+                                    <div class="backup-item">
+                                        <div class="backup-info">
+                                            <div class="backup-name" x-text="backup.filename"></div>
+                                            <div class="backup-meta">
+                                                <span x-text="formatBackupDate(backup.created)"></span>
+                                                <span class="backup-size" x-text="formatFileSize(backup.size)"></span>
+                                            </div>
+                                        </div>
+                                        <div class="backup-actions">
+                                            <button class="btn btn-sm btn-secondary" @click="downloadBackup(backup)" title="Download">
+                                                <i class="fas fa-download"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-primary" @click="confirmRestore(backup)" title="Restore">
+                                                <i class="fas fa-undo"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                        
+                        <div x-show="backups.length === 0 && !loadingBackups" class="empty-message">
+                            No backups available. Create your first backup to get started.
+                        </div>
+                        
+                        <div x-show="loadingBackups" class="loading-message">
+                            <i class="fas fa-spinner fa-spin"></i> Loading backups...
                         </div>
                     </div>
                 </div>
-                
-                <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
-                    <button class="btn btn-secondary" @click="createManualBackup()">
-                        <i class="fas fa-save"></i>
-                        Create Backup
-                    </button>
-                    <button class="btn btn-secondary" @click="loadBackupsList()">
-                        <i class="fas fa-sync"></i>
-                        Refresh List
-                    </button>
-                </div>
-                
-                <!-- Backups List -->
-                <div x-show="backups.length > 0" class="backups-list">
-                    <label class="form-label-sm">Available Backups</label>
-                    <div class="backups-container">
-                        <template x-for="backup in backups" :key="backup.filename">
-                            <div class="backup-item">
-                                <div class="backup-info">
-                                    <div class="backup-filename" x-text="backup.filename"></div>
-                                    <div class="backup-meta">
-                                        <span class="backup-date" x-text="formatBackupDate(backup.created)"></span>
-                                        <span class="backup-size" x-text="formatFileSize(backup.size)"></span>
-                                    </div>
-                                </div>
-                                <div class="backup-actions">
-                                    <button class="btn-icon-sm btn-secondary" 
-                                            @click="downloadBackup(backup)" 
-                                            :title="'Download ' + backup.filename">
-                                        <i class="fas fa-download"></i>
-                                    </button>
-                                    <button class="btn-icon-sm btn-primary" 
-                                            @click="confirmRestore(backup)" 
-                                            :title="'Restore from ' + backup.filename">
-                                        <i class="fas fa-undo"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        </template>
-                    </div>
-                </div>
-                
-                <div x-show="backups.length === 0 && !loadingBackups" class="text-secondary" style="font-size: 0.875rem; font-style: italic;">
-                    No backups available. Create your first backup to get started.
-                </div>
-                
-                <div x-show="loadingBackups" class="text-secondary" style="font-size: 0.875rem;">
-                    <i class="fas fa-spinner fa-spin"></i> Loading backups...
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Grid Columns</label>
-                <input type="range" min="2" max="6" x-model="gridColumns" 
-                       @input="updateGridColumns()" class="form-input">
-                <div x-text="gridColumns + ' columns'"></div>
-            </div>
-            
-            <!-- Color Customization Section -->
-            <div class="form-group">
-                <label class="form-label">Theme Colors</label>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-top: 0.5rem;">
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Primary Color</label>
-                        <input type="color" x-model="colors.primary" 
-                               @input="updateColor('primary', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Accent Color</label>
-                        <input type="color" x-model="colors.accent" 
-                               @input="updateColor('accent', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Background Color</label>
-                        <input type="color" x-model="colors.background" 
-                               @input="updateColor('background', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Surface Color</label>
-                        <input type="color" x-model="colors.surface" 
-                               @input="updateColor('surface', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Text Primary</label>
-                        <input type="color" x-model="colors.textPrimary" 
-                               @input="updateColor('textPrimary', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Text Secondary</label>
-                        <input type="color" x-model="colors.textSecondary" 
-                               @input="updateColor('textSecondary', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Border Color</label>
-                        <input type="color" x-model="colors.border" 
-                               @input="updateColor('border', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Success Color</label>
-                        <input type="color" x-model="colors.success" 
-                               @input="updateColor('success', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Warning Color</label>
-                        <input type="color" x-model="colors.warning" 
-                               @input="updateColor('warning', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                    <div>
-                        <label style="font-size: 0.75rem; color: var(--text-secondary);">Error Color</label>
-                        <input type="color" x-model="colors.error" 
-                               @input="updateColor('error', $event.target.value)" 
-                               class="form-input" style="height: 2.5rem;">
-                    </div>
-                </div>
-                <button class="btn btn-secondary" @click="resetColors()" style="margin-top: 1rem;">
-                    <i class="fas fa-undo"></i>
-                    Reset to Default Colors
-                </button>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Image Management</label>
-                <button class="btn btn-secondary" @click="cleanupUnusedImages()">
-                    <i class="fas fa-broom"></i>
-                    Clean Up Unused Images
-                </button>
-                <div class="text-secondary" style="font-size: 0.75rem; margin-top: 0.5rem;">
-                    Remove uploaded images that are not being used by any services
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <button class="btn btn-secondary" @click="resetCategoryOrder()">
-                    <i class="fas fa-sort"></i>
-                    Reset Category Order
-                </button>
-                <div class="text-secondary" style="font-size: 0.75rem; margin-top: 0.5rem;">
-                    Drag category headers to reorder them
-                </div>
-            </div>
-            
-            <div class="form-group">
-                <button class="btn btn-secondary" @click="resetData()" 
-                        style="background: var(--error-color);">
-                    <i class="fas fa-trash"></i>
-                    Reset All Data
-                </button>
             </div>
         </div>
     </div>
