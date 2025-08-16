@@ -758,6 +758,113 @@ app.post('/api/backup', async (req, res) => {
   }
 });
 
+// Restore from backup
+app.post('/api/restore/:filename', async (req, res) => {
+  try {
+    const filename = decodeURIComponent(req.params.filename);
+    const backupFile = path.join(BACKUP_DIR, filename);
+    
+    // Security check - ensure filename doesn't contain path traversal
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid filename',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Check if backup file exists
+    if (!(await fs.pathExists(backupFile))) {
+      return res.status(404).json({
+        success: false,
+        error: 'Backup file not found',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Create a backup of current config before restoring
+    const currentBackupFile = await createBackup();
+    if (!currentBackupFile) {
+      console.warn('Failed to create backup before restore, proceeding anyway');
+    }
+    
+    // Read and validate the backup file
+    let backupConfig;
+    try {
+      backupConfig = await fs.readJson(backupFile);
+    } catch (parseError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid backup file format',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Validate the backup configuration structure
+    if (!backupConfig.services || !Array.isArray(backupConfig.services)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid backup: missing or invalid services array',
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    // Validate each service in the backup
+    for (let i = 0; i < backupConfig.services.length; i++) {
+      const errors = validateService(backupConfig.services[i]);
+      if (errors.length > 0) {
+        return res.status(400).json({
+          success: false,
+          error: `Invalid service at index ${i}: ${errors.join(', ')}`,
+          timestamp: new Date().toISOString()
+        });
+      }
+    }
+    
+    // Merge with default config to ensure all required fields are present
+    const restoredConfig = {
+      ...defaultConfig,
+      ...backupConfig,
+      metadata: {
+        ...defaultConfig.metadata,
+        ...backupConfig.metadata,
+        lastModified: new Date().toISOString(),
+        restoredFrom: filename,
+        restoredAt: new Date().toISOString()
+      }
+    };
+    
+    // Save the restored configuration
+    const saved = await saveConfig(restoredConfig);
+    
+    if (saved) {
+      res.json({
+        success: true,
+        message: 'Configuration restored successfully',
+        data: {
+          restoredFrom: filename,
+          servicesCount: restoredConfig.services.length,
+          currentBackup: currentBackupFile ? path.basename(currentBackupFile) : null
+        },
+        timestamp: new Date().toISOString()
+      });
+    } else {
+      res.status(500).json({
+        success: false,
+        error: 'Failed to save restored configuration',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (error) {
+    console.error('POST /api/restore error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to restore from backup',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // Update settings only
 app.patch('/api/settings', async (req, res) => {
   try {

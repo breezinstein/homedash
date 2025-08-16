@@ -60,7 +60,7 @@
                     Add Service
                 </button>
                 
-                <button class="btn btn-secondary" @click="showSettingsModal = true">
+                <button class="btn btn-secondary" @click="showSettingsModal = true; loadBackupsList()">
                     <i class="fas fa-cog"></i>
                     Settings
                 </button>
@@ -308,6 +308,59 @@
                 <input type="file" class="form-input" accept=".json" @change="importConfig($event)">
             </div>
             
+            <!-- Backup Management Section -->
+            <div class="form-group">
+                <label class="form-label">Backup Management</label>
+                <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
+                    <button class="btn btn-secondary" @click="createManualBackup()">
+                        <i class="fas fa-save"></i>
+                        Create Backup
+                    </button>
+                    <button class="btn btn-secondary" @click="loadBackupsList()">
+                        <i class="fas fa-sync"></i>
+                        Refresh List
+                    </button>
+                </div>
+                
+                <!-- Backups List -->
+                <div x-show="backups.length > 0" class="backups-list">
+                    <label class="form-label-sm">Available Backups</label>
+                    <div class="backups-container">
+                        <template x-for="backup in backups" :key="backup.filename">
+                            <div class="backup-item">
+                                <div class="backup-info">
+                                    <div class="backup-filename" x-text="backup.filename"></div>
+                                    <div class="backup-meta">
+                                        <span class="backup-date" x-text="formatBackupDate(backup.created)"></span>
+                                        <span class="backup-size" x-text="formatFileSize(backup.size)"></span>
+                                    </div>
+                                </div>
+                                <div class="backup-actions">
+                                    <button class="btn-icon-sm btn-secondary" 
+                                            @click="downloadBackup(backup)" 
+                                            :title="'Download ' + backup.filename">
+                                        <i class="fas fa-download"></i>
+                                    </button>
+                                    <button class="btn-icon-sm btn-primary" 
+                                            @click="confirmRestore(backup)" 
+                                            :title="'Restore from ' + backup.filename">
+                                        <i class="fas fa-undo"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+                
+                <div x-show="backups.length === 0 && !loadingBackups" class="text-secondary" style="font-size: 0.875rem; font-style: italic;">
+                    No backups available. Create your first backup to get started.
+                </div>
+                
+                <div x-show="loadingBackups" class="text-secondary" style="font-size: 0.875rem;">
+                    <i class="fas fa-spinner fa-spin"></i> Loading backups...
+                </div>
+            </div>
+            
             <div class="form-group">
                 <label class="form-label">Grid Columns</label>
                 <input type="range" min="2" max="6" x-model="gridColumns" 
@@ -417,6 +470,64 @@
         </div>
     </div>
 
+    <!-- Restore Confirmation Modal -->
+    <div x-show="showRestoreModal" 
+         class="modal" 
+         @click.self="showRestoreModal = false"
+         x-transition:enter="transition ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100">
+        <div class="modal-content" style="max-width: 500px;">
+            <div class="modal-header">
+                <h3 class="modal-title">
+                    <i class="fas fa-exclamation-triangle" style="color: var(--warning-color);"></i>
+                    Confirm Restore
+                </h3>
+                <button class="close-btn" @click="showRestoreModal = false">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            
+            <div style="margin-bottom: 1.5rem;">
+                <p style="margin-bottom: 1rem;">Are you sure you want to restore from this backup?</p>
+                
+                <div class="backup-detail-card">
+                    <div class="backup-detail-item">
+                        <strong>Backup File:</strong>
+                        <span x-text="selectedBackup?.filename"></span>
+                    </div>
+                    <div class="backup-detail-item">
+                        <strong>Created:</strong>
+                        <span x-text="selectedBackup ? formatBackupDate(selectedBackup.created) : ''"></span>
+                    </div>
+                    <div class="backup-detail-item">
+                        <strong>Size:</strong>
+                        <span x-text="selectedBackup ? formatFileSize(selectedBackup.size) : ''"></span>
+                    </div>
+                </div>
+                
+                <div class="warning-box">
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <strong>Important:</strong> This will replace your current configuration. 
+                        A backup of your current settings will be created automatically before the restore.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="form-actions">
+                <button class="btn btn-secondary" @click="showRestoreModal = false">
+                    <i class="fas fa-times"></i>
+                    Cancel
+                </button>
+                <button class="btn btn-primary" @click="executeRestore()" :disabled="restoringBackup">
+                    <i class="fas" :class="restoringBackup ? 'fa-spinner fa-spin' : 'fa-undo'"></i>
+                    <span x-text="restoringBackup ? 'Restoring...' : 'Restore Configuration'"></span>
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         function dashboard() {
             return {
@@ -460,7 +571,14 @@
                 showAddServiceModal: false,
                 showEditServiceModal: false,
                 showSettingsModal: false,
+                showRestoreModal: false,
                 editingService: null,
+                
+                // Backup management
+                backups: [],
+                loadingBackups: false,
+                selectedBackup: null,
+                restoringBackup: false,
                 
                 // Image upload
                 uploadingIcon: false,
@@ -1261,6 +1379,119 @@
                         console.error('Cleanup error:', error);
                         alert('Cleanup failed: ' + error.message);
                     }
+                },
+
+                // Backup management methods
+                async loadBackupsList() {
+                    if (!this.serverAvailable) {
+                        console.warn('Server not available, cannot load backups');
+                        return;
+                    }
+
+                    this.loadingBackups = true;
+                    try {
+                        const response = await fetch(`${this.serverUrl}/api/backups`);
+                        const result = await response.json();
+
+                        if (result.success) {
+                            this.backups = result.data;
+                        } else {
+                            console.error('Failed to load backups:', result.error);
+                        }
+                    } catch (error) {
+                        console.error('Error loading backups:', error);
+                    } finally {
+                        this.loadingBackups = false;
+                    }
+                },
+
+                async createManualBackup() {
+                    if (!this.serverAvailable) {
+                        alert('Server is not available. Cannot create backup.');
+                        return;
+                    }
+
+                    try {
+                        const response = await fetch(`${this.serverUrl}/api/backup`, {
+                            method: 'POST'
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            alert(`Backup created successfully: ${result.filename}`);
+                            await this.loadBackupsList();
+                        } else {
+                            alert('Backup failed: ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('Backup error:', error);
+                        alert('Backup failed: ' + error.message);
+                    }
+                },
+
+                downloadBackup(backup) {
+                    if (!this.serverAvailable) {
+                        alert('Server is not available. Cannot download backup.');
+                        return;
+                    }
+
+                    window.open(`${this.serverUrl}${backup.path}`, '_blank');
+                },
+
+                confirmRestore(backup) {
+                    this.selectedBackup = backup;
+                    this.showRestoreModal = true;
+                },
+
+                async executeRestore() {
+                    if (!this.selectedBackup || !this.serverAvailable) {
+                        return;
+                    }
+
+                    this.restoringBackup = true;
+                    try {
+                        const response = await fetch(`${this.serverUrl}/api/restore/${encodeURIComponent(this.selectedBackup.filename)}`, {
+                            method: 'POST'
+                        });
+
+                        const result = await response.json();
+
+                        if (result.success) {
+                            alert(`Configuration restored successfully from ${result.data.restoredFrom}!\n\nServices restored: ${result.data.servicesCount}\n\nThe page will reload to apply the changes.`);
+                            
+                            // Close modals
+                            this.showRestoreModal = false;
+                            this.showSettingsModal = false;
+                            
+                            // Reload the page to refresh everything
+                            window.location.reload();
+                        } else {
+                            alert('Restore failed: ' + result.error);
+                        }
+                    } catch (error) {
+                        console.error('Restore error:', error);
+                        alert('Restore failed: ' + error.message);
+                    } finally {
+                        this.restoringBackup = false;
+                    }
+                },
+
+                formatBackupDate(dateString) {
+                    try {
+                        const date = new Date(dateString);
+                        return date.toLocaleString();
+                    } catch (error) {
+                        return dateString;
+                    }
+                },
+
+                formatFileSize(bytes) {
+                    if (bytes === 0) return '0 B';
+                    const k = 1024;
+                    const sizes = ['B', 'KB', 'MB', 'GB'];
+                    const i = Math.floor(Math.log(bytes) / Math.log(k));
+                    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
                 },
 
                 // Context menu functions
