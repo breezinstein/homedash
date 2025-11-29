@@ -1,6 +1,8 @@
 services:
   homedash:
-    image: ghcr.io/breezinstein/homedash:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: homedash
     restart: unless-stopped
     ports:

@@ -33,8 +33,8 @@ A modern, responsive dashboard for managing homelab services built with React, T
 git clone https://github.com/breezinstein/homedash.git
 cd homedash
 
-# Start with Docker Compose
-docker compose up -d
+# Build and start with Docker Compose
+docker compose up -d --build
 
 # Access dashboard at http://localhost:3001
 ```
@@ -84,11 +84,23 @@ npm run server
 
 ## Docker Deployment
 
-### Docker Compose
+### Docker Compose (Recommended)
 
-The included `docker-compose.yml` provides a production-ready setup:
+The included `docker-compose.yml` builds and runs from source:
+
+```bash
+# Build and start the container
+docker compose up -d --build
+
+# Access dashboard at http://localhost:3001
+```
+
+### Pre-built Image from GitHub Container Registry
+
+Alternatively, use the pre-built image without cloning the repository:
 
 ```yaml
+# docker-compose.yml
 services:
   homedash:
     image: ghcr.io/breezinstein/homedash:latest
@@ -98,9 +110,31 @@ services:
       - "3001:3001"
     volumes:
       - homedash-data:/app/data
+    environment:
+      - NODE_ENV=production
 
 volumes:
   homedash-data:
+    driver: local
+```
+
+```bash
+docker compose up -d
+```
+
+### Manual Docker Run
+
+```bash
+# Pull from GitHub Container Registry
+docker pull ghcr.io/breezinstein/homedash:latest
+
+# Run the container
+docker run -d \
+  --name homedash \
+  -p 3001:3001 \
+  -v homedash-data:/app/data \
+  --restart unless-stopped \
+  ghcr.io/breezinstein/homedash:latest
 ```
 
 ### Manual Build

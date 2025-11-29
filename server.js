@@ -210,7 +210,7 @@ app.post('/api/upload-icon', express.raw({ type: 'image/*', limit: '5mb' }), (re
 
 // SPA fallback - serve index.html for all non-API routes
 if (existsSync(distPath)) {
-  app.get('*', (req, res) => {
+  app.get('/{*splat}', (req, res) => {
     res.sendFile(join(distPath, 'index.html'));
   });
 }
