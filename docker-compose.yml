@@ -1,0 +1,21 @@
+services:
+  homedash:
+    image: ghcr.io/breezinstein/homedash:latest
+    container_name: homedash
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - homedash-data:/app/data
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/config/check"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  homedash-data:
+    driver: local

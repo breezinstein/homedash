@@ -188,6 +188,12 @@ app.delete('/api/backups/:filename', (req, res) => {
 // Serve uploaded icons
 app.use('/uploads', express.static(join(__dirname, 'data', 'uploads')));
 
+// Serve static files in production
+const distPath = join(__dirname, 'dist');
+if (existsSync(distPath)) {
+  app.use(express.static(distPath));
+}
+
 // POST /api/upload-icon - Upload icon file
 app.post('/api/upload-icon', express.raw({ type: 'image/*', limit: '5mb' }), (req, res) => {
   try {
@@ -196,11 +202,18 @@ app.post('/api/upload-icon', express.raw({ type: 'image/*', limit: '5mb' }), (re
     
     const filename = `${Date.now()}-${req.query.name || 'icon.png'}`;
     writeFileSync(join(uploadsDir, filename), req.body);
-    res.json({ url: `http://localhost:${PORT}/uploads/${filename}` });
+    res.json({ url: `/uploads/${filename}` });
   } catch (error) {
     res.status(500).json({ error: 'Failed to upload icon' });
   }
 });
+
+// SPA fallback - serve index.html for all non-API routes
+if (existsSync(distPath)) {
+  app.get('*', (req, res) => {
+    res.sendFile(join(distPath, 'index.html'));
+  });
+}
 
 app.listen(PORT, () => {
   console.log(`\n🚀 Config API server running on http://localhost:${PORT}`);
