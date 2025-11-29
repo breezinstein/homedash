@@ -1,255 +1,187 @@
-# 🏠 Homelab Dashboard
+# 🏠 Homedash
 
-A modern, responsive dashboard for managing homelab services with a clean and intuitive interface.
+A modern, responsive dashboard for managing homelab services built with React, TypeScript, and Tailwind CSS.
 
 ## Features
 
 ### 🎯 Core Features
 - **Service Management**: Add, edit, and organize your homelab services
 - **Category Groups**: Collapsible sections to organize services by type
-- **Icon Support**: FontAwesome, Material Icons, custom image URLs, and **image uploads**
+- **Icon Support**: Lucide icons, custom image URLs, and **image uploads**
 - **Search**: Real-time filtering with keyboard shortcuts (Ctrl+K)
 - **Responsive Design**: Works great on desktop, tablet, and mobile
 
 ### ⚙️ Configuration
-- **Local Storage**: Automatic persistence of all settings
+- **Server-side Storage**: Persistent configuration with automatic sync
 - **JSON Import/Export**: Backup and restore configurations
 - **Grid Layout**: Adjustable columns (2-6) to fit your screen
-- **Right-click Context Menu**: Easy editing and management
+- **Custom Themes**: Customize colors and appearance
 
 ### 📱 User Experience
-- **Dark Theme**: Modern dark theme with blue accents
-- **Smooth Animations**: CSS-only transitions and hover effects
+- **Dark Theme**: Modern dark theme with customizable accents
+- **Smooth Animations**: CSS transitions and hover effects
 - **Touch Optimized**: Great mobile and tablet experience
 - **Keyboard Shortcuts**: Quick navigation and search
 - **Image Upload**: Upload custom icons/logos with automatic management
 
 ## Quick Start
 
-### Option 1: Client-Only Mode (Static Files)
-1. **Open the dashboard**: Simply open `index.html` in any modern web browser
-2. **Add services**: Click "Add Service" to add your homelab services
-3. **Organize**: Create categories and organize your services
-4. **Customize**: Adjust grid columns and export your configuration
-5. **Note**: Image upload requires server mode (Option 2)
-
-### Option 2: Server Mode (Multi-Device Sync + Image Upload)
-1. **Install dependencies**: `cd server && npm install`
-2. **Start the server**: `npm start`
-3. **Access dashboard**: Open `http://localhost:3001` in your browser
-4. **Enjoy sync**: Your configuration automatically syncs across all devices
-5. **Upload images**: Upload custom icons and logos for your services
-
-## 🌐 Server-Side Storage
-
-Homedash supports **hybrid storage** with automatic fallback between server and local storage:
-
-### Features
-- **🔄 Multi-Device Sync**: Configuration syncs across all your devices
-- **📱 Hybrid Mode**: Automatically detects server availability
-- **💾 Local Backup**: Always maintains localStorage backup
-- **🔒 Secure**: Rate-limited API with security headers
-- **📊 Backup System**: Automatic configuration backups
-- **⚡ Real-time Status**: Live sync status indicator
-
-### Server API
-The server provides a REST API for configuration management:
+### Option 1: Docker Compose (Recommended)
 
 ```bash
-# Health check
-GET /api/health
+# Clone the repository
+git clone https://github.com/breezinstein/homedash.git
+cd homedash
 
-# Configuration management
-GET /api/config           # Get current configuration
-POST /api/config          # Save complete configuration
+# Build and start with Docker Compose
+docker compose up -d --build
 
-# Service management
-GET /api/services         # List all services
-POST /api/services        # Add new service
-PUT /api/services/:name   # Update existing service
-DELETE /api/services/:name # Delete service
-
-# Image upload and management
-POST /api/upload-icon     # Upload image file for icons
-GET /api/uploads          # List uploaded images
-DELETE /api/uploads/:file # Delete uploaded image
-POST /api/uploads/cleanup # Clean up unused images
-
-# Backup management
-GET /api/backups          # List available backups
-GET /api/backups/:file    # Download backup file
-POST /api/backup          # Create manual backup
-
-# Settings
-PATCH /api/settings       # Update settings only
+# Access dashboard at http://localhost:3001
 ```
 
-### Docker Deployment
-
-#### Pre-built Images (Multi-Architecture)
-
-Pre-built images are automatically available for both AMD64 and ARM64 architectures:
+### Option 2: Pre-built Docker Image
 
 ```bash
 # Pull from GitHub Container Registry
-docker pull ghcr.io/yourusername/homedash:latest
+docker pull ghcr.io/breezinstein/homedash:latest
 
 # Run the container
-docker run -p 3001:3001 -v homedash-data:/app/server/data ghcr.io/yourusername/homedash:latest
-
-# Using Docker Compose (recommended)
-docker-compose up -d
+docker run -d \
+  --name homedash \
+  -p 3001:3001 \
+  -v homedash-data:/app/data \
+  --restart unless-stopped \
+  ghcr.io/breezinstein/homedash:latest
 ```
 
-#### Manual Build
+### Option 3: Development Mode
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server (frontend + backend)
+npm run dev
+
+# Frontend: http://localhost:5173
+# Backend API: http://localhost:3001
+```
+
+### Option 4: Production Build
+
+```bash
+# Install dependencies
+npm install
+
+# Build the frontend
+npm run build
+
+# Start the server
+npm run server
+
+# Access at http://localhost:3001
+```
+
+## Docker Deployment
+
+### Docker Compose (Recommended)
+
+The included `docker-compose.yml` builds and runs from source:
+
+```bash
+# Build and start the container
+docker compose up -d --build
+
+# Access dashboard at http://localhost:3001
+```
+
+### Pre-built Image from GitHub Container Registry
+
+Alternatively, use the pre-built image without cloning the repository:
+
+```yaml
+# docker-compose.yml
+services:
+  homedash:
+    image: ghcr.io/breezinstein/homedash:latest
+    container_name: homedash
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - homedash-data:/app/data
+    environment:
+      - NODE_ENV=production
+
+volumes:
+  homedash-data:
+    driver: local
+```
+
+```bash
+docker compose up -d
+```
+
+### Manual Docker Run
+
+```bash
+# Pull from GitHub Container Registry
+docker pull ghcr.io/breezinstein/homedash:latest
+
+# Run the container
+docker run -d \
+  --name homedash \
+  -p 3001:3001 \
+  -v homedash-data:/app/data \
+  --restart unless-stopped \
+  ghcr.io/breezinstein/homedash:latest
+```
+
+### Manual Build
 
 ```bash
 # Build for current architecture
 docker build -t homedash .
-docker run -p 3001:3001 -v homedash-data:/app/server/data homedash
+
+# Run the container
+docker run -d \
+  --name homedash \
+  -p 3001:3001 \
+  -v homedash-data:/app/data \
+  homedash
 
 # Build for multiple architectures (requires buildx)
 docker buildx build --platform linux/amd64,linux/arm64 -t homedash .
 ```
 
-#### Available Platforms
+### Available Platforms
 - `linux/amd64` - Standard x86_64 systems
 - `linux/arm64` - ARM64 systems (Raspberry Pi 4+, Apple Silicon, etc.)
 
-### Environment Configuration
+## API Reference
 
-Copy `.env.example` to `.env` and configure:
+The server provides a REST API for configuration management:
 
 ```bash
-NODE_ENV=production
-PORT=3001
-MAX_BACKUPS=10
-AUTO_BACKUP=true
-```
+# Configuration
+GET  /api/config           # Get current configuration
+PUT  /api/config           # Save complete configuration
+GET  /api/config/check     # Check for changes (polling)
 
-## Default Services
+# Backups
+GET  /api/backups                      # List available backups
+POST /api/backups                      # Create manual backup
+POST /api/backups/restore/:filename    # Restore from backup
+DELETE /api/backups/:filename          # Delete backup
 
-The dashboard comes pre-configured with common homelab services:
-
-### Media
-- Jellyfin - Media Server & Streaming
-- Emby - Personal Media Server
-
-### Media Management
-- Sonarr - TV Series Management
-- Radarr - Movie Management
-- Prowlarr - Indexer Manager
-
-### Downloads
-- qBittorrent - BitTorrent Client
-
-### Infrastructure
-- Portainer - Docker Management
-- Pi-hole - Network Ad Blocker
-
-### Home Automation
-- Home Assistant - Smart Home Hub
-
-### Monitoring
-- Grafana - Analytics & Monitoring
-
-## Usage
-
-### Adding Services
-1. Click the "Add Service" button
-2. Fill in the service details:
-   - **Name**: Display name for your service
-   - **URL**: The web interface URL
-   - **Icon**: Choose from:
-     - FontAwesome class (e.g., `fas fa-tv`)
-     - Image URL (e.g., `https://example.com/icon.png`)
-     - **Upload custom image** (JPG, PNG, GIF, SVG, WebP, ICO up to 5MB)
-   - **Category**: Group your services (e.g., "Media", "Infrastructure")
-   - **Description**: Brief description of the service
-
-### Image Upload Features
-- **Upload custom icons**: Support for JPG, PNG, GIF, SVG, WebP, and ICO formats
-- **File size limit**: Maximum 5MB per image
-- **Image gallery**: View and select from previously uploaded images
-- **Automatic cleanup**: Remove unused uploaded images
-- **Preview support**: Live preview of selected icons
-- **Secure storage**: Images stored securely on the server
-
-### Managing Services
-- **Right-click** any service card to see options:
-  - Edit Service
-  - Duplicate Service
-  - Delete Service
-
-### Keyboard Shortcuts
-- **Ctrl+K**: Focus search box
-- **Escape**: Close modals and menus
-- **/** : Alternative search focus
-
-### Configuration Management
-- **Export**: Download your configuration as JSON
-- **Import**: Upload a JSON configuration file
-- **Reset**: Clear all data and start fresh
-- **Image Management**: Clean up unused uploaded images
-
-## Technical Details
-
-### Technology Stack
-- **Frontend**: Pure HTML5, CSS3, JavaScript
-- **Framework**: Alpine.js (lightweight reactive framework)
-- **Icons**: FontAwesome 6 + Material Icons
-- **Storage**: Browser localStorage
-- **Responsive**: CSS Grid + Flexbox
-
-### Browser Support
-- Chrome/Edge 60+
-- Firefox 60+
-- Safari 12+
-- Modern mobile browsers
-
-### File Structure
-```
-homedash/
-├── index.html              # Main dashboard file
-├── README.md              # This documentation
-├── architecture-blueprint.md  # Technical architecture
-└── docs/                  # Additional documentation
-```
-
-## Deployment Options
-
-### 1. Local File
-- Simply open `index.html` in your browser
-- Works offline, data stored locally
-
-### 2. Web Server
-```bash
-# Python
-python -m http.server 8000
-
-# Node.js
-npx http-server
-
-# PHP
-php -S localhost:8000
-```
-
-### 3. Static Hosting
-- GitHub Pages
-- Netlify
-- Vercel
-- Any static file hosting
-
-### 4. Docker
-```dockerfile
-FROM nginx:alpine
-COPY index.html /usr/share/nginx/html/
-EXPOSE 80
+# Image uploads
+POST /api/upload-icon      # Upload image file for icons
+GET  /uploads/:filename    # Serve uploaded images
 ```
 
 ## Configuration Format
 
-The dashboard uses a simple JSON format for configuration:
+The dashboard uses a JSON format for configuration:
 
 ```json
 {
@@ -257,29 +189,71 @@ The dashboard uses a simple JSON format for configuration:
     {
       "name": "Service Name",
       "url": "http://service.local:port",
-      "icon": "fas fa-icon-name",
+      "icon": "server",
       "category": "Category Name",
       "description": "Service description"
     }
   ],
   "collapsedCategories": [],
-  "gridColumns": 4
+  "gridColumns": "4",
+  "theme": "dark",
+  "colors": {
+    "primary": "#6366f1",
+    "background": "#0a0a0a",
+    "surface": "#1a1a1a"
+  },
+  "categoryOrder": []
 }
+```
+
+## Technology Stack
+
+- **Frontend**: React 19, TypeScript, Tailwind CSS 4
+- **Backend**: Express 5, Node.js
+- **Icons**: Lucide React
+- **Build**: Vite
+- **Container**: Docker with multi-arch support
+
+## Development
+
+### Project Structure
+
+```
+homedash/
+├── src/
+│   ├── components/     # React components
+│   ├── context/        # React context providers
+│   ├── api/            # API client
+│   ├── App.tsx         # Main application
+│   └── types.ts        # TypeScript types
+├── data/
+│   ├── config.json     # Configuration file
+│   ├── backups/        # Backup files
+│   └── uploads/        # Uploaded images
+├── server.js           # Express backend
+├── docker-compose.yml  # Docker Compose config
+└── Dockerfile          # Docker build config
+```
+
+### Scripts
+
+```bash
+npm run dev      # Start development (frontend + backend)
+npm run client   # Start frontend only
+npm run server   # Start backend only
+npm run build    # Build for production
+npm run lint     # Run ESLint
+npm run preview  # Preview production build
 ```
 
 ## Contributing
 
-This is a single-file dashboard designed for simplicity. If you'd like to contribute:
-
 1. Fork the repository
-2. Make your changes to `index.html`
-3. Test thoroughly across different browsers
-4. Submit a pull request
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## License
 
 MIT License - Feel free to use and modify for your homelab!
-
-## Support
-
-Having issues? Check the browser console for error messages and ensure you're using a modern browser with JavaScript enabled.

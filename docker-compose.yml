@@ -1,0 +1,23 @@
+services:
+  homedash:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: homedash
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - homedash-data:/app/data
+    environment:
+      - NODE_ENV=production
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/config/check', res => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  homedash-data:
+    driver: local
