@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
+import { dirname, join, basename } from 'path';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -200,7 +200,10 @@ app.post('/api/upload-icon', express.raw({ type: 'image/*', limit: '5mb' }), (re
     const uploadsDir = join(__dirname, 'data', 'uploads');
     mkdirSync(uploadsDir, { recursive: true });
     
-    const filename = `${Date.now()}-${req.query.name || 'icon.png'}`;
+    // Sanitize filename to prevent path traversal attacks
+    const rawName = String(req.query.name || 'icon.png');
+    const safeName = basename(rawName).replace(/[^a-zA-Z0-9._-]/g, '_');
+    const filename = `${Date.now()}-${safeName || 'icon.png'}`;
     writeFileSync(join(uploadsDir, filename), req.body);
     res.json({ url: `/uploads/${filename}` });
   } catch (error) {
