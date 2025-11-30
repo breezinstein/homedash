@@ -6,12 +6,14 @@ import { Plus, FolderPlus, Search } from 'lucide-react';
 import { CategoryModal } from './components/CategoryModal';
 
 function Dashboard() {
-  const { config, isEditMode, addCategory, updateCategory, searchQuery } = useDashboard();
+  const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories } = useDashboard();
   const [showSettings, setShowSettings] = useState(false);
   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
+  const [categoryDraggedOver, setCategoryDraggedOver] = useState<string | null>(null);
 
   // Filter services based on search query
   const filteredServices = searchQuery
@@ -52,6 +54,47 @@ function Dashboard() {
     }
   };
 
+  // Category drag and drop handlers
+  const handleCategoryDragStart = (e: React.DragEvent, category: string) => {
+    e.dataTransfer.setData('draggedCategory', category);
+    e.dataTransfer.effectAllowed = 'move';
+    setDraggedCategory(category);
+  };
+
+  const handleCategoryDragOver = (e: React.DragEvent, category: string) => {
+    e.preventDefault();
+    if (draggedCategory && draggedCategory !== category) {
+      setCategoryDraggedOver(category);
+    }
+  };
+
+  const handleCategoryDrop = (e: React.DragEvent, targetCategory: string) => {
+    e.preventDefault();
+    const sourceCategory = e.dataTransfer.getData('draggedCategory');
+    
+    if (sourceCategory && sourceCategory !== targetCategory) {
+      const currentOrder = [...config.categoryOrder];
+      const sourceIndex = currentOrder.indexOf(sourceCategory);
+      const targetIndex = currentOrder.indexOf(targetCategory);
+      
+      if (sourceIndex !== -1 && targetIndex !== -1) {
+        // Remove from source position
+        currentOrder.splice(sourceIndex, 1);
+        // Insert at target position
+        currentOrder.splice(targetIndex, 0, sourceCategory);
+        reorderCategories(currentOrder);
+      }
+    }
+    
+    setDraggedCategory(null);
+    setCategoryDraggedOver(null);
+  };
+
+  const handleCategoryDragEnd = () => {
+    setDraggedCategory(null);
+    setCategoryDraggedOver(null);
+  };
+
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
       <Header onSettingsClick={() => setShowSettings(true)} />
@@ -84,20 +127,26 @@ function Dashboard() {
         )}
 
         {/* Categories */}
-        {config.categoryOrder.map((category) => {
-          const services = servicesByCategory[category] || [];
-          // Hide empty categories when searching
-          if (searchQuery && services.length === 0) return null;
-          return (
-            <CategorySection
-              key={category}
-              category={category}
-              services={services}
-              onEditService={handleEditService}
-              onEditCategory={handleEditCategory}
-            />
-          );
-        })}
+        <div onDragEnd={handleCategoryDragEnd}>
+          {config.categoryOrder.map((category) => {
+            const services = servicesByCategory[category] || [];
+            // Hide empty categories when searching
+            if (searchQuery && services.length === 0) return null;
+            return (
+              <CategorySection
+                key={category}
+                category={category}
+                services={services}
+                onEditService={handleEditService}
+                onEditCategory={handleEditCategory}
+                onCategoryDragStart={handleCategoryDragStart}
+                onCategoryDragOver={handleCategoryDragOver}
+                onCategoryDrop={handleCategoryDrop}
+                categoryDraggedOver={categoryDraggedOver}
+              />
+            );
+          })}
+        </div>
 
         {/* Uncategorized Services */}
         {uncategorizedServices.length > 0 && (
