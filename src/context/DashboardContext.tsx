@@ -19,6 +19,8 @@ interface DashboardContextType {
   addCategory: (name: string) => void;
   deleteCategory: (name: string) => void;
   reorderCategories: (newOrder: string[]) => void;
+  moveServiceToCategory: (serviceIndex: number, targetCategory: string, targetPosition?: number) => void;
+  reorderServicesInCategory: (category: string, fromIndex: number, toIndex: number) => void;
   backups: ServerBackup[];
   createBackup: (name?: string) => Promise<void>;
   restoreBackup: (backup: ServerBackup) => Promise<void>;
@@ -246,6 +248,87 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setConfig({ ...config, categoryOrder: newOrder });
   };
 
+  const moveServiceToCategory = (serviceIndex: number, targetCategory: string, targetPosition?: number) => {
+    const service = config.services[serviceIndex];
+    if (!service) return;
+
+    // Update service category
+    const updatedService = { ...service, category: targetCategory };
+    
+    // Get services in target category (excluding the moving service if it's already there)
+    const targetCategoryServices = config.services.filter(
+      (s, i) => s.category === targetCategory && i !== serviceIndex
+    );
+    
+    // Get all other services
+    const otherServices = config.services.filter(
+      (s, i) => s.category !== targetCategory && i !== serviceIndex
+    );
+
+    // Insert service at target position or at end
+    let newTargetCategoryServices: Service[];
+    if (targetPosition !== undefined && targetPosition >= 0) {
+      newTargetCategoryServices = [
+        ...targetCategoryServices.slice(0, targetPosition),
+        updatedService,
+        ...targetCategoryServices.slice(targetPosition)
+      ];
+    } else {
+      newTargetCategoryServices = [...targetCategoryServices, updatedService];
+    }
+
+    // Rebuild services array maintaining category order
+    const newServices: Service[] = [];
+    for (const category of config.categoryOrder) {
+      if (category === targetCategory) {
+        newServices.push(...newTargetCategoryServices);
+      } else {
+        newServices.push(...otherServices.filter(s => s.category === category));
+      }
+    }
+    // Add any uncategorized services
+    const categorized = new Set(config.categoryOrder);
+    newServices.push(...otherServices.filter(s => !categorized.has(s.category)));
+
+    // Ensure target category exists in categoryOrder
+    const categoryOrder = config.categoryOrder.includes(targetCategory)
+      ? config.categoryOrder
+      : [...config.categoryOrder, targetCategory];
+
+    setConfig({ ...config, services: newServices, categoryOrder });
+  };
+
+  const reorderServicesInCategory = (category: string, fromIndex: number, toIndex: number) => {
+    // Get services in this category with their original indices
+    const categoryServices = config.services
+      .map((s, i) => ({ service: s, originalIndex: i }))
+      .filter(({ service }) => service.category === category);
+
+    if (fromIndex < 0 || fromIndex >= categoryServices.length) return;
+    if (toIndex < 0 || toIndex >= categoryServices.length) return;
+    if (fromIndex === toIndex) return;
+
+    // Reorder within category
+    const [moved] = categoryServices.splice(fromIndex, 1);
+    categoryServices.splice(toIndex, 0, moved);
+
+    // Rebuild the full services array
+    const newServices: Service[] = [];
+    let categoryIndex = 0;
+    
+    for (const original of config.services) {
+      if (original.category === category) {
+        // Use the reordered service at this position
+        newServices.push(categoryServices[categoryIndex].service);
+        categoryIndex++;
+      } else {
+        newServices.push(original);
+      }
+    }
+
+    setConfig({ ...config, services: newServices });
+  };
+
   const createBackup = async (name?: string) => {
     try {
       await configApi.createBackup(name);
@@ -320,6 +403,8 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       addCategory,
       deleteCategory,
       reorderCategories,
+      moveServiceToCategory,
+      reorderServicesInCategory,
       backups,
       createBackup,
       restoreBackup,

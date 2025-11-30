@@ -6,10 +6,13 @@ import { useDashboard } from '../context/DashboardContext';
 interface ServiceCardProps {
   service: Service;
   index: number;
+  localIndex?: number;
   onEdit: (index: number) => void;
+  onDragStart?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
 }
 
-export function ServiceCard({ service, index, onEdit }: ServiceCardProps) {
+export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: ServiceCardProps) {
   const { isEditMode, deleteService } = useDashboard();
   const [imgError, setImgError] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -23,10 +26,16 @@ export function ServiceCard({ service, index, onEdit }: ServiceCardProps) {
   const handleDragStart = (e: React.DragEvent) => {
     e.dataTransfer.setData('serviceIndex', index.toString());
     setIsDragging(true);
+    if (onDragStart) {
+      onDragStart(e);
+    }
   };
 
   const handleDragEnd = () => {
     setIsDragging(false);
+    if (onDragEnd) {
+      onDragEnd();
+    }
   };
 
   return (
