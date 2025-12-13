@@ -1,4 +1,5 @@
-const API_BASE = 'http://localhost:3001';
+// Use relative URLs for reverse proxy compatibility
+const API_BASE = '';
 
 export interface ApiResponse<T> {
   success?: boolean;
