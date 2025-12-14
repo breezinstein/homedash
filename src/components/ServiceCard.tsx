@@ -49,7 +49,7 @@ export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: 
       onDragEnd={handleDragEnd}
     >
       {isEditMode && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -76,7 +76,7 @@ export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: 
       )}
 
       {isEditMode && (
-        <div className="absolute top-2 left-2 text-[var(--color-text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute top-2 left-2 text-[var(--color-text-secondary)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <GripVertical className="w-4 h-4" />
         </div>
       )}
