@@ -1,8 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join, basename } from 'path';
+import { dirname, join, basename, extname } from 'path';
+import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -11,6 +12,7 @@ const app = express();
 const PORT = 3001;
 const CONFIG_PATH = join(__dirname, 'data', 'config.json');
 const BACKUPS_DIR = join(__dirname, 'data', 'backups');
+const ICONS_CACHE_DIR = join(__dirname, 'data', 'icons');
 
 // Track file modification time for change detection
 let lastModified = 0;
@@ -21,6 +23,7 @@ app.use(express.json({ limit: '10mb' }));
 // Ensure data directory exists
 mkdirSync(join(__dirname, 'data'), { recursive: true });
 mkdirSync(BACKUPS_DIR, { recursive: true });
+mkdirSync(ICONS_CACHE_DIR, { recursive: true });
 
 // Default config
 const defaultConfig = {
@@ -187,6 +190,168 @@ app.delete('/api/backups/:filename', (req, res) => {
 
 // Serve uploaded icons
 app.use('/uploads', express.static(join(__dirname, 'data', 'uploads')));
+
+// Serve cached icons
+app.use('/icons', express.static(ICONS_CACHE_DIR));
+
+// GET /api/icons/proxy - Proxy and cache external icon
+app.get('/api/icons/proxy', async (req, res) => {
+  try {
+    const iconUrl = req.query.url;
+    if (!iconUrl) {
+      return res.status(400).json({ error: 'URL parameter required' });
+    }
+
+    // Validate URL
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(iconUrl);
+    } catch {
+      return res.status(400).json({ error: 'Invalid URL' });
+    }
+
+    // Create a hash of the URL for the filename
+    const urlHash = crypto.createHash('md5').update(iconUrl).digest('hex');
+    
+    // Try to determine extension from URL
+    let ext = extname(parsedUrl.pathname).toLowerCase();
+    if (!ext || !['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'].includes(ext)) {
+      ext = '.png'; // Default to png
+    }
+    
+    const cachedFilename = `${urlHash}${ext}`;
+    const cachedPath = join(ICONS_CACHE_DIR, cachedFilename);
+
+    // Check if already cached
+    if (existsSync(cachedPath)) {
+      return res.json({ 
+        cached: true, 
+        url: `/icons/${cachedFilename}` 
+      });
+    }
+
+    // Fetch the icon with timeout
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+
+    let response;
+    try {
+      response = await fetch(iconUrl, {
+        headers: {
+          'User-Agent': 'HomeDash/1.0',
+          'Accept': 'image/*'
+        },
+        signal: controller.signal
+      });
+    } catch (fetchError) {
+      clearTimeout(timeout);
+      console.error('Icon fetch error:', fetchError.message);
+      // Return original URL as fallback - let client try directly
+      return res.json({ 
+        cached: false, 
+        url: iconUrl,
+        fallback: true 
+      });
+    }
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      // Return original URL as fallback
+      return res.json({ 
+        cached: false, 
+        url: iconUrl,
+        fallback: true 
+      });
+    }
+
+    // Get content type and adjust extension if needed
+    const contentType = response.headers.get('content-type') || '';
+    if (contentType.includes('svg')) {
+      ext = '.svg';
+    } else if (contentType.includes('jpeg') || contentType.includes('jpg')) {
+      ext = '.jpg';
+    } else if (contentType.includes('gif')) {
+      ext = '.gif';
+    } else if (contentType.includes('webp')) {
+      ext = '.webp';
+    } else if (contentType.includes('ico') || contentType.includes('x-icon')) {
+      ext = '.ico';
+    }
+
+    const finalFilename = `${urlHash}${ext}`;
+    const finalPath = join(ICONS_CACHE_DIR, finalFilename);
+
+    // Save to cache
+    const buffer = Buffer.from(await response.arrayBuffer());
+    writeFileSync(finalPath, buffer);
+
+    res.json({ 
+      cached: false, 
+      url: `/icons/${finalFilename}` 
+    });
+  } catch (error) {
+    console.error('Icon proxy error:', error.message);
+    // Return original URL as fallback instead of error
+    const iconUrl = req.query.url;
+    res.json({ 
+      cached: false, 
+      url: iconUrl,
+      fallback: true,
+      error: error.message 
+    });
+  }
+});
+
+// GET /api/icons/cache-info - Get cache statistics
+app.get('/api/icons/cache-info', (req, res) => {
+  try {
+    const files = readdirSync(ICONS_CACHE_DIR);
+    let totalSize = 0;
+    
+    files.forEach(file => {
+      const stats = statSync(join(ICONS_CACHE_DIR, file));
+      totalSize += stats.size;
+    });
+
+    res.json({
+      count: files.length,
+      totalSize,
+      totalSizeFormatted: formatBytes(totalSize)
+    });
+  } catch (error) {
+    res.json({ count: 0, totalSize: 0, totalSizeFormatted: '0 B' });
+  }
+});
+
+// DELETE /api/icons/cache - Clear icon cache
+app.delete('/api/icons/cache', (req, res) => {
+  try {
+    const files = readdirSync(ICONS_CACHE_DIR);
+    let deletedCount = 0;
+
+    files.forEach(file => {
+      try {
+        unlinkSync(join(ICONS_CACHE_DIR, file));
+        deletedCount++;
+      } catch (e) {
+        console.error(`Failed to delete ${file}:`, e.message);
+      }
+    });
+
+    res.json({ success: true, deletedCount });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to clear cache' });
+  }
+});
+
+// Helper function to format bytes
+function formatBytes(bytes) {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 // Serve static files in production
 const distPath = join(__dirname, 'dist');

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Service } from '../types';
 import { ExternalLink, Edit2, Trash2, GripVertical } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
+import { configApi } from '../api/configApi';
 
 interface ServiceCardProps {
   service: Service;
@@ -12,10 +13,38 @@ interface ServiceCardProps {
   onDragEnd?: () => void;
 }
 
+// Check if an icon URL is external (not local/uploads)
+function isExternalIcon(url: string): boolean {
+  if (!url) return false;
+  // Local icons start with / or are relative paths
+  if (url.startsWith('/uploads/') || url.startsWith('/icons/')) return false;
+  // External icons have http(s) protocol
+  return url.startsWith('http://') || url.startsWith('https://');
+}
+
 export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: ServiceCardProps) {
   const { isEditMode, deleteService } = useDashboard();
   const [imgError, setImgError] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [cachedIconUrl, setCachedIconUrl] = useState<string | null>(null);
+
+  // Cache external icons
+  useEffect(() => {
+    if (service.icon && isExternalIcon(service.icon)) {
+      configApi.proxyIcon(service.icon)
+        .then(result => {
+          setCachedIconUrl(result.url);
+        })
+        .catch(() => {
+          // Fallback to original URL on error
+          setCachedIconUrl(service.icon);
+        });
+    } else {
+      setCachedIconUrl(service.icon || null);
+    }
+  }, [service.icon]);
+
+  const displayIconUrl = cachedIconUrl || service.icon;
 
   const handleClick = () => {
     if (!isEditMode) {
@@ -83,9 +112,9 @@ export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: 
 
       <div className="flex items-start gap-3">
         <div className="w-12 h-12 rounded-lg bg-[var(--color-background)] flex items-center justify-center flex-shrink-0 overflow-hidden">
-          {!imgError && service.icon ? (
+          {!imgError && displayIconUrl ? (
             <img
-              src={service.icon}
+              src={displayIconUrl}
               alt={service.name}
               className="w-8 h-8 object-contain"
               onError={() => setImgError(true)}
