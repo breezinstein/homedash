@@ -78,5 +78,28 @@ export const configApi = {
     });
     if (!res.ok) throw new Error('Failed to upload icon');
     return res.json();
+  },
+
+  // Proxy and cache an external icon
+  async proxyIcon(url: string): Promise<{ cached: boolean; url: string }> {
+    const res = await fetch(`${API_BASE}/api/icons/proxy?url=${encodeURIComponent(url)}`);
+    if (!res.ok) throw new Error('Failed to proxy icon');
+    return res.json();
+  },
+
+  // Get icon cache info
+  async getIconCacheInfo(): Promise<{ count: number; totalSize: number; totalSizeFormatted: string }> {
+    const res = await fetch(`${API_BASE}/api/icons/cache-info`);
+    if (!res.ok) throw new Error('Failed to get cache info');
+    return res.json();
+  },
+
+  // Clear icon cache
+  async clearIconCache(): Promise<{ success: boolean; deletedCount: number }> {
+    const res = await fetch(`${API_BASE}/api/icons/cache`, {
+      method: 'DELETE'
+    });
+    if (!res.ok) throw new Error('Failed to clear cache');
+    return res.json();
   }
 };
