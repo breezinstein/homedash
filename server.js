@@ -20,10 +20,15 @@ let lastModified = 0;
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 
-// Ensure data directory exists
-mkdirSync(join(__dirname, 'data'), { recursive: true });
-mkdirSync(BACKUPS_DIR, { recursive: true });
-mkdirSync(ICONS_CACHE_DIR, { recursive: true });
+// Ensure data directory exists (with error handling for disk space issues)
+try {
+  mkdirSync(join(__dirname, 'data'), { recursive: true });
+  mkdirSync(BACKUPS_DIR, { recursive: true });
+  mkdirSync(ICONS_CACHE_DIR, { recursive: true });
+} catch (error) {
+  console.error('Warning: Could not create data directories:', error.message);
+  // Continue anyway - the app can still work without icon caching
+}
 
 // Default config
 const defaultConfig = {
