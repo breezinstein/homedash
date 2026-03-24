@@ -7,14 +7,16 @@ import {
   Home,
   Search,
   X,
-  Menu
+  Menu,
+  FolderOpen,
 } from 'lucide-react';
 
 interface HeaderProps {
   onSettingsClick: () => void;
+  onFileSharingClick: () => void;
 }
 
-export function Header({ onSettingsClick }: HeaderProps) {
+export function Header({ onSettingsClick, onFileSharingClick }: HeaderProps) {
   const { isEditMode, setIsEditMode, searchQuery, setSearchQuery } = useDashboard();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -81,6 +83,15 @@ export function Header({ onSettingsClick }: HeaderProps) {
                 <span className="hidden lg:inline">Edit</span>
               </button>
             </div>
+
+            {/* Files */}
+            <button
+              onClick={onFileSharingClick}
+              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              title="File Sharing"
+            >
+              <FolderOpen className="w-5 h-5" />
+            </button>
 
             {/* Settings */}
             <button
@@ -152,6 +163,18 @@ export function Header({ onSettingsClick }: HeaderProps) {
                 </button>
               )}
             </div>
+
+            {/* Mobile Files Button */}
+            <button
+              onClick={() => {
+                onFileSharingClick();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            >
+              <FolderOpen className="w-5 h-5" />
+              <span className="text-sm">File Sharing</span>
+            </button>
 
             {/* Mobile Settings Button */}
             <button

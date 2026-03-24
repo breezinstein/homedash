@@ -1,12 +1,14 @@
 import express from 'express';
 import cors from 'cors';
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync, createReadStream, createWriteStream } from 'fs';
 import { fileURLToPath } from 'url';
-import { dirname, join, basename, extname } from 'path';
+import { dirname, join, basename, extname, resolve, sep } from 'path';
 import crypto from 'crypto';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+
+const SHARED_FILES_DIR = process.env.SHARED_FILES_DIR || join(__dirname, '..', 'shared-files');
 
 const app = express();
 const PORT = 3001;
@@ -25,6 +27,7 @@ try {
   mkdirSync(join(__dirname, 'data'), { recursive: true });
   mkdirSync(BACKUPS_DIR, { recursive: true });
   mkdirSync(ICONS_CACHE_DIR, { recursive: true });
+  mkdirSync(SHARED_FILES_DIR, { recursive: true });
 } catch (error) {
   console.error('Warning: Could not create data directories:', error.message);
   // Continue anyway - the app can still work without icon caching
@@ -357,6 +360,111 @@ function formatBytes(bytes) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
+
+// Resolve a URL sub-path (relative to /api/files) to a real filesystem path.
+// Returns null if the resolved path escapes SHARED_FILES_DIR (path traversal guard).
+function resolveSharedPath(urlSubPath) {
+  // The UI prefixes paths with '/shared' (the virtual root name) — strip it.
+  // Use a lookahead so that only the segment '/shared' is stripped, not '/sharedsomething'.
+  const local = urlSubPath.replace(/^\/shared(?=\/|$)/, '') || '/';
+  const resolved = resolve(join(SHARED_FILES_DIR, local));
+  const base = resolve(SHARED_FILES_DIR);
+  if (resolved !== base && !resolved.startsWith(base + sep)) return null;
+  return resolved;
+}
+
+// GET /api/files/* - list directory (?ls) or download file
+app.get('/api/files{/*path}', (req, res) => {
+  const subPath = req.path.slice('/api/files'.length) || '/';
+  const fsPath = resolveSharedPath(subPath);
+  if (!fsPath) return res.status(403).json({ error: 'Forbidden' });
+
+  try {
+    if (!existsSync(fsPath)) return res.status(404).json({ error: 'Not found' });
+    const stat = statSync(fsPath);
+
+    if (stat.isDirectory()) {
+      const entries = readdirSync(fsPath, { withFileTypes: true });
+      const dirs = [], files = [];
+      for (const entry of entries) {
+        try {
+          const s = statSync(join(fsPath, entry.name));
+          const ts = Math.floor(s.mtimeMs / 1000);
+          if (entry.isDirectory()) {
+            dirs.push({ n: entry.name, ts });
+          } else if (entry.isFile()) {
+            files.push({ n: entry.name, sz: s.size, ts, ext: extname(entry.name).slice(1) });
+          }
+        } catch { /* skip unreadable entries */ }
+      }
+      return res.json({ dirs, files, path: subPath });
+    } else {
+      // File download — escape backslash and double-quote in the filename to
+      // prevent Content-Disposition header injection (RFC 6266).
+      const safeName = basename(fsPath).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+      res.setHeader('Content-Length', String(stat.size));
+      createReadStream(fsPath).pipe(res);
+    }
+  } catch (err) {
+    console.error('File server error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// PUT /api/files/* - upload a file
+app.put('/api/files{/*path}', (req, res) => {
+  const subPath = req.path.slice('/api/files'.length) || '/';
+  if (subPath.endsWith('/')) return res.status(400).json({ error: 'Path must point to a file' });
+  const fsPath = resolveSharedPath(subPath);
+  if (!fsPath) return res.status(403).json({ error: 'Forbidden' });
+
+  try {
+    mkdirSync(dirname(fsPath), { recursive: true });
+  } catch (err) {
+    return res.status(500).json({ error: 'Failed to create directory' });
+  }
+
+  const ws = createWriteStream(fsPath);
+  req.pipe(ws);
+  ws.on('finish', () => res.json({ success: true }));
+  ws.on('error', (err) => {
+    console.error('Upload error:', err.message);
+    if (!res.headersSent) res.status(500).json({ error: 'Upload failed' });
+  });
+  req.on('error', (err) => {
+    console.error('Request error during upload:', err.message);
+    ws.destroy();
+    if (!res.headersSent) res.status(500).json({ error: 'Upload failed' });
+  });
+});
+
+// DELETE /api/files/* - delete a file or directory
+app.delete('/api/files{/*path}', (req, res) => {
+  const subPath = req.path.slice('/api/files'.length) || '/';
+  const fsPath = resolveSharedPath(subPath);
+  if (!fsPath) return res.status(403).json({ error: 'Forbidden' });
+
+  // Protect the root shared directory itself
+  if (resolve(fsPath) === resolve(SHARED_FILES_DIR)) {
+    return res.status(403).json({ error: 'Cannot delete root directory' });
+  }
+
+  try {
+    if (!existsSync(fsPath)) return res.status(404).json({ error: 'Not found' });
+    const stat = statSync(fsPath);
+    if (stat.isDirectory()) {
+      rmSync(fsPath, { recursive: true, force: true });
+    } else {
+      unlinkSync(fsPath);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Delete error:', err.message);
+    res.status(500).json({ error: 'Delete failed' });
+  }
+});
 
 // Serve static files in production
 const distPath = join(__dirname, 'dist');

@@ -54,3 +54,22 @@ export interface Backup {
   date: string;
   data: DashboardConfig;
 }
+
+// Copyparty file-sharing types
+export interface CopypartyFile {
+  n: string;   // filename
+  sz: number;  // size in bytes
+  ts: number;  // Unix timestamp (seconds)
+  ext?: string;
+}
+
+export interface CopypartyDir {
+  n: string;   // directory name
+  ts: number;  // Unix timestamp (seconds)
+}
+
+export interface CopypartyListing {
+  files: CopypartyFile[];
+  dirs: CopypartyDir[];
+  path: string;
+}
