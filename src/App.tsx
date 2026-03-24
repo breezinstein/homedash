@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
-import { Header, CategorySection, ServiceModal, SettingsModal } from './components';
+import { Header, CategorySection, ServiceModal, SettingsModal, FileSharing } from './components';
 import type { Service } from './types';
 import { Plus, FolderPlus, Search } from 'lucide-react';
 import { CategoryModal } from './components/CategoryModal';
@@ -8,6 +8,7 @@ import { CategoryModal } from './components/CategoryModal';
 function Dashboard() {
   const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories } = useDashboard();
   const [showSettings, setShowSettings] = useState(false);
+  const [isFileSharingOpen, setIsFileSharingOpen] = useState(false);
   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -97,7 +98,10 @@ function Dashboard() {
 
   return (
     <div className="min-h-screen bg-[var(--color-background)]">
-      <Header onSettingsClick={() => setShowSettings(true)} />
+      <Header
+        onSettingsClick={() => setShowSettings(true)}
+        onFileSharingClick={() => setIsFileSharingOpen(true)}
+      />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Edit Mode Actions */}
@@ -202,6 +206,10 @@ function Dashboard() {
       {/* Modals */}
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
+      )}
+
+      {isFileSharingOpen && (
+        <FileSharing onClose={() => setIsFileSharingOpen(false)} />
       )}
 
       {showServiceModal && (
