@@ -20,8 +20,8 @@ FROM node:20-alpine AS production
 
 WORKDIR /app
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init for signal handling and su-exec for privilege dropping
+RUN apk add --no-cache dumb-init su-exec
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
@@ -37,12 +37,19 @@ COPY --from=builder /app/dist ./dist
 # Copy server file
 COPY server.js ./
 
-# Create data directory with proper permissions
-RUN mkdir -p data/uploads data/backups && \
+# Create data directories (including icons cache) with proper permissions.
+# The entrypoint script re-applies ownership at runtime to handle cases where
+# the named volume was created before these chown rules existed.
+RUN mkdir -p data/uploads data/backups data/icons && \
     chown -R homedash:nodejs /app
 
-# Switch to non-root user
-USER homedash
+# Copy entrypoint script that fixes volume/bind-mount permissions at startup
+# then drops privileges to the homedash user.
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+# NOTE: USER is intentionally omitted here — the entrypoint runs as root
+# only long enough to fix directory ownership, then exec's as homedash.
 
 # Expose port
 EXPOSE 3001
@@ -51,8 +58,8 @@ EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/config/check || exit 1
 
-# Use dumb-init to handle signals properly
-ENTRYPOINT ["dumb-init", "--"]
+# Entrypoint fixes permissions and drops to homedash via su-exec.
+ENTRYPOINT ["/entrypoint.sh"]
 
-# Start the server
+# Start the server (passed as "$@" to entrypoint).
 CMD ["node", "server.js"]
