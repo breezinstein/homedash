@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import type { Service } from '../types';
 import { X, Upload, Link, Image } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
+import { ModalShell } from './ui';
 
 interface ServiceModalProps {
   service: Service | null;
@@ -73,21 +74,26 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-md shadow-2xl">
+    <ModalShell
+      onClose={onClose}
+      dismissOnBackdrop={false}
+      ariaLabel={service ? 'Edit service' : 'Add service'}
+    >
+      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
             {service ? 'Edit Service' : 'Add Service'}
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto">
           {/* Icon Preview */}
           <div className="flex justify-center">
             <div className="w-20 h-20 rounded-xl bg-[var(--color-background)] flex items-center justify-center overflow-hidden border-2 border-dashed border-[var(--color-border)]">
@@ -228,19 +234,19 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 bg-[var(--color-background)] text-[var(--color-text-primary)] rounded-lg hover:bg-[var(--color-border)] transition-colors"
+              className="flex-1 px-4 py-2.5 sm:py-2 bg-[var(--color-background)] text-[var(--color-text-primary)] rounded-lg hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors"
+              className="flex-1 px-4 py-2.5 sm:py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/80 transition-colors"
             >
               {service ? 'Save Changes' : 'Add Service'}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </ModalShell>
   );
 }

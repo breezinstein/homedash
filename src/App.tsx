@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
 import { Header, CategorySection } from './components';
+import { ConfirmProvider, ToastProvider, useToast } from './components/ui';
 import type { Service } from './types';
 import { Plus, FolderPlus, Search } from 'lucide-react';
 
@@ -13,6 +14,18 @@ const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => 
 const CategoryModal = lazy(() => import('./components/CategoryModal').then(m => ({ default: m.CategoryModal })));
 const FileSharing = lazy(() => import('./components/FileSharing').then(m => ({ default: m.FileSharing })));
 const ClipboardManager = lazy(() => import('./components/ClipboardManager').then(m => ({ default: m.ClipboardManager })));
+
+// Bridge: dashboard sync errors surface as toasts. Lives inside both
+// providers so it has access to both contexts. Keeps the cross-cutting
+// concern out of DashboardContext itself.
+function SyncErrorReporter() {
+  const { syncError } = useDashboard();
+  const toast = useToast();
+  useEffect(() => {
+    if (syncError) toast.error(syncError);
+  }, [syncError, toast]);
+  return null;
+}
 
 function Dashboard() {
   const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories } = useDashboard();
@@ -128,7 +141,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
+    <div className="min-h-screen min-h-dvh bg-[var(--color-background)]">
       <Header
         onSettingsClick={() => setShowSettings(true)}
         onFileSharingClick={() => setIsFileSharingOpen(true)}
@@ -277,9 +290,14 @@ function Dashboard() {
 
 function App() {
   return (
-    <DashboardProvider>
-      <Dashboard />
-    </DashboardProvider>
+    <ToastProvider>
+      <ConfirmProvider>
+        <DashboardProvider>
+          <SyncErrorReporter />
+          <Dashboard />
+        </DashboardProvider>
+      </ConfirmProvider>
+    </ToastProvider>
   );
 }
 
