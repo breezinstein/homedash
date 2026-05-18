@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import type { Clip, DashboardConfig, Service } from '../types';
 import { configApi } from '../api/configApi';
 
@@ -39,6 +39,7 @@ interface DashboardContextType {
   uploadIcon: (file: File) => Promise<string>;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  serviceIndexByRef: Map<Service, number>;
   clips: Clip[];
   addClip: (label: string, content: string) => void;
   updateClip: (id: string, patch: Partial<Pick<Clip, 'label' | 'content' | 'pinned'>>) => void;
@@ -378,6 +379,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const clips: Clip[] = config.clips ?? [];
 
+  // O(1) lookup of a service's global index, rebuilt only when the
+  // services array reference changes. Replaces the per-render O(n)
+  // `findIndex` that CategorySection used for every rendered card.
+  const serviceIndexByRef = useMemo(() => {
+    const map = new Map<Service, number>();
+    config.services.forEach((service, idx) => map.set(service, idx));
+    return map;
+  }, [config.services]);
+
   const setClips = (next: Clip[]) => {
     setConfig({ ...config, clips: next });
   };
@@ -512,6 +522,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       uploadIcon,
       searchQuery,
       setSearchQuery,
+      serviceIndexByRef,
       clips,
       addClip,
       updateClip,

@@ -1,9 +1,18 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
-import { Header, CategorySection, ServiceModal, SettingsModal, FileSharing, ClipboardManager } from './components';
+import { Header, CategorySection } from './components';
 import type { Service } from './types';
 import { Plus, FolderPlus, Search } from 'lucide-react';
-import { CategoryModal } from './components/CategoryModal';
+
+// Modals are heavy and only mount when opened; splitting them keeps the
+// initial bundle small. The fallback is null because modals already
+// render over a transparent backdrop and a flash of "Loading..." would
+// be more jarring than nothing for the ~1 RTT it takes to fetch.
+const ServiceModal = lazy(() => import('./components/ServiceModal').then(m => ({ default: m.ServiceModal })));
+const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => ({ default: m.SettingsModal })));
+const CategoryModal = lazy(() => import('./components/CategoryModal').then(m => ({ default: m.CategoryModal })));
+const FileSharing = lazy(() => import('./components/FileSharing').then(m => ({ default: m.FileSharing })));
+const ClipboardManager = lazy(() => import('./components/ClipboardManager').then(m => ({ default: m.ClipboardManager })));
 
 function Dashboard() {
   const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories } = useDashboard();
@@ -30,25 +39,34 @@ function Dashboard() {
   }, []);
 
   // Filter services based on search query
-  const filteredServices = searchQuery
-    ? config.services.filter(s =>
-        s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        s.category.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : config.services;
+  const filteredServices = useMemo(() => {
+    if (!searchQuery) return config.services;
+    const q = searchQuery.toLowerCase();
+    return config.services.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      s.description.toLowerCase().includes(q) ||
+      s.category.toLowerCase().includes(q)
+    );
+  }, [config.services, searchQuery]);
 
   // Group services by category
-  const servicesByCategory = config.categoryOrder.reduce((acc, category) => {
-    acc[category] = filteredServices.filter(s => s.category === category);
-    return acc;
-  }, {} as Record<string, Service[]>);
+  const { servicesByCategory, uncategorizedServices } = useMemo(() => {
+    const byCategory = config.categoryOrder.reduce((acc, category) => {
+      acc[category] = [];
+      return acc;
+    }, {} as Record<string, Service[]>);
 
-  // Find uncategorized services
-  const categorizedCategories = new Set(config.categoryOrder);
-  const uncategorizedServices = filteredServices.filter(
-    s => !categorizedCategories.has(s.category)
-  );
+    const categoryOrderSet = new Set(config.categoryOrder);
+    const uncategorized: Service[] = [];
+    for (const service of filteredServices) {
+      if (categoryOrderSet.has(service.category)) {
+        byCategory[service.category].push(service);
+      } else {
+        uncategorized.push(service);
+      }
+    }
+    return { servicesByCategory: byCategory, uncategorizedServices: uncategorized };
+  }, [filteredServices, config.categoryOrder]);
 
   const handleEditService = (index: number) => {
     setEditingServiceIndex(index);
@@ -217,40 +235,42 @@ function Dashboard() {
         )}
       </main>
 
-      {/* Modals */}
-      {showSettings && (
-        <SettingsModal onClose={() => setShowSettings(false)} />
-      )}
+      {/* Modals (lazy-loaded; tiny chunk fetched on first open) */}
+      <Suspense fallback={null}>
+        {showSettings && (
+          <SettingsModal onClose={() => setShowSettings(false)} />
+        )}
 
-      {isFileSharingOpen && (
-        <FileSharing onClose={() => setIsFileSharingOpen(false)} />
-      )}
+        {isFileSharingOpen && (
+          <FileSharing onClose={() => setIsFileSharingOpen(false)} />
+        )}
 
-      {isClipboardOpen && (
-        <ClipboardManager onClose={() => setIsClipboardOpen(false)} />
-      )}
+        {isClipboardOpen && (
+          <ClipboardManager onClose={() => setIsClipboardOpen(false)} />
+        )}
 
-      {showServiceModal && (
-        <ServiceModal
-          service={editingServiceIndex !== null ? config.services[editingServiceIndex] : null}
-          serviceIndex={editingServiceIndex}
-          onClose={() => {
-            setShowServiceModal(false);
-            setEditingServiceIndex(null);
-          }}
-        />
-      )}
+        {showServiceModal && (
+          <ServiceModal
+            service={editingServiceIndex !== null ? config.services[editingServiceIndex] : null}
+            serviceIndex={editingServiceIndex}
+            onClose={() => {
+              setShowServiceModal(false);
+              setEditingServiceIndex(null);
+            }}
+          />
+        )}
 
-      {showCategoryModal && (
-        <CategoryModal
-          category={editingCategory}
-          onSave={handleCategorySave}
-          onClose={() => {
-            setShowCategoryModal(false);
-            setEditingCategory(null);
-          }}
-        />
-      )}
+        {showCategoryModal && (
+          <CategoryModal
+            category={editingCategory}
+            onSave={handleCategorySave}
+            onClose={() => {
+              setShowCategoryModal(false);
+              setEditingCategory(null);
+            }}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }
