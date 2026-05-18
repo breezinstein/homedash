@@ -54,6 +54,7 @@ const defaultConfig = {
     configHash: ""
   },
   categoryOrder: [],
+  clips: [],
   colors: {
     primary: "#6366f1",
     secondary: "#475569",
@@ -167,10 +168,27 @@ app.post('/api/backups', (req, res) => {
   }
 });
 
+// Resolve a user-supplied backup filename to an absolute path inside
+// BACKUPS_DIR. Returns null if the resolved path escapes the directory
+// (path traversal guard) or if the filename is otherwise invalid.
+function resolveBackupPath(rawName) {
+  if (typeof rawName !== 'string' || !rawName) return null;
+  // Reject anything that isn't a plain filename — no slashes, no ..
+  const name = basename(rawName);
+  if (name !== rawName) return null;
+  if (name === '.' || name === '..') return null;
+  if (!name.endsWith('.json')) return null;
+  const resolved = resolve(join(BACKUPS_DIR, name));
+  const base = resolve(BACKUPS_DIR);
+  if (!resolved.startsWith(base + sep)) return null;
+  return resolved;
+}
+
 // POST /api/backups/restore/:filename - Restore backup
 app.post('/api/backups/restore/:filename', (req, res) => {
   try {
-    const backupPath = join(BACKUPS_DIR, req.params.filename);
+    const backupPath = resolveBackupPath(req.params.filename);
+    if (!backupPath) return res.status(400).json({ error: 'Invalid filename' });
     if (!existsSync(backupPath)) {
       return res.status(404).json({ error: 'Backup not found' });
     }
@@ -186,7 +204,8 @@ app.post('/api/backups/restore/:filename', (req, res) => {
 // DELETE /api/backups/:filename - Delete backup
 app.delete('/api/backups/:filename', (req, res) => {
   try {
-    const backupPath = join(BACKUPS_DIR, req.params.filename);
+    const backupPath = resolveBackupPath(req.params.filename);
+    if (!backupPath) return res.status(400).json({ error: 'Invalid filename' });
     if (existsSync(backupPath)) {
       unlinkSync(backupPath);
     }

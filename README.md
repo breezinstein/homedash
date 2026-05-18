@@ -9,6 +9,8 @@ A modern, responsive dashboard for managing homelab services built with React, T
 - **Category Groups**: Collapsible sections to organize services by type
 - **Icon Support**: Lucide icons, custom image URLs, and **image uploads**
 - **Search**: Real-time filtering with keyboard shortcuts (Ctrl+K)
+- **Multi-Clipboard**: Save labeled snippets server-side and copy any of
+  them with one click — synced across all your devices (Ctrl+Shift+C)
 - **Responsive Design**: Works great on desktop, tablet, and mobile
 
 ### ⚙️ Configuration
@@ -202,7 +204,17 @@ The dashboard uses a JSON format for configuration:
     "background": "#0a0a0a",
     "surface": "#1a1a1a"
   },
-  "categoryOrder": []
+  "categoryOrder": [],
+  "clips": [
+    {
+      "id": "ssh-pi",
+      "label": "SSH to Pi",
+      "content": "ssh pi@homelab.local",
+      "pinned": true,
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "updatedAt": "2025-01-01T00:00:00.000Z"
+    }
+  ]
 }
 ```
 

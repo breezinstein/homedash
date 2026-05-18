@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
-import type { DashboardConfig, Service } from '../types';
+import type { Clip, DashboardConfig, Service } from '../types';
 import { configApi } from '../api/configApi';
 
 interface ServerBackup {
@@ -39,6 +39,13 @@ interface DashboardContextType {
   uploadIcon: (file: File) => Promise<string>;
   searchQuery: string;
   setSearchQuery: (query: string) => void;
+  clips: Clip[];
+  addClip: (label: string, content: string) => void;
+  updateClip: (id: string, patch: Partial<Pick<Clip, 'label' | 'content' | 'pinned'>>) => void;
+  deleteClip: (id: string) => void;
+  toggleClipPin: (id: string) => void;
+  reorderClips: (newOrder: Clip[]) => void;
+  copyClipToSystemClipboard: (content: string) => Promise<boolean>;
 }
 
 const defaultConfig: DashboardConfig = {
@@ -61,6 +68,7 @@ const defaultConfig: DashboardConfig = {
     configHash: ""
   },
   categoryOrder: [],
+  clips: [],
   colors: {
     primary: "#6366f1",
     secondary: "#475569",
@@ -123,6 +131,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   // Poll for changes from server
   useEffect(() => {
+    // Settings value is configurable; clamp to a sensible floor so a bad
+    // value can't hammer the server. Default of 5000ms matches prior behaviour.
+    const configured = config.settings?.syncInterval;
+    const pollMs = Math.max(1000, typeof configured === 'number' && configured > 0 ? configured : 5000);
     const checkInterval = setInterval(async () => {
       if (isSavingRef.current) return;
       
@@ -140,10 +152,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('Sync check failed:', error);
       }
-    }, 5000); // Check every 5 seconds
+    }, pollMs);
 
     return () => clearInterval(checkInterval);
-  }, []);
+  }, [config.settings?.syncInterval]);
 
   // Save to server with debounce
   const saveToServer = useCallback(async (newConfig: DashboardConfig) => {
@@ -364,6 +376,83 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return result.url;
   };
 
+  const clips: Clip[] = config.clips ?? [];
+
+  const setClips = (next: Clip[]) => {
+    setConfig({ ...config, clips: next });
+  };
+
+  const generateClipId = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  };
+
+  const addClip = (label: string, content: string) => {
+    const now = new Date().toISOString();
+    const newClip: Clip = {
+      id: generateClipId(),
+      label: label.trim() || 'Untitled',
+      content,
+      pinned: false,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setClips([newClip, ...clips]);
+  };
+
+  const updateClip = (id: string, patch: Partial<Pick<Clip, 'label' | 'content' | 'pinned'>>) => {
+    const next = clips.map(c =>
+      c.id === id
+        ? { ...c, ...patch, updatedAt: new Date().toISOString() }
+        : c
+    );
+    setClips(next);
+  };
+
+  const deleteClip = (id: string) => {
+    setClips(clips.filter(c => c.id !== id));
+  };
+
+  const toggleClipPin = (id: string) => {
+    const target = clips.find(c => c.id === id);
+    if (!target) return;
+    updateClip(id, { pinned: !target.pinned });
+  };
+
+  const reorderClips = (newOrder: Clip[]) => {
+    setClips(newOrder);
+  };
+
+  const copyClipToSystemClipboard = async (content: string): Promise<boolean> => {
+    // Async clipboard API is only available in secure contexts. Fall back to
+    // the deprecated execCommand path for plain-HTTP homelab setups.
+    if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(content);
+        return true;
+      } catch {
+        // fall through to fallback
+      }
+    }
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = content;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    } catch {
+      return false;
+    }
+  };
+
   const importConfig = async (file: File) => {
     const text = await file.text();
     const importedConfig = JSON.parse(text) as DashboardConfig;
@@ -422,7 +511,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       syncError,
       uploadIcon,
       searchQuery,
-      setSearchQuery
+      setSearchQuery,
+      clips,
+      addClip,
+      updateClip,
+      deleteClip,
+      toggleClipPin,
+      reorderClips,
+      copyClipToSystemClipboard,
     }}>
       {children}
     </DashboardContext.Provider>

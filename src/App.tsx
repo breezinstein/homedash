@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
-import { Header, CategorySection, ServiceModal, SettingsModal, FileSharing } from './components';
+import { Header, CategorySection, ServiceModal, SettingsModal, FileSharing, ClipboardManager } from './components';
 import type { Service } from './types';
 import { Plus, FolderPlus, Search } from 'lucide-react';
 import { CategoryModal } from './components/CategoryModal';
@@ -9,12 +9,25 @@ function Dashboard() {
   const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories } = useDashboard();
   const [showSettings, setShowSettings] = useState(false);
   const [isFileSharingOpen, setIsFileSharingOpen] = useState(false);
+  const [isClipboardOpen, setIsClipboardOpen] = useState(false);
   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
   const [categoryDraggedOver, setCategoryDraggedOver] = useState<string | null>(null);
+
+  // Global shortcut: Ctrl/Cmd+Shift+C opens the multi-clipboard.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        setIsClipboardOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   // Filter services based on search query
   const filteredServices = searchQuery
@@ -101,6 +114,7 @@ function Dashboard() {
       <Header
         onSettingsClick={() => setShowSettings(true)}
         onFileSharingClick={() => setIsFileSharingOpen(true)}
+        onClipboardClick={() => setIsClipboardOpen(true)}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -210,6 +224,10 @@ function Dashboard() {
 
       {isFileSharingOpen && (
         <FileSharing onClose={() => setIsFileSharingOpen(false)} />
+      )}
+
+      {isClipboardOpen && (
+        <ClipboardManager onClose={() => setIsClipboardOpen(false)} />
       )}
 
       {showServiceModal && (

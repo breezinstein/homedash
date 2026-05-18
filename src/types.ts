@@ -47,6 +47,16 @@ export interface DashboardConfig {
   metadata: Metadata;
   categoryOrder: string[];
   colors: Colors;
+  clips?: Clip[];
+}
+
+export interface Clip {
+  id: string;
+  label: string;
+  content: string;
+  pinned?: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface Backup {

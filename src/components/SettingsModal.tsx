@@ -204,7 +204,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     Grid Columns
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {['2', '3', '4', '5'].map((cols) => (
+                    {['2', '3', '4', '5', '6'].map((cols) => (
                       <button
                         key={cols}
                         onClick={() => handleGridChange(cols)}
