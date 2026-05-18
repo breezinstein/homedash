@@ -2,14 +2,17 @@ import { useState, useRef } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { ServiceCard } from './ServiceCard';
 import type { Service } from '../types';
-import { 
-  ChevronDown, 
-  ChevronRight, 
-  Plus, 
-  Edit2, 
-  Trash2, 
-  GripVertical 
+import {
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Edit2,
+  Trash2,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
+import { useConfirm, useToast } from './ui';
 
 interface CategorySectionProps {
   category: string;
@@ -41,8 +44,11 @@ export function CategorySection({
     addService,
     moveServiceToCategory,
     reorderServicesInCategory,
+    reorderCategories,
     serviceIndexByRef
   } = useDashboard();
+  const confirm = useConfirm();
+  const toast = useToast();
   
   const [isDragOver, setIsDragOver] = useState(false);
   const [serviceDragOverIndex, setServiceDragOverIndex] = useState<number | null>(null);
@@ -150,6 +156,29 @@ export function CategorySection({
     addService(newService);
   };
 
+  // Category position in the canonical order array.
+  const categoryIdx = config.categoryOrder.indexOf(category);
+  const canMoveCategoryUp = categoryIdx > 0;
+  const canMoveCategoryDown = categoryIdx !== -1 && categoryIdx < config.categoryOrder.length - 1;
+
+  const swapCategory = (direction: -1 | 1) => {
+    if (categoryIdx === -1) return;
+    const next = [...config.categoryOrder];
+    const target = categoryIdx + direction;
+    if (target < 0 || target >= next.length) return;
+    [next[categoryIdx], next[target]] = [next[target], next[categoryIdx]];
+    reorderCategories(next);
+  };
+
+  const moveCategoryUp = () => swapCategory(-1);
+  const moveCategoryDown = () => swapCategory(1);
+
+  const moveServiceWithin = (fromLocalIdx: number, direction: -1 | 1) => {
+    const toLocalIdx = fromLocalIdx + direction;
+    if (toLocalIdx < 0 || toLocalIdx >= services.length) return;
+    reorderServicesInCategory(category, fromLocalIdx, toLocalIdx);
+  };
+
   const gridCols = {
     '2': 'grid-cols-1 sm:grid-cols-2',
     '3': 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3',
@@ -206,33 +235,60 @@ export function CategorySection({
         </button>
 
         {isEditMode && (
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={() => moveCategoryUp()}
+              disabled={!canMoveCategoryUp}
+              className="p-2 -m-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] active:bg-[var(--color-border)] rounded-lg transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              title="Move category up"
+              aria-label="Move category up"
+            >
+              <ArrowUp className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => moveCategoryDown()}
+              disabled={!canMoveCategoryDown}
+              className="p-2 -m-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] active:bg-[var(--color-border)] rounded-lg transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              title="Move category down"
+              aria-label="Move category down"
+            >
+              <ArrowDown className="w-4 h-4" />
+            </button>
             <button
               onClick={handleAddService}
-              className="p-1.5 text-[var(--color-success)] hover:bg-[var(--color-success)]/10 rounded-lg transition-colors"
+              className="p-2 -m-0.5 text-[var(--color-success)] hover:bg-[var(--color-success)]/10 active:bg-[var(--color-success)]/20 rounded-lg transition-colors"
               title="Add Service"
+              aria-label="Add service"
             >
               <Plus className="w-4 h-4" />
             </button>
             <button
               onClick={() => onEditCategory(category)}
-              className="p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors"
+              className="p-2 -m-0.5 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 active:bg-[var(--color-primary)]/20 rounded-lg transition-colors"
               title="Edit Category"
+              aria-label="Edit category"
             >
               <Edit2 className="w-4 h-4" />
             </button>
             <button
-              onClick={() => {
-                if (confirm(`Delete category "${category}" and all its services?`)) {
-                  deleteCategory(category);
-                }
+              onClick={async () => {
+                const ok = await confirm({
+                  title: 'Delete category',
+                  message: `Delete category "${category}" and all its services? This cannot be undone.`,
+                  confirmLabel: 'Delete',
+                  tone: 'danger',
+                });
+                if (!ok) return;
+                deleteCategory(category);
+                toast.success(`Category "${category}" deleted`);
               }}
-              className="p-1.5 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 rounded-lg transition-colors"
+              className="p-2 -m-0.5 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 active:bg-[var(--color-error)]/20 rounded-lg transition-colors"
               title="Delete Category"
+              aria-label="Delete category"
             >
               <Trash2 className="w-4 h-4" />
             </button>
-            <div className="p-1.5 text-[var(--color-text-secondary)] cursor-grab active:cursor-grabbing">
+            <div className="hidden sm:flex p-1.5 text-[var(--color-text-secondary)] cursor-grab active:cursor-grabbing">
               <GripVertical className="w-4 h-4" />
             </div>
           </div>
@@ -255,6 +311,28 @@ export function CategorySection({
                 onDragStart={(e) => handleServiceDragStart(e, service, localIndex)}
                 onDragEnd={handleServiceDragEnd}
               />
+              {isEditMode && services.length > 1 && (
+                <div className="flex sm:hidden items-center gap-2 mt-2">
+                  <button
+                    onClick={() => moveServiceWithin(localIndex, -1)}
+                    disabled={localIndex === 0}
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:bg-[var(--color-border)] rounded-lg text-xs disabled:opacity-30 disabled:pointer-events-none transition-colors border border-[var(--color-border)]"
+                    aria-label="Move service up"
+                  >
+                    <ArrowUp className="w-3.5 h-3.5" />
+                    Up
+                  </button>
+                  <button
+                    onClick={() => moveServiceWithin(localIndex, 1)}
+                    disabled={localIndex === services.length - 1}
+                    className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:bg-[var(--color-border)] rounded-lg text-xs disabled:opacity-30 disabled:pointer-events-none transition-colors border border-[var(--color-border)]"
+                    aria-label="Move service down"
+                  >
+                    <ArrowDown className="w-3.5 h-3.5" />
+                    Down
+                  </button>
+                </div>
+              )}
             </div>
           ))}
         </div>

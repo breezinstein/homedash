@@ -1,10 +1,27 @@
 import { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
-import { X, GripVertical, Plus, Trash2, Edit2, Palette, Layout, Database, Check, ChevronDown, ChevronUp, Sun, Moon } from 'lucide-react';
+import {
+  X,
+  GripVertical,
+  Plus,
+  Trash2,
+  Edit2,
+  Palette,
+  Layout,
+  Database,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Sun,
+  Moon,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react';
 import { CategoryModal } from './CategoryModal';
 import { BackupManager } from './BackupManager';
 import { themePresets } from '../themes';
 import type { ThemePreset } from '../themes';
+import { ModalShell, useConfirm } from './ui';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -12,6 +29,7 @@ interface SettingsModalProps {
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { config, setConfig, reorderCategories, addCategory, updateCategory, deleteCategory } = useDashboard();
+  const confirm = useConfirm();
   const [activeTab, setActiveTab] = useState<'categories' | 'appearance' | 'backups'>('categories');
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -36,12 +54,34 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
+  // Touch-friendly reorder: swap with the neighbor in the given direction.
+  // This is the only way to reorder categories on mobile, since HTML5
+  // drag-and-drop doesn't fire on touch.
+  const moveCategory = (category: string, direction: -1 | 1) => {
+    const idx = config.categoryOrder.indexOf(category);
+    const targetIdx = idx + direction;
+    if (idx === -1 || targetIdx < 0 || targetIdx >= config.categoryOrder.length) return;
+    const next = [...config.categoryOrder];
+    [next[idx], next[targetIdx]] = [next[targetIdx], next[idx]];
+    reorderCategories(next);
+  };
+
   const handleCategorySave = (oldName: string | null, newName: string) => {
     if (oldName) {
       updateCategory(oldName, newName);
     } else {
       addCategory(newName);
     }
+  };
+
+  const handleDeleteCategory = async (category: string) => {
+    const ok = await confirm({
+      title: 'Delete category?',
+      message: `"${category}" and all its services will be removed. This can't be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (ok) deleteCategory(category);
   };
 
   const handleColorChange = (key: keyof typeof config.colors, value: string) => {
@@ -97,7 +137,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm">
+      <ModalShell onClose={onClose} ariaLabel="Settings">
         <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-2xl shadow-2xl max-h-[90vh] sm:max-h-[80vh] flex flex-col">
           <div className="flex items-center justify-between p-3 sm:p-4 border-b border-[var(--color-border)]">
             <h2 className="text-base sm:text-lg font-semibold text-[var(--color-text-primary)]">
@@ -105,7 +145,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             </h2>
             <button
               onClick={onClose}
-              className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              aria-label="Close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -124,7 +165,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 }`}
               >
                 <tab.icon className="w-4 h-4" />
-                <span className="hidden xs:inline">{tab.label}</span>
+                <span>{tab.label}</span>
               </button>
             ))}
           </div>
@@ -150,47 +191,68 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 </div>
 
                 <div className="space-y-2">
-                  {config.categoryOrder.map((category) => (
-                    <div
-                      key={category}
-                      draggable
-                      onDragStart={() => handleDragStart(category)}
-                      onDragOver={(e) => handleDragOver(e, category)}
-                      onDragEnd={() => setDraggedCategory(null)}
-                      className={`flex items-center justify-between p-2.5 sm:p-3 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] cursor-move transition-opacity ${
-                        draggedCategory === category ? 'opacity-50' : ''
-                      }`}
-                    >
-                      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                        <GripVertical className="w-4 h-4 text-[var(--color-text-secondary)] flex-shrink-0" />
-                        <span className="text-sm text-[var(--color-text-primary)] truncate">{category}</span>
-                        <span className="text-xs text-[var(--color-text-secondary)] flex-shrink-0">
-                          ({config.services.filter(s => s.category === category).length})
-                        </span>
+                  {config.categoryOrder.map((category, idx) => {
+                    const isFirst = idx === 0;
+                    const isLast = idx === config.categoryOrder.length - 1;
+                    return (
+                      <div
+                        key={category}
+                        draggable
+                        onDragStart={() => handleDragStart(category)}
+                        onDragOver={(e) => handleDragOver(e, category)}
+                        onDragEnd={() => setDraggedCategory(null)}
+                        className={`flex items-center justify-between p-2.5 sm:p-3 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] sm:cursor-move transition-opacity ${
+                          draggedCategory === category ? 'opacity-50' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <GripVertical className="hidden sm:block w-4 h-4 text-[var(--color-text-secondary)] flex-shrink-0" />
+                          <span className="text-sm text-[var(--color-text-primary)] truncate">{category}</span>
+                          <span className="text-xs text-[var(--color-text-secondary)] flex-shrink-0">
+                            ({config.services.filter(s => s.category === category).length})
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+                          {/* Touch-friendly reorder; visible on every screen so it's
+                              discoverable, while the drag handle remains the primary
+                              affordance on desktop. */}
+                          <button
+                            onClick={() => moveCategory(category, -1)}
+                            disabled={isFirst}
+                            className="p-2 sm:p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label={`Move ${category} up`}
+                          >
+                            <ArrowUp className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => moveCategory(category, 1)}
+                            disabled={isLast}
+                            className="p-2 sm:p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            aria-label={`Move ${category} down`}
+                          >
+                            <ArrowDown className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditingCategory(category);
+                              setShowCategoryModal(true);
+                            }}
+                            className="p-2 sm:p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors"
+                            aria-label={`Edit ${category}`}
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteCategory(category)}
+                            className="p-2 sm:p-1.5 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 rounded-lg transition-colors"
+                            aria-label={`Delete ${category}`}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1 flex-shrink-0">
-                        <button
-                          onClick={() => {
-                            setEditingCategory(category);
-                            setShowCategoryModal(true);
-                          }}
-                          className="p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`Delete category "${category}" and all its services?`)) {
-                              deleteCategory(category);
-                            }
-                          }}
-                          className="p-1.5 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 rounded-lg transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -387,7 +449,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             )}
           </div>
         </div>
-      </div>
+      </ModalShell>
 
       {showCategoryModal && (
         <CategoryModal

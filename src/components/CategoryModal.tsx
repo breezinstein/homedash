@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { ModalShell } from './ui';
 
 interface CategoryModalProps {
   category: string | null;
@@ -23,7 +24,11 @@ export function CategoryModal({ category, onSave, onClose }: CategoryModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+    <ModalShell
+      onClose={onClose}
+      dismissOnBackdrop={false}
+      ariaLabel={category ? 'Edit category' : 'New category'}
+    >
       <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-sm shadow-2xl">
         <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
           <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
@@ -31,7 +36,8 @@ export function CategoryModal({ category, onSave, onClose }: CategoryModalProps)
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -57,19 +63,19 @@ export function CategoryModal({ category, onSave, onClose }: CategoryModalProps)
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-4 py-2 bg-[var(--color-background)] text-[var(--color-text-primary)] rounded-lg hover:bg-[var(--color-border)] transition-colors"
+              className="flex-1 px-4 py-2.5 sm:py-2 bg-[var(--color-background)] text-[var(--color-text-primary)] rounded-lg hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors"
+              className="flex-1 px-4 py-2.5 sm:py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/80 transition-colors"
             >
               {category ? 'Save' : 'Create'}
             </button>
           </div>
         </form>
       </div>
-    </div>
+    </ModalShell>
   );
 }

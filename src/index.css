@@ -14,10 +14,25 @@
   --color-error: #f87171;
 }
 
+html {
+  /* Allow safe-area-inset() usage to flow through */
+  height: 100%;
+}
+
 body {
   background-color: var(--color-background);
   color: var(--color-text-primary);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Prevent the iOS pull-to-refresh from triggering inside the app shell */
+  overscroll-behavior-y: contain;
+  /* Avoid double-tap zoom on interactive elements */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* When a modal locks the body, freeze scroll without losing horizontal layout */
+body.modal-open {
+  overflow: hidden;
+  touch-action: none;
 }
 
 * {
@@ -38,3 +53,41 @@ body {
   background-color: var(--color-border);
   border-radius: 4px;
 }
+
+/* Improve form-control rendering on iOS so inputs/selects pick up the theme */
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/* Native iOS Safari pads inputs differently; normalize so our py-* utilities win */
+input[type='text'],
+input[type='url'],
+input[type='search'],
+input[type='email'],
+input[type='password'],
+input[type='number'],
+textarea,
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  /* iOS zooms inputs whose font-size < 16px. Our inputs explicitly use sm:text-sm,
+     which is 14px, and that triggers the zoom. Force >= 16px on small screens. */
+  font-size: 16px;
+}
+@media (min-width: 640px) {
+  input[type='text'],
+  input[type='url'],
+  input[type='search'],
+  input[type='email'],
+  input[type='password'],
+  input[type='number'],
+  textarea,
+  select {
+    font-size: inherit;
+  }
+}
+

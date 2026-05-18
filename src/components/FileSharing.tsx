@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { listDirectory, getFileDownloadUrl, uploadFile, deleteItem } from '../api/filesApi';
 import type { CopypartyListing, CopypartyFile, CopypartyDir } from '../types';
+import { useBodyScrollLock, useConfirm, useToast } from './ui';
 
 interface FileSharingProps {
   onClose: () => void;
@@ -35,6 +36,9 @@ function formatDate(ts: number): string {
 }
 
 export function FileSharing({ onClose }: FileSharingProps) {
+  useBodyScrollLock(true);
+  const confirm = useConfirm();
+  const toast = useToast();
   const [currentPath, setCurrentPath] = useState('/shared/');
   const [listing, setListing] = useState<CopypartyListing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,22 +85,38 @@ export function FileSharing({ onClose }: FileSharingProps) {
     try {
       await uploadFile(currentPath, file, setUploadProgress);
       await load(currentPath);
+      toast.success(`Uploaded ${file.name}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed');
+      const msg = e instanceof Error ? e.message : 'Upload failed';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setUploadProgress(null);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
-  const handleDelete = async (path: string) => {
+  const handleDelete = async (path: string, kind: 'file' | 'folder', displayName: string) => {
+    const ok = await confirm({
+      title: kind === 'folder' ? 'Delete folder' : 'Delete file',
+      message:
+        kind === 'folder'
+          ? `Delete folder "${displayName}" and all its contents? This cannot be undone.`
+          : `Delete "${displayName}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
     setDeletingPath(path);
     setError(null);
     try {
       await deleteItem(path);
       await load(currentPath);
+      toast.success(kind === 'folder' ? 'Folder deleted' : 'File deleted');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
+      const msg = e instanceof Error ? e.message : 'Delete failed';
+      setError(msg);
+      toast.error(msg);
     } finally {
       setDeletingPath(null);
     }
@@ -231,7 +251,7 @@ export function FileSharing({ onClose }: FileSharingProps) {
                 dir={dir}
                 currentPath={currentPath}
                 onNavigate={navigate}
-                onDelete={handleDelete}
+                onDelete={(p) => handleDelete(p, 'folder', dir.n)}
                 deleting={deletingPath === currentPath + dir.n + '/'}
               />
             ))}
@@ -240,7 +260,7 @@ export function FileSharing({ onClose }: FileSharingProps) {
                 key={file.n}
                 file={file}
                 currentPath={currentPath}
-                onDelete={handleDelete}
+                onDelete={(p) => handleDelete(p, 'file', file.n)}
                 deleting={deletingPath === currentPath + file.n}
               />
             ))}
@@ -263,7 +283,7 @@ function DirCard({ dir, currentPath, onNavigate, onDelete, deleting }: DirCardPr
   const path = currentPath + dir.n + '/';
   return (
     <div
-      className="group relative flex flex-col items-center gap-2 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/50 transition-colors cursor-pointer"
+      className="group relative flex flex-col items-center gap-2 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/50 active:bg-[var(--color-background)] transition-colors cursor-pointer"
       onClick={() => onNavigate(path)}
     >
       <Folder className="w-10 h-10 text-[var(--color-accent)]" />
@@ -276,14 +296,14 @@ function DirCard({ dir, currentPath, onNavigate, onDelete, deleting }: DirCardPr
       <button
         onClick={(e) => {
           e.stopPropagation();
-          if (!window.confirm(`Delete folder "${dir.n}" and all its contents?`)) return;
           onDelete(path);
         }}
         disabled={deleting}
-        className="absolute top-1.5 right-1.5 p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-400/10 transition-all disabled:opacity-50"
+        className="absolute top-1.5 right-1.5 p-1.5 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-400/10 active:bg-red-400/20 transition-all disabled:opacity-50"
         title="Delete folder"
+        aria-label={`Delete folder ${dir.n}`}
       >
-        <Trash2 className="w-3 h-3" />
+        <Trash2 className="w-3.5 h-3.5" />
       </button>
     </div>
   );
@@ -305,7 +325,7 @@ function FileCard({ file, currentPath, onDelete, deleting }: FileCardProps) {
         href={downloadUrl}
         download={file.n}
         onClick={(e) => e.stopPropagation()}
-        className="flex flex-col items-center gap-2 w-full"
+        className="flex flex-col items-center gap-2 w-full active:scale-[0.98] transition-transform"
         title={`Download ${file.n}`}
       >
         <File className="w-10 h-10 text-[var(--color-primary)]" />
@@ -320,15 +340,13 @@ function FileCard({ file, currentPath, onDelete, deleting }: FileCardProps) {
         </div>
       </a>
       <button
-        onClick={() => {
-          if (!window.confirm(`Delete "${file.n}"?`)) return;
-          onDelete(filePath);
-        }}
+        onClick={() => onDelete(filePath)}
         disabled={deleting}
-        className="absolute top-1.5 right-1.5 p-1 rounded opacity-0 group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-400/10 transition-all disabled:opacity-50"
+        className="absolute top-1.5 right-1.5 p-1.5 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-400/10 active:bg-red-400/20 transition-all disabled:opacity-50"
         title="Delete file"
+        aria-label={`Delete file ${file.n}`}
       >
-        <Trash2 className="w-3 h-3" />
+        <Trash2 className="w-3.5 h-3.5" />
       </button>
     </div>
   );

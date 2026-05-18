@@ -3,6 +3,7 @@ import type { Service } from '../types';
 import { ExternalLink, Edit2, Trash2, GripVertical } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
 import { configApi } from '../api/configApi';
+import { useConfirm, useToast } from './ui';
 
 interface ServiceCardProps {
   service: Service;
@@ -24,6 +25,8 @@ function isExternalIcon(url: string): boolean {
 
 export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: ServiceCardProps) {
   const { isEditMode, deleteService } = useDashboard();
+  const confirm = useConfirm();
+  const toast = useToast();
   const [imgError, setImgError] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [cachedIconUrl, setCachedIconUrl] = useState<string | null>(null);
@@ -70,7 +73,7 @@ export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: 
   return (
     <div
       className={`group relative bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 transition-all duration-200 ${
-        isEditMode ? 'cursor-move' : 'cursor-pointer hover:border-[var(--color-primary)] hover:shadow-lg hover:shadow-[var(--color-primary)]/10'
+        isEditMode ? 'cursor-move' : 'cursor-pointer hover:border-[var(--color-primary)] hover:shadow-lg hover:shadow-[var(--color-primary)]/10 active:scale-[0.98] active:bg-[var(--color-background)]'
       } ${isDragging ? 'opacity-50' : ''}`}
       onClick={handleClick}
       draggable={isEditMode}
@@ -84,20 +87,28 @@ export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: 
               e.stopPropagation();
               onEdit(index);
             }}
-            className="p-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors"
+            className="p-2 -m-0.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/70 transition-colors"
             title="Edit"
+            aria-label="Edit service"
           >
             <Edit2 className="w-3.5 h-3.5" />
           </button>
           <button
-            onClick={(e) => {
+            onClick={async (e) => {
               e.stopPropagation();
-              if (confirm('Delete this service?')) {
-                deleteService(index);
-              }
+              const ok = await confirm({
+                title: 'Delete service',
+                message: `Delete "${service.name}"? This cannot be undone.`,
+                confirmLabel: 'Delete',
+                tone: 'danger',
+              });
+              if (!ok) return;
+              deleteService(index);
+              toast.success('Service deleted');
             }}
-            className="p-1.5 bg-[var(--color-error)] text-white rounded-lg hover:bg-[var(--color-error)]/80 transition-colors"
+            className="p-2 -m-0.5 bg-[var(--color-error)] text-white rounded-lg hover:bg-[var(--color-error)]/80 active:bg-[var(--color-error)]/70 transition-colors"
             title="Delete"
+            aria-label="Delete service"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
@@ -135,7 +146,7 @@ export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: 
               <ExternalLink className="w-3.5 h-3.5 text-[var(--color-text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
             )}
           </div>
-          <p className="text-sm text-[var(--color-text-secondary)] truncate">
+          <p className="text-sm text-[var(--color-text-secondary)] line-clamp-2 sm:truncate">
             {service.description}
           </p>
         </div>

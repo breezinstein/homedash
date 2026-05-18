@@ -23,6 +23,8 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuToggleRef = useRef<HTMLButtonElement>(null);
 
   // Global keyboard shortcuts: Ctrl/Cmd+K focuses search.
   useEffect(() => {
@@ -47,6 +49,28 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Close mobile menu on outside click or Escape.
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onPointerDown = (e: MouseEvent | TouchEvent) => {
+      const target = e.target as Node;
+      if (mobileMenuRef.current?.contains(target)) return;
+      if (mobileMenuToggleRef.current?.contains(target)) return;
+      setMobileMenuOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMobileMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('touchstart', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('touchstart', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [mobileMenuOpen]);
 
   return (
     <header className="sticky top-0 z-50 bg-[var(--color-surface)]/80 backdrop-blur-md border-b border-[var(--color-border)]">
@@ -171,8 +195,11 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }
 
             {/* Menu Toggle */}
             <button
+              ref={mobileMenuToggleRef}
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] active:bg-[var(--color-border)] rounded-lg transition-colors"
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
             >
               {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -181,7 +208,7 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden py-3 border-t border-[var(--color-border)] space-y-3">
+          <div ref={mobileMenuRef} className="md:hidden py-3 border-t border-[var(--color-border)] space-y-3">
             {/* Mobile Search */}
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-secondary)]" />
