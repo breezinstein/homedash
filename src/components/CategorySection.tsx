@@ -40,7 +40,8 @@ export function CategorySection({
     toggleCategoryCollapse,
     addService,
     moveServiceToCategory,
-    reorderServicesInCategory
+    reorderServicesInCategory,
+    serviceIndexByRef
   } = useDashboard();
   
   const [isDragOver, setIsDragOver] = useState(false);
@@ -49,10 +50,13 @@ export function CategorySection({
   const isCollapsed = collapsedCategories.includes(category);
   const isCategoryDraggedOver = categoryDraggedOver === category;
 
+  // Look up the service's index in `config.services` from the precomputed
+  // ref→index map (O(1)). Falls back to indexOf for the rare case of a
+  // freshly added service whose ref isn't in the map yet.
   const getServiceGlobalIndex = (service: Service) => {
-    return config.services.findIndex(
-      s => s.name === service.name && s.url === service.url
-    );
+    const cached = serviceIndexByRef.get(service);
+    if (cached !== undefined) return cached;
+    return config.services.indexOf(service);
   };
 
   const handleDragOver = (e: React.DragEvent) => {

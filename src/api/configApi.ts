@@ -1,6 +1,38 @@
 // Use relative URLs for reverse proxy compatibility
 const API_BASE = '';
 
+// Dedupe in-flight icon proxy requests. Many service cards can share the
+// same external icon URL (or the same card can re-mount under StrictMode),
+// which previously meant N concurrent requests to the same endpoint.
+// Resolved results are also cached for the life of the page so subsequent
+// re-renders skip the network entirely.
+type ProxyIconResult = { cached: boolean; url: string };
+const inFlightIconRequests = new Map<string, Promise<ProxyIconResult>>();
+const resolvedIconResults = new Map<string, ProxyIconResult>();
+
+function proxyIconCoalesced(url: string): Promise<ProxyIconResult> {
+  const resolved = resolvedIconResults.get(url);
+  if (resolved) return Promise.resolve(resolved);
+  const existing = inFlightIconRequests.get(url);
+  if (existing) return existing;
+  const promise = fetch(`${API_BASE}/api/icons/proxy?url=${encodeURIComponent(url)}`)
+    .then(res => {
+      if (!res.ok) throw new Error('Failed to proxy icon');
+      return res.json() as Promise<ProxyIconResult>;
+    })
+    .then(result => {
+      resolvedIconResults.set(url, result);
+      inFlightIconRequests.delete(url);
+      return result;
+    })
+    .catch(err => {
+      inFlightIconRequests.delete(url);
+      throw err;
+    });
+  inFlightIconRequests.set(url, promise);
+  return promise;
+}
+
 export interface ApiResponse<T> {
   success?: boolean;
   error?: string;
@@ -82,9 +114,7 @@ export const configApi = {
 
   // Proxy and cache an external icon
   async proxyIcon(url: string): Promise<{ cached: boolean; url: string }> {
-    const res = await fetch(`${API_BASE}/api/icons/proxy?url=${encodeURIComponent(url)}`);
-    if (!res.ok) throw new Error('Failed to proxy icon');
-    return res.json();
+    return proxyIconCoalesced(url);
   },
 
   // Get icon cache info

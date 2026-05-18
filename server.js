@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync, createReadStream, createWriteStream } from 'fs';
+import { readFile, writeFile, stat } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join, basename, extname, resolve, sep } from 'path';
 import crypto from 'crypto';
@@ -16,10 +18,40 @@ const CONFIG_PATH = join(__dirname, 'data', 'config.json');
 const BACKUPS_DIR = join(__dirname, 'data', 'backups');
 const ICONS_CACHE_DIR = join(__dirname, 'data', 'icons');
 
-// Track file modification time for change detection
+// In-memory config cache. The config file is read once at startup, then
+// served from memory; PUT updates both the file and the cache atomically.
+// Polling clients (every syncInterval) compare against `cache.mtimeMs`
+// without touching the filesystem, which is the dominant request shape.
+const configCache = {
+  config: null,        // parsed object
+  mtimeMs: 0,          // last known mtime in milliseconds
+  serialized: null,    // pre-serialised JSON body (response payload)
+};
+
+async function refreshConfigCache() {
+  try {
+    const [raw, stats] = await Promise.all([
+      readFile(CONFIG_PATH, 'utf-8'),
+      stat(CONFIG_PATH),
+    ]);
+    configCache.config = JSON.parse(raw);
+    configCache.mtimeMs = stats.mtimeMs;
+    configCache.serialized = raw;
+  } catch (e) {
+    // Leave previous cache state in place on failure.
+    console.error('Failed to refresh config cache:', e.message);
+  }
+}
+
+// Track file modification time for change detection (mirrors cache for
+// any code paths still using it directly).
 let lastModified = 0;
 
 app.use(cors());
+// gzip text-ish responses. The default filter skips images / already
+// compressed payloads, so the cached-icons /icons static mount is
+// unaffected.
+app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 
 // Ensure data directory exists (with error handling for disk space issues)
@@ -81,28 +113,34 @@ function updateLastModified() {
   try {
     const stats = statSync(CONFIG_PATH);
     lastModified = stats.mtimeMs;
+    configCache.mtimeMs = stats.mtimeMs;
   } catch (e) {
     lastModified = 0;
   }
 }
 updateLastModified();
+// Prime the in-memory cache (best effort; route handlers will refresh
+// on demand if this fails for any reason).
+refreshConfigCache();
 
-// GET /api/config - Read config
-app.get('/api/config', (req, res) => {
+// GET /api/config - Read config (served from in-memory cache when fresh)
+app.get('/api/config', async (req, res) => {
   try {
-    const config = JSON.parse(readFileSync(CONFIG_PATH, 'utf-8'));
-    const stats = statSync(CONFIG_PATH);
-    res.json({ 
-      config, 
-      lastModified: stats.mtimeMs 
+    const stats = await stat(CONFIG_PATH);
+    if (configCache.config === null || stats.mtimeMs !== configCache.mtimeMs) {
+      await refreshConfigCache();
+    }
+    res.json({
+      config: configCache.config,
+      lastModified: configCache.mtimeMs,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to read config' });
   }
 });
 
-// PUT /api/config - Write config
-app.put('/api/config', (req, res) => {
+// PUT /api/config - Write config (updates file and cache together)
+app.put('/api/config', async (req, res) => {
   try {
     const config = {
       ...req.body,
@@ -111,19 +149,24 @@ app.put('/api/config', (req, res) => {
         lastModified: new Date().toISOString()
       }
     };
-    writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
-    updateLastModified();
+    const serialized = JSON.stringify(config, null, 2);
+    await writeFile(CONFIG_PATH, serialized);
+    const stats = await stat(CONFIG_PATH);
+    lastModified = stats.mtimeMs;
+    configCache.config = config;
+    configCache.mtimeMs = stats.mtimeMs;
+    configCache.serialized = serialized;
     res.json({ success: true, lastModified });
   } catch (error) {
     res.status(500).json({ error: 'Failed to write config' });
   }
 });
 
-// GET /api/config/check - Check if config changed
-app.get('/api/config/check', (req, res) => {
+// GET /api/config/check - Check if config changed (cheap stat-only path)
+app.get('/api/config/check', async (req, res) => {
   try {
     const clientLastModified = parseFloat(req.query.since) || 0;
-    const stats = statSync(CONFIG_PATH);
+    const stats = await stat(CONFIG_PATH);
     const changed = stats.mtimeMs > clientLastModified;
     res.json({ changed, lastModified: stats.mtimeMs });
   } catch (error) {
