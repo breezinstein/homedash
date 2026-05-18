@@ -6,3 +6,4 @@ export { CategoryModal } from './CategoryModal';
 export { SettingsModal } from './SettingsModal';
 export { BackupManager } from './BackupManager';
 export { FileSharing } from './FileSharing';
+export { ClipboardManager } from './ClipboardManager';

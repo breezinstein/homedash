@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { 
   Settings, 
@@ -9,16 +9,44 @@ import {
   X,
   Menu,
   FolderOpen,
+  Clipboard,
 } from 'lucide-react';
 
 interface HeaderProps {
   onSettingsClick: () => void;
   onFileSharingClick: () => void;
+  onClipboardClick: () => void;
 }
 
-export function Header({ onSettingsClick, onFileSharingClick }: HeaderProps) {
+export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }: HeaderProps) {
   const { isEditMode, setIsEditMode, searchQuery, setSearchQuery } = useDashboard();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const mobileSearchInputRef = useRef<HTMLInputElement>(null);
+
+  // Global keyboard shortcuts: Ctrl/Cmd+K focuses search.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        const desktop = searchInputRef.current;
+        if (desktop && desktop.offsetParent !== null) {
+          desktop.focus();
+          desktop.select();
+          return;
+        }
+        // Fall back to mobile search — open the menu so the input is mounted.
+        setMobileMenuOpen(true);
+        // Defer focus until the input is in the DOM.
+        setTimeout(() => {
+          mobileSearchInputRef.current?.focus();
+          mobileSearchInputRef.current?.select();
+        }, 0);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   return (
     <header className="sticky top-0 z-50 bg-[var(--color-surface)]/80 backdrop-blur-md border-b border-[var(--color-border)]">
@@ -42,10 +70,11 @@ export function Header({ onSettingsClick, onFileSharingClick }: HeaderProps) {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-secondary)]" />
               <input
+                ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search services..."
+                placeholder="Search services... (Ctrl+K)"
                 className="w-48 lg:w-64 pl-9 pr-8 py-1.5 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
               />
               {searchQuery && (
@@ -91,6 +120,15 @@ export function Header({ onSettingsClick, onFileSharingClick }: HeaderProps) {
               title="File Sharing"
             >
               <FolderOpen className="w-5 h-5" />
+            </button>
+
+            {/* Clipboard */}
+            <button
+              onClick={onClipboardClick}
+              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              title="Clipboard (Ctrl+Shift+C)"
+            >
+              <Clipboard className="w-5 h-5" />
             </button>
 
             {/* Settings */}
@@ -148,6 +186,7 @@ export function Header({ onSettingsClick, onFileSharingClick }: HeaderProps) {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-secondary)]" />
               <input
+                ref={mobileSearchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -174,6 +213,18 @@ export function Header({ onSettingsClick, onFileSharingClick }: HeaderProps) {
             >
               <FolderOpen className="w-5 h-5" />
               <span className="text-sm">File Sharing</span>
+            </button>
+
+            {/* Mobile Clipboard Button */}
+            <button
+              onClick={() => {
+                onClipboardClick();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            >
+              <Clipboard className="w-5 h-5" />
+              <span className="text-sm">Clipboard</span>
             </button>
 
             {/* Mobile Settings Button */}
