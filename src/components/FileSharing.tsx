@@ -9,10 +9,16 @@ import {
   RefreshCw,
   Trash2,
   AlertCircle,
+  Share2,
 } from 'lucide-react';
 import { listDirectory, getFileDownloadUrl, uploadFile, deleteItem } from '../api/filesApi';
 import type { CopypartyListing, CopypartyFile, CopypartyDir } from '../types';
 import { useBodyScrollLock, useConfirm, useToast } from './ui';
+import { useDashboard } from '../context/DashboardContext';
+
+const canWebShare =
+  typeof navigator !== 'undefined' &&
+  typeof (navigator as Navigator).share === 'function';
 
 interface FileSharingProps {
   onClose: () => void;
@@ -39,6 +45,7 @@ export function FileSharing({ onClose }: FileSharingProps) {
   useBodyScrollLock(true);
   const confirm = useConfirm();
   const toast = useToast();
+  const { copyClipToSystemClipboard } = useDashboard();
   const [currentPath, setCurrentPath] = useState('/shared/');
   const [listing, setListing] = useState<CopypartyListing | null>(null);
   const [loading, setLoading] = useState(true);
@@ -119,6 +126,36 @@ export function FileSharing({ onClose }: FileSharingProps) {
       toast.error(msg);
     } finally {
       setDeletingPath(null);
+    }
+  };
+
+  const handleShare = async (filePath: string, fileName: string) => {
+    // Build an absolute URL so the shared link works on other devices.
+    const relativeUrl = getFileDownloadUrl(filePath);
+    let absoluteUrl = relativeUrl;
+    try {
+      absoluteUrl = new URL(relativeUrl, window.location.origin).toString();
+    } catch {
+      // Fall back to the relative URL if the origin can't be resolved.
+    }
+
+    if (canWebShare) {
+      try {
+        await (navigator as Navigator).share({ title: fileName, url: absoluteUrl });
+        return;
+      } catch (err) {
+        // AbortError = user dismissed the share sheet — silently ignore and
+        // skip the clipboard fallback so we don't paste over their selection.
+        if ((err as DOMException)?.name === 'AbortError') return;
+        // Any other share error falls through to the clipboard path.
+      }
+    }
+
+    const copied = await copyClipToSystemClipboard(absoluteUrl);
+    if (copied) {
+      toast.success('Link copied to clipboard');
+    } else {
+      toast.error('Could not share link');
     }
   };
 
@@ -261,6 +298,7 @@ export function FileSharing({ onClose }: FileSharingProps) {
                 file={file}
                 currentPath={currentPath}
                 onDelete={(p) => handleDelete(p, 'file', file.n)}
+                onShare={(p) => handleShare(p, file.n)}
                 deleting={deletingPath === currentPath + file.n}
               />
             ))}
@@ -313,10 +351,11 @@ interface FileCardProps {
   file: CopypartyFile;
   currentPath: string;
   onDelete: (path: string) => void;
+  onShare: (path: string) => void;
   deleting: boolean;
 }
 
-function FileCard({ file, currentPath, onDelete, deleting }: FileCardProps) {
+function FileCard({ file, currentPath, onDelete, onShare, deleting }: FileCardProps) {
   const filePath = currentPath + file.n;
   const downloadUrl = getFileDownloadUrl(filePath);
   return (
@@ -339,15 +378,31 @@ function FileCard({ file, currentPath, onDelete, deleting }: FileCardProps) {
           )}
         </div>
       </a>
-      <button
-        onClick={() => onDelete(filePath)}
-        disabled={deleting}
-        className="absolute top-1.5 right-1.5 p-1.5 rounded opacity-100 sm:opacity-0 sm:group-hover:opacity-100 text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-400/10 active:bg-red-400/20 transition-all disabled:opacity-50"
-        title="Delete file"
-        aria-label={`Delete file ${file.n}`}
-      >
-        <Trash2 className="w-3.5 h-3.5" />
-      </button>
+      <div className="absolute top-1.5 right-1.5 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onShare(filePath);
+          }}
+          className="p-1.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 active:bg-[var(--color-primary)]/20 transition-colors"
+          title={canWebShare ? 'Share' : 'Copy link'}
+          aria-label={`Share ${file.n}`}
+        >
+          <Share2 className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(filePath);
+          }}
+          disabled={deleting}
+          className="p-1.5 rounded text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-400/10 active:bg-red-400/20 transition-colors disabled:opacity-50"
+          title="Delete file"
+          aria-label={`Delete file ${file.n}`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
     </div>
   );
 }

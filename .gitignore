@@ -62,3 +62,6 @@ server/logs/
 data/config.json
 data/backups/backup-2025-11-29T14-06-07-267Z.json
 data/uploads/1764425856750-solar-assistant.png
+
+# Copyparty shared volume (user-uploaded files live here at runtime)
+shared-files/
