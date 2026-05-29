@@ -212,6 +212,18 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     });
   }, [config.colors]);
 
+  useEffect(() => {
+    // Inject user's custom CSS into the document so it overrides theme variables.
+    const css = config.settings?.customCSS ?? '';
+    let el = document.getElementById('homedash-custom-css') as HTMLStyleElement | null;
+    if (!el) {
+      el = document.createElement('style');
+      el.id = 'homedash-custom-css';
+      document.head.appendChild(el);
+    }
+    el.textContent = css;
+  }, [config.settings?.customCSS]);
+
   // All mutators below read the live config from `configRef` rather than the
   // `config` closure, so they can be wrapped in useCallback with stable
   // identities. This keeps the context value (and therefore every consumer,

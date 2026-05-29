@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import {
   X,
@@ -16,11 +16,13 @@ import {
   Moon,
   ArrowUp,
   ArrowDown,
+  Code2,
 } from 'lucide-react';
 import { CategoryModal } from './CategoryModal';
 import { BackupManager } from './BackupManager';
 import { themePresets } from '../themes';
 import type { ThemePreset } from '../themes';
+import type { Colors } from '../types';
 import { ModalShell, useConfirm } from './ui';
 
 interface SettingsModalProps {
@@ -37,6 +39,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
   const [showCustomColors, setShowCustomColors] = useState(config.theme === 'custom');
   const [themeFilter, setThemeFilter] = useState<'all' | 'dark' | 'light'>('all');
+  const [showCustomCSS, setShowCustomCSS] = useState(false);
+
+  // Temporarily apply colors to CSS vars for hover preview without saving.
+  const applyColorsToCSSVars = useCallback((colors: Colors) => {
+    const root = document.documentElement;
+    Object.entries(colors).forEach(([key, value]) => {
+      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+      root.style.setProperty(`--color-${cssKey}`, value as string);
+    });
+  }, []);
 
   const handleDragStart = (category: string) => {
     setDraggedCategory(category);
@@ -105,6 +117,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       colors: { ...theme.colors },
     });
     setShowCustomColors(false);
+    // Apply immediately so the UI doesn't flicker back from the hover preview
+    applyColorsToCSSVars(theme.colors);
   };
 
   const handleCustomTheme = () => {
@@ -125,6 +139,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const colorOptions = [
     { key: 'primary' as const, label: 'Primary' },
     { key: 'accent' as const, label: 'Accent' },
+    { key: 'secondary' as const, label: 'Secondary' },
     { key: 'background' as const, label: 'Background' },
     { key: 'surface' as const, label: 'Surface' },
     { key: 'border' as const, label: 'Border' },
@@ -325,50 +340,73 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   </div>
 
                   {/* Theme Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 max-h-48 overflow-y-auto">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 max-h-64 overflow-y-auto">
                     {filteredThemes.map((theme) => (
                       <button
                         key={theme.name}
                         onClick={() => handleThemeSelect(theme)}
+                        onMouseEnter={() => applyColorsToCSSVars(theme.colors)}
+                        onMouseLeave={() => applyColorsToCSSVars(config.colors)}
                         className={`relative p-2.5 sm:p-3 rounded-xl border transition-all text-left ${
                           config.theme === theme.name
                             ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20'
                             : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'
                         }`}
                         style={{ backgroundColor: theme.colors.background }}
+                        title={`Preview ${theme.name}`}
                       >
-                        {/* Color Preview */}
-                        <div className="flex gap-1 mb-2">
+                        {/* Mini dashboard mockup */}
+                        <div
+                          className="w-full rounded-lg mb-2 overflow-hidden"
+                          style={{
+                            backgroundColor: theme.colors.surface,
+                            border: `1px solid ${theme.colors.border}`,
+                          }}
+                        >
+                          {/* Primary accent bar */}
                           <div
-                            className="w-4 h-4 rounded-full"
+                            className="h-1.5 w-full"
                             style={{ backgroundColor: theme.colors.primary }}
                           />
-                          <div
-                            className="w-4 h-4 rounded-full"
-                            style={{ backgroundColor: theme.colors.accent }}
-                          />
-                          <div
-                            className="w-4 h-4 rounded-full"
-                            style={{ backgroundColor: theme.colors.surface }}
-                          />
-                        </div>
-                        <span
-                          className="text-xs sm:text-sm font-medium block truncate"
-                          style={{ color: theme.colors.textPrimary }}
-                        >
-                          {theme.name}
-                        </span>
-                        <span
-                          className="text-xs capitalize"
-                          style={{ color: theme.colors.textSecondary }}
-                        >
-                          {theme.type}
-                        </span>
-                        {config.theme === theme.name && (
-                          <div className="absolute top-1.5 right-1.5 w-5 h-5 bg-[var(--color-primary)] rounded-full flex items-center justify-center">
-                            <Check className="w-3 h-3 text-white" />
+                          <div className="p-1.5 space-y-1">
+                            {/* Simulated text-primary line */}
+                            <div
+                              className="h-1.5 w-3/4 rounded-full"
+                              style={{ backgroundColor: theme.colors.textPrimary, opacity: 0.8 }}
+                            />
+                            {/* Simulated text-secondary line */}
+                            <div
+                              className="h-1 w-1/2 rounded-full"
+                              style={{ backgroundColor: theme.colors.textSecondary, opacity: 0.6 }}
+                            />
+                            {/* Accent dot row */}
+                            <div className="flex gap-1 pt-0.5">
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.colors.primary }} />
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.colors.accent }} />
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.colors.success }} />
+                            </div>
                           </div>
-                        )}
+                        </div>
+
+                        <div className="flex items-start justify-between gap-1">
+                          <div className="min-w-0">
+                            <span
+                              className="text-xs font-medium block truncate"
+                              style={{ color: theme.colors.textPrimary }}
+                            >
+                              {theme.name}
+                            </span>
+                            <span className="text-xs capitalize flex items-center gap-0.5" style={{ color: theme.colors.textSecondary }}>
+                              {theme.type === 'dark' ? <Moon className="w-2.5 h-2.5" /> : <Sun className="w-2.5 h-2.5" />}
+                              {theme.type}
+                            </span>
+                          </div>
+                          {config.theme === theme.name && (
+                            <div className="w-4 h-4 shrink-0 bg-[var(--color-primary)] rounded-full flex items-center justify-center mt-0.5">
+                              <Check className="w-2.5 h-2.5 text-white" />
+                            </div>
+                          )}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -429,6 +467,67 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     </div>
                   </div>
                 )}
+
+                {/* Custom CSS */}
+                <div>
+                  <button
+                    onClick={() => setShowCustomCSS((v) => !v)}
+                    className={`flex items-center justify-between w-full p-3 rounded-xl border transition-colors ${
+                      showCustomCSS
+                        ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10'
+                        : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <Code2 className="w-4 h-4 text-[var(--color-primary)]" />
+                      <span className="text-sm text-[var(--color-text-primary)]">Custom CSS</span>
+                      {config.settings?.customCSS?.trim() && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-primary)]/20 text-[var(--color-primary)]">
+                          active
+                        </span>
+                      )}
+                    </div>
+                    {showCustomCSS ? (
+                      <ChevronUp className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                    )}
+                  </button>
+
+                  {showCustomCSS && (
+                    <div className="mt-2 space-y-2">
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        Injected after theme styles. Changes apply live.
+                      </p>
+                      <textarea
+                        value={config.settings?.customCSS ?? ''}
+                        onChange={(e) =>
+                          setConfig({
+                            ...config,
+                            settings: { ...config.settings, customCSS: e.target.value },
+                          })
+                        }
+                        placeholder={`:root {\n  --color-primary: #ff6b6b;\n}\n\n.my-custom-style { ... }`}
+                        spellCheck={false}
+                        rows={8}
+                        className="w-full bg-[var(--color-background)] text-[var(--color-text-primary)] border border-[var(--color-border)] rounded-xl p-3 text-xs font-mono resize-y focus:outline-none focus:border-[var(--color-primary)] placeholder:text-[var(--color-text-secondary)]/50"
+                      />
+                      {config.settings?.customCSS?.trim() && (
+                        <button
+                          onClick={() =>
+                            setConfig({
+                              ...config,
+                              settings: { ...config.settings, customCSS: '' },
+                            })
+                          }
+                          className="text-xs text-[var(--color-error)] hover:underline"
+                        >
+                          Clear custom CSS
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
