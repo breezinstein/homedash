@@ -48,6 +48,17 @@ export interface DashboardConfig {
   categoryOrder: string[];
   colors: Colors;
   clips?: Clip[];
+  servers?: RemoteServer[];
+}
+
+// A remote HomeDash instance whose server stats can be viewed.
+export interface RemoteServer {
+  id: string;
+  name: string;
+  url: string;
+  username?: string;
+  password?: string;
+  createdAt: string;
 }
 
 export interface Clip {
@@ -90,7 +101,7 @@ export interface ServerStats {
     percent: number | null;
     cores: number | null;
     model: string | null;
-    load: { '1m': number; '5m': number; '15m': number };
+    load: { '1m': number | null; '5m': number | null; '15m': number | null };
   };
   memory: {
     total: number | null;
@@ -114,7 +125,23 @@ export interface ServerStats {
     arch: string;
     release: string;
     type: string;
-    nodeVersion: string;
+    nodeVersion?: string;     // local host only
+    distro?: string;          // Glances: linux distribution
+    glancesVersion?: string;  // Glances instances only
   };
+  containers?: ContainerStat[];
+  source?: 'local' | 'glances';
   timestamp: number;
+}
+
+// A single Docker/Podman container reported by a Glances instance.
+export interface ContainerStat {
+  name: string;
+  image: string;
+  status: string;
+  cpuPercent: number | null;
+  memoryUsage: number | null;
+  memoryLimit: number | null;
+  uptime: string | null;
+  engine: string | null;
 }
