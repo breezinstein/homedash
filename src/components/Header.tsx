@@ -12,15 +12,17 @@ import {
   Clipboard,
   RefreshCw,
   CloudOff,
+  Activity,
 } from 'lucide-react';
 
 interface HeaderProps {
   onSettingsClick: () => void;
   onFileSharingClick: () => void;
   onClipboardClick: () => void;
+  onStatsClick: () => void;
 }
 
-export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }: HeaderProps) {
+export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, onStatsClick }: HeaderProps) {
   const { isEditMode, setIsEditMode, searchQuery, setSearchQuery, isSyncing, syncError } = useDashboard();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -165,6 +167,15 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }
               <FolderOpen className="w-5 h-5" />
             </button>
 
+            {/* Server Stats */}
+            <button
+              onClick={onStatsClick}
+              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              title="Server Stats"
+            >
+              <Activity className="w-5 h-5" />
+            </button>
+
             {/* Clipboard */}
             <button
               onClick={onClipboardClick}
@@ -271,6 +282,18 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }
             >
               <Clipboard className="w-5 h-5" />
               <span className="text-sm">Clipboard</span>
+            </button>
+
+            {/* Mobile Server Stats Button */}
+            <button
+              onClick={() => {
+                onStatsClick();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            >
+              <Activity className="w-5 h-5" />
+              <span className="text-sm">Server Stats</span>
             </button>
 
             {/* Mobile Settings Button */}

@@ -1,3 +1,5 @@
+import type { ServerStats } from '../types';
+
 // Use relative URLs for reverse proxy compatibility
 const API_BASE = '';
 
@@ -130,6 +132,13 @@ export const configApi = {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Failed to clear cache');
+    return res.json();
+  },
+
+  // Get live server stats for the host machine
+  async getStats(): Promise<ServerStats> {
+    const res = await fetch(`${API_BASE}/api/stats`);
+    if (!res.ok) throw new Error('Failed to fetch server stats');
     return res.json();
   }
 };

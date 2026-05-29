@@ -1,11 +1,12 @@
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync, createReadStream, createWriteStream } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync, createReadStream, createWriteStream, statfsSync } from 'fs';
 import { readFile, writeFile, stat } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join, basename, extname, resolve, sep } from 'path';
 import crypto from 'crypto';
+import os from 'os';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -422,6 +423,119 @@ function formatBytes(bytes) {
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
+
+// ---------------------------------------------------------------------------
+// Server stats — report live metrics for the host machine HomeDash runs on,
+// gathered entirely from Node built-ins (os / fs). No external dependencies
+// and no SSH; this surfaces the homelab box's own CPU, memory, disk, uptime
+// and system info (mirroring Termix's "Server Stats" view).
+// ---------------------------------------------------------------------------
+
+// Aggregate idle/total CPU jiffies across all cores.
+function cpuTimesSnapshot() {
+  let idle = 0;
+  let total = 0;
+  for (const cpu of os.cpus()) {
+    for (const value of Object.values(cpu.times)) total += value;
+    idle += cpu.times.idle;
+  }
+  return { idle, total };
+}
+
+// Sample CPU usage over a short window. os.loadavg() is unavailable/zero on
+// some platforms (Windows), so we derive instantaneous usage from two
+// snapshots of per-core busy time.
+function sampleCpuUsage(windowMs = 150) {
+  return new Promise((resolve) => {
+    const start = cpuTimesSnapshot();
+    setTimeout(() => {
+      const end = cpuTimesSnapshot();
+      const idleDelta = end.idle - start.idle;
+      const totalDelta = end.total - start.total;
+      const usage = totalDelta > 0 ? 1 - idleDelta / totalDelta : 0;
+      resolve(Math.max(0, Math.min(1, usage)));
+    }, windowMs);
+  });
+}
+
+// Disk usage for the filesystem hosting the app. statfsSync is available in
+// Node 18.15+/20; guarded so an unsupported platform degrades to nulls.
+function getDiskStats() {
+  try {
+    const target = process.platform === 'win32'
+      ? `${process.cwd().split(sep)[0]}${sep}`
+      : '/';
+    const s = statfsSync(target);
+    const total = s.blocks * s.bsize;
+    const free = s.bavail * s.bsize;
+    const used = total - free;
+    return {
+      total,
+      used,
+      free,
+      percent: total > 0 ? Math.round((used / total) * 1000) / 10 : null,
+    };
+  } catch {
+    return { total: null, used: null, free: null, percent: null };
+  }
+}
+
+function formatUptime(seconds) {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const parts = [];
+  if (d) parts.push(`${d}d`);
+  if (h) parts.push(`${h}h`);
+  if (m) parts.push(`${m}m`);
+  if (!parts.length) parts.push(`${Math.floor(seconds)}s`);
+  return parts.join(' ');
+}
+
+// GET /api/stats - Live host metrics (CPU, memory, disk, uptime, system)
+app.get('/api/stats', async (req, res) => {
+  try {
+    const cpuUsage = await sampleCpuUsage(150);
+    const cpus = os.cpus();
+    const load = os.loadavg();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    const uptime = os.uptime();
+
+    res.json({
+      cpu: {
+        percent: Math.round(cpuUsage * 1000) / 10,
+        cores: cpus.length,
+        model: cpus[0]?.model?.trim() || null,
+        load: { '1m': load[0], '5m': load[1], '15m': load[2] },
+      },
+      memory: {
+        total: totalMem,
+        used: usedMem,
+        free: freeMem,
+        percent: totalMem > 0 ? Math.round((usedMem / totalMem) * 1000) / 10 : null,
+      },
+      disk: getDiskStats(),
+      uptime: {
+        seconds: Math.floor(uptime),
+        formatted: formatUptime(uptime),
+      },
+      system: {
+        hostname: os.hostname(),
+        platform: process.platform,
+        arch: process.arch,
+        release: os.release(),
+        type: os.type(),
+        nodeVersion: process.version,
+      },
+      timestamp: Date.now(),
+    });
+  } catch (error) {
+    console.error('Stats error:', error.message);
+    res.status(500).json({ error: 'Failed to collect server stats' });
+  }
+});
 
 // Resolve a URL sub-path (relative to /api/files) to a real filesystem path.
 // Returns null if the resolved path escapes SHARED_FILES_DIR (path traversal guard).

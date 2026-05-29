@@ -83,3 +83,38 @@ export interface CopypartyListing {
   dirs: CopypartyDir[];
   path: string;
 }
+
+// Live host metrics returned by GET /api/stats
+export interface ServerStats {
+  cpu: {
+    percent: number | null;
+    cores: number | null;
+    model: string | null;
+    load: { '1m': number; '5m': number; '15m': number };
+  };
+  memory: {
+    total: number | null;
+    used: number | null;
+    free: number | null;
+    percent: number | null;
+  };
+  disk: {
+    total: number | null;
+    used: number | null;
+    free: number | null;
+    percent: number | null;
+  };
+  uptime: {
+    seconds: number | null;
+    formatted: string | null;
+  };
+  system: {
+    hostname: string;
+    platform: string;
+    arch: string;
+    release: string;
+    type: string;
+    nodeVersion: string;
+  };
+  timestamp: number;
+}
