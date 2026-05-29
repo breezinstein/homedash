@@ -426,9 +426,22 @@ function formatBytes(bytes) {
 // Resolve a URL sub-path (relative to /api/files) to a real filesystem path.
 // Returns null if the resolved path escapes SHARED_FILES_DIR (path traversal guard).
 function resolveSharedPath(urlSubPath) {
+  // Express does not URL-decode req.path, so filenames with spaces or other
+  // special characters arrive percent-encoded (e.g. "%20"). Decode each segment
+  // before touching the filesystem. The traversal guard below still catches any
+  // "../" that decoding might reveal.
+  let decoded;
+  try {
+    decoded = urlSubPath
+      .split('/')
+      .map(seg => (seg ? decodeURIComponent(seg) : seg))
+      .join('/');
+  } catch {
+    return null; // malformed percent-encoding
+  }
   // The UI prefixes paths with '/shared' (the virtual root name) — strip it.
   // Use a lookahead so that only the segment '/shared' is stripped, not '/sharedsomething'.
-  const local = urlSubPath.replace(/^\/shared(?=\/|$)/, '') || '/';
+  const local = decoded.replace(/^\/shared(?=\/|$)/, '') || '/';
   const resolved = resolve(join(SHARED_FILES_DIR, local));
   const base = resolve(SHARED_FILES_DIR);
   if (resolved !== base && !resolved.startsWith(base + sep)) return null;

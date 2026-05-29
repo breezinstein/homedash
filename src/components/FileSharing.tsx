@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { listDirectory, getFileDownloadUrl, uploadFile, deleteItem } from '../api/filesApi';
 import type { CopypartyListing, CopypartyFile, CopypartyDir } from '../types';
-import { useBodyScrollLock, useConfirm, useToast } from './ui';
+import { ModalShell, useConfirm, useToast } from './ui';
 import { useDashboard } from '../context/DashboardContext';
 
 const canWebShare =
@@ -42,7 +42,6 @@ function formatDate(ts: number): string {
 }
 
 export function FileSharing({ onClose }: FileSharingProps) {
-  useBodyScrollLock(true);
   const confirm = useConfirm();
   const toast = useToast();
   const { copyClipToSystemClipboard } = useDashboard();
@@ -70,15 +69,6 @@ export function FileSharing({ onClose }: FileSharingProps) {
   useEffect(() => {
     load(currentPath);
   }, [currentPath, load]);
-
-  // Close on Escape
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
 
   const navigate = (path: string) => setCurrentPath(path);
 
@@ -130,7 +120,6 @@ export function FileSharing({ onClose }: FileSharingProps) {
   };
 
   const handleShare = async (filePath: string, fileName: string) => {
-    // Build an absolute URL so the shared link works on other devices.
     const relativeUrl = getFileDownloadUrl(filePath);
     let absoluteUrl = relativeUrl;
     try {
@@ -144,10 +133,7 @@ export function FileSharing({ onClose }: FileSharingProps) {
         await (navigator as Navigator).share({ title: fileName, url: absoluteUrl });
         return;
       } catch (err) {
-        // AbortError = user dismissed the share sheet — silently ignore and
-        // skip the clipboard fallback so we don't paste over their selection.
         if ((err as DOMException)?.name === 'AbortError') return;
-        // Any other share error falls through to the clipboard path.
       }
     }
 
@@ -162,150 +148,147 @@ export function FileSharing({ onClose }: FileSharingProps) {
   const isEmpty = listing && listing.dirs.length === 0 && listing.files.length === 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[var(--color-background)]">
-      {/* Header bar */}
-      <div className="flex items-center gap-3 px-4 sm:px-6 py-3 bg-[var(--color-surface)] border-b border-[var(--color-border)] shrink-0">
-        {/* Title */}
-        <span className="text-sm font-semibold text-[var(--color-text-primary)] shrink-0 hidden sm:block">
-          File Sharing
-        </span>
-        <span className="text-[var(--color-border)] hidden sm:block">|</span>
+    <ModalShell onClose={onClose} ariaLabel="File Sharing">
+      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-4xl shadow-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-[var(--color-border)] shrink-0">
+          {/* Title */}
+          <span className="text-sm font-semibold text-[var(--color-text-primary)] shrink-0 hidden sm:block">
+            File Sharing
+          </span>
+          <span className="text-[var(--color-border)] hidden sm:block">|</span>
 
-        {/* Breadcrumb */}
-        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
-          <button
-            onClick={() => navigate('/shared/')}
-            className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors shrink-0"
-            title="Root"
-          >
-            <Home className="w-4 h-4" />
-          </button>
-          {breadcrumbs.map((segment, i) => {
-            const segPath = '/' + breadcrumbs.slice(0, i + 1).join('/') + '/';
-            return (
-              <span key={segPath} className="flex items-center gap-1 shrink-0">
-                <ChevronRight className="w-3 h-3 text-[var(--color-text-secondary)]" />
-                <button
-                  onClick={() => navigate(segPath)}
-                  className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-                >
-                  {segment}
-                </button>
-              </span>
-            );
-          })}
+          {/* Breadcrumb */}
+          <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
+            <button
+              onClick={() => navigate('/shared/')}
+              className="p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors shrink-0"
+              title="Root"
+            >
+              <Home className="w-4 h-4" />
+            </button>
+            {breadcrumbs.map((segment, i) => {
+              const segPath = '/' + breadcrumbs.slice(0, i + 1).join('/') + '/';
+              return (
+                <span key={segPath} className="flex items-center gap-1 shrink-0">
+                  <ChevronRight className="w-3 h-3 text-[var(--color-text-secondary)]" />
+                  <button
+                    onClick={() => navigate(segPath)}
+                    className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+                  >
+                    {segment}
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => load(currentPath)}
+              disabled={loading}
+              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              title="Refresh"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadProgress !== null}
+              className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm font-medium disabled:opacity-50"
+            >
+              <Upload className="w-4 h-4" />
+              <span className="hidden sm:inline">Upload</span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleUpload}
+            />
+            <button
+              onClick={onClose}
+              className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={() => load(currentPath)}
-            disabled={loading}
-            className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-            title="Refresh"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            disabled={uploadProgress !== null}
-            className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm font-medium disabled:opacity-50"
-          >
-            <Upload className="w-4 h-4" />
-            <span className="hidden sm:inline">Upload</span>
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            onChange={handleUpload}
-          />
-          <button
-            onClick={onClose}
-            className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-            title="Close (Esc)"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Upload progress bar */}
-      {uploadProgress !== null && (
-        <div className="h-1 bg-[var(--color-surface)] shrink-0">
-          <div
-            className="h-full bg-[var(--color-primary)] transition-all duration-100"
-            style={{ width: `${uploadProgress}%` }}
-          />
-        </div>
-      )}
-
-      {/* Error banner */}
-      {error && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-sm shrink-0">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span className="flex-1 min-w-0 truncate">{error}</span>
-          <button
-            onClick={() => load(currentPath)}
-            className="underline hover:no-underline shrink-0"
-          >
-            Retry
-          </button>
-          <button onClick={() => setError(null)} className="shrink-0">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
-        {/* Initial loading */}
-        {loading && !listing && (
-          <div className="flex items-center justify-center py-24">
-            <RefreshCw className="w-8 h-8 text-[var(--color-text-secondary)] animate-spin" />
+        {/* Upload progress bar */}
+        {uploadProgress !== null && (
+          <div className="h-1 bg-[var(--color-background)] shrink-0">
+            <div
+              className="h-full bg-[var(--color-primary)] transition-all duration-100"
+              style={{ width: `${uploadProgress}%` }}
+            />
           </div>
         )}
 
-        {/* Empty state */}
-        {!loading && isEmpty && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 mb-4 rounded-2xl bg-[var(--color-surface)] flex items-center justify-center">
-              <Folder className="w-8 h-8 text-[var(--color-text-secondary)]" />
+        {/* Error banner */}
+        {error && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-sm shrink-0">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="flex-1 min-w-0 truncate">{error}</span>
+            <button onClick={() => load(currentPath)} className="underline hover:no-underline shrink-0">
+              Retry
+            </button>
+            <button onClick={() => setError(null)} className="shrink-0" aria-label="Dismiss error">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-5">
+          {/* Initial loading */}
+          {loading && !listing && (
+            <div className="flex items-center justify-center py-24">
+              <RefreshCw className="w-8 h-8 text-[var(--color-text-secondary)] animate-spin" />
             </div>
-            <p className="text-[var(--color-text-primary)] font-medium mb-1">This folder is empty</p>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              Click Upload to add files
-            </p>
-          </div>
-        )}
+          )}
 
-        {/* File/folder grid */}
-        {listing && !isEmpty && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {listing.dirs.map((dir) => (
-              <DirCard
-                key={dir.n}
-                dir={dir}
-                currentPath={currentPath}
-                onNavigate={navigate}
-                onDelete={(p) => handleDelete(p, 'folder', dir.n)}
-                deleting={deletingPath === currentPath + dir.n + '/'}
-              />
-            ))}
-            {listing.files.map((file) => (
-              <FileCard
-                key={file.n}
-                file={file}
-                currentPath={currentPath}
-                onDelete={(p) => handleDelete(p, 'file', file.n)}
-                onShare={(p) => handleShare(p, file.n)}
-                deleting={deletingPath === currentPath + file.n}
-              />
-            ))}
-          </div>
-        )}
+          {/* Empty state */}
+          {!loading && isEmpty && (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <div className="w-16 h-16 mb-4 rounded-2xl bg-[var(--color-background)] flex items-center justify-center">
+                <Folder className="w-8 h-8 text-[var(--color-text-secondary)]" />
+              </div>
+              <p className="text-[var(--color-text-primary)] font-medium mb-1">This folder is empty</p>
+              <p className="text-sm text-[var(--color-text-secondary)]">Click Upload to add files</p>
+            </div>
+          )}
+
+          {/* File/folder grid */}
+          {listing && !isEmpty && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+              {listing.dirs.map((dir) => (
+                <DirCard
+                  key={dir.n}
+                  dir={dir}
+                  currentPath={currentPath}
+                  onNavigate={navigate}
+                  onDelete={(p) => handleDelete(p, 'folder', dir.n)}
+                  deleting={deletingPath === currentPath + dir.n + '/'}
+                />
+              ))}
+              {listing.files.map((file) => (
+                <FileCard
+                  key={file.n}
+                  file={file}
+                  currentPath={currentPath}
+                  onDelete={(p) => handleDelete(p, 'file', file.n)}
+                  onShare={(p) => handleShare(p, file.n)}
+                  deleting={deletingPath === currentPath + file.n}
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </ModalShell>
   );
 }
 
