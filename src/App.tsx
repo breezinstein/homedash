@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
 import { Header, CategorySection } from './components';
 import { ConfirmProvider, ToastProvider, useToast } from './components/ui';
@@ -28,7 +28,7 @@ function SyncErrorReporter() {
 }
 
 function Dashboard() {
-  const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories } = useDashboard();
+  const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories, isLoading } = useDashboard();
   const [showSettings, setShowSettings] = useState(false);
   const [isFileSharingOpen, setIsFileSharingOpen] = useState(false);
   const [isClipboardOpen, setIsClipboardOpen] = useState(false);
@@ -51,16 +51,26 @@ function Dashboard() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Debounce the query that actually drives filtering/grouping so typing stays
+  // snappy on large service lists — the controlled input (in Header) still
+  // updates instantly, but the expensive filter+regroup+rerender only runs
+  // after the user pauses.
+  const [debouncedQuery, setDebouncedQuery] = useState(searchQuery);
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(searchQuery), 150);
+    return () => clearTimeout(id);
+  }, [searchQuery]);
+
   // Filter services based on search query
   const filteredServices = useMemo(() => {
-    if (!searchQuery) return config.services;
-    const q = searchQuery.toLowerCase();
+    if (!debouncedQuery) return config.services;
+    const q = debouncedQuery.toLowerCase();
     return config.services.filter(s =>
       s.name.toLowerCase().includes(q) ||
       s.description.toLowerCase().includes(q) ||
       s.category.toLowerCase().includes(q)
     );
-  }, [config.services, searchQuery]);
+  }, [config.services, debouncedQuery]);
 
   // Group services by category
   const { servicesByCategory, uncategorizedServices } = useMemo(() => {
@@ -81,10 +91,10 @@ function Dashboard() {
     return { servicesByCategory: byCategory, uncategorizedServices: uncategorized };
   }, [filteredServices, config.categoryOrder]);
 
-  const handleEditService = (index: number) => {
+  const handleEditService = useCallback((index: number) => {
     setEditingServiceIndex(index);
     setShowServiceModal(true);
-  };
+  }, []);
 
   const handleEditCategory = (category: string) => {
     setEditingCategory(category);
@@ -180,7 +190,7 @@ function Dashboard() {
           {config.categoryOrder.map((category) => {
             const services = servicesByCategory[category] || [];
             // Hide empty categories when searching
-            if (searchQuery && services.length === 0) return null;
+            if (debouncedQuery && services.length === 0) return null;
             return (
               <CategorySection
                 key={category}
@@ -207,8 +217,24 @@ function Dashboard() {
           />
         )}
 
+        {/* Initial load skeleton — avoids flashing the empty state before
+            the server config arrives. Only shown while nothing is loaded yet. */}
+        {isLoading && config.services.length === 0 && (
+          <div className="space-y-3" aria-hidden="true">
+            <div className="h-6 w-40 rounded-lg bg-[var(--color-surface)] animate-pulse" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-[88px] rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] animate-pulse"
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* No Search Results */}
-        {searchQuery && filteredServices.length === 0 && (
+        {debouncedQuery && filteredServices.length === 0 && (
           <div className="text-center py-16">
             <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-[var(--color-surface)] flex items-center justify-center">
               <Search className="w-10 h-10 text-[var(--color-text-secondary)]" />
@@ -217,13 +243,13 @@ function Dashboard() {
               No Results Found
             </h2>
             <p className="text-[var(--color-text-secondary)]">
-              No services match "{searchQuery}"
+              No services match "{debouncedQuery}"
             </p>
           </div>
         )}
 
         {/* Empty State */}
-        {config.services.length === 0 && !searchQuery && (
+        {!isLoading && config.services.length === 0 && !debouncedQuery && (
           <div className="text-center py-16">
             <div className="w-20 h-20 mx-auto mb-4 rounded-2xl bg-[var(--color-surface)] flex items-center justify-center">
               <Plus className="w-10 h-10 text-[var(--color-text-secondary)]" />

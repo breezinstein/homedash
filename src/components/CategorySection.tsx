@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { ServiceCard } from './ServiceCard';
 import type { Service } from '../types';
@@ -102,14 +102,14 @@ export function CategorySection({
     }
   };
 
-  const handleServiceDragStart = (e: React.DragEvent, service: Service, localIndex: number) => {
-    const globalIndex = getServiceGlobalIndex(service);
+  const handleServiceDragStart = useCallback((e: React.DragEvent, service: Service, localIndex: number) => {
+    const globalIndex = serviceIndexByRef.get(service) ?? config.services.indexOf(service);
     e.dataTransfer.setData('serviceglobalindex', globalIndex.toString());
     e.dataTransfer.setData('sourcelocalindex', localIndex.toString());
     e.dataTransfer.setData('sourcecategory', category);
     e.dataTransfer.effectAllowed = 'move';
     draggedServiceRef.current = { index: localIndex, category };
-  };
+  }, [category, serviceIndexByRef, config.services]);
 
   const handleServiceDragOver = (e: React.DragEvent, targetLocalIndex: number) => {
     e.preventDefault();
@@ -140,10 +140,10 @@ export function CategorySection({
     }
   };
 
-  const handleServiceDragEnd = () => {
+  const handleServiceDragEnd = useCallback(() => {
     draggedServiceRef.current = null;
     setServiceDragOverIndex(null);
-  };
+  }, []);
 
   const handleAddService = () => {
     const newService: Service = {
@@ -297,18 +297,21 @@ export function CategorySection({
 
       {!isCollapsed && (
         <div className={`grid ${gridCols} gap-4`}>
-          {services.map((service, localIndex) => (
+          {services.map((service, localIndex) => {
+            const globalIndex = getServiceGlobalIndex(service);
+            return (
             <div
-              key={`${service.name}-${service.url}`}
+              key={globalIndex}
               className={`transition-all ${serviceDragOverIndex === localIndex ? 'ring-2 ring-[var(--color-accent)] ring-offset-2 ring-offset-[var(--color-background)] rounded-xl' : ''}`}
               onDragOver={(e) => handleServiceDragOver(e, localIndex)}
               onDrop={(e) => handleServiceDrop(e, localIndex)}
             >
               <ServiceCard
                 service={service}
-                index={getServiceGlobalIndex(service)}
+                index={globalIndex}
+                localIndex={localIndex}
                 onEdit={onEditService}
-                onDragStart={(e) => handleServiceDragStart(e, service, localIndex)}
+                onDragStart={handleServiceDragStart}
                 onDragEnd={handleServiceDragEnd}
               />
               {isEditMode && services.length > 1 && (
@@ -334,7 +337,8 @@ export function CategorySection({
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

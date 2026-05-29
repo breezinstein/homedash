@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -101,12 +102,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value: ToastContextValue = {
+  const value: ToastContextValue = useMemo(() => ({
     show,
     success: (message, duration) => show({ message, tone: 'success', duration }),
     error: (message, duration) => show({ message, tone: 'error', duration }),
     info: (message, duration) => show({ message, tone: 'info', duration }),
-  };
+  }), [show]);
 
   return (
     <ToastContext.Provider value={value}>

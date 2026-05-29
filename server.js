@@ -75,7 +75,7 @@ const defaultConfig = {
     timezone: "UTC",
     customCSS: "",
     autoSync: true,
-    syncInterval: 5000
+    syncInterval: 30000
   },
   metadata: {
     version: "1.0.0",

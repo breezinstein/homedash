@@ -10,6 +10,8 @@ import {
   Menu,
   FolderOpen,
   Clipboard,
+  RefreshCw,
+  CloudOff,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -19,7 +21,7 @@ interface HeaderProps {
 }
 
 export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }: HeaderProps) {
-  const { isEditMode, setIsEditMode, searchQuery, setSearchQuery } = useDashboard();
+  const { isEditMode, setIsEditMode, searchQuery, setSearchQuery, isSyncing, syncError } = useDashboard();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
@@ -86,6 +88,23 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick }
               <h1 className="text-lg sm:text-xl font-bold text-[var(--color-text-primary)]">HomeDash</h1>
               <p className="text-xs text-[var(--color-text-secondary)] hidden sm:block">Homelab Dashboard</p>
             </div>
+
+            {/* Sync status: subtle spinner while saving/syncing, error chip if
+                the server is unreachable. Stays out of the way otherwise. */}
+            {syncError ? (
+              <span
+                className="flex items-center gap-1 text-[var(--color-error)]"
+                title={syncError}
+              >
+                <CloudOff className="w-4 h-4" />
+                <span className="text-xs hidden sm:inline">Offline</span>
+              </span>
+            ) : isSyncing ? (
+              <span className="flex items-center gap-1 text-[var(--color-text-secondary)]" title="Syncing…">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span className="text-xs hidden sm:inline">Syncing…</span>
+              </span>
+            ) : null}
           </div>
 
           {/* Desktop Controls */}

@@ -104,6 +104,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const lastModifiedRef = useRef<number>(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
+  // Always-current snapshot of config so memoized callbacks can read the
+  // latest state without taking `config` as a dependency (which would make
+  // every handler — and therefore the context value — change each render).
+  const configRef = useRef(config);
+  configRef.current = config;
 
   // Load config from server on mount
   useEffect(() => {
@@ -136,9 +141,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     // value can't hammer the server. Default of 5000ms matches prior behaviour.
     const configured = config.settings?.syncInterval;
     const pollMs = Math.max(1000, typeof configured === 'number' && configured > 0 ? configured : 5000);
-    const checkInterval = setInterval(async () => {
-      if (isSavingRef.current) return;
-      
+
+    const poll = async () => {
+      // Skip work while the tab is hidden — nobody is looking and it just
+      // burns requests/CPU. A visibilitychange listener triggers an immediate
+      // catch-up poll when the tab becomes visible again.
+      if (isSavingRef.current || document.hidden) return;
+
       try {
         const { changed, lastModified } = await configApi.checkForChanges(lastModifiedRef.current);
         if (changed) {
@@ -153,9 +162,17 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       } catch (error) {
         console.error('Sync check failed:', error);
       }
-    }, pollMs);
+    };
 
-    return () => clearInterval(checkInterval);
+    const checkInterval = setInterval(poll, pollMs);
+    // Catch up immediately when the user returns to the tab.
+    const onVisibility = () => { if (!document.hidden) poll(); };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    return () => {
+      clearInterval(checkInterval);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [config.settings?.syncInterval]);
 
   // Save to server with debounce
@@ -195,7 +212,11 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     });
   }, [config.colors]);
 
-  const setConfig = (newConfig: DashboardConfig) => {
+  // All mutators below read the live config from `configRef` rather than the
+  // `config` closure, so they can be wrapped in useCallback with stable
+  // identities. This keeps the context value (and therefore every consumer,
+  // e.g. each ServiceCard) from re-rendering on unrelated state changes.
+  const setConfig = useCallback((newConfig: DashboardConfig) => {
     const updated = {
       ...newConfig,
       metadata: {
@@ -205,76 +226,83 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     };
     setConfigState(updated);
     saveToServer(updated);
-  };
+  }, [saveToServer]);
 
-  const refreshBackups = async () => {
+  const refreshBackups = useCallback(async () => {
     try {
       const serverBackups = await configApi.listBackups();
       setBackups(serverBackups);
     } catch (error) {
       console.error('Failed to load backups:', error);
     }
-  };
+  }, []);
 
-  const updateService = (index: number, service: Service) => {
-    const newServices = [...config.services];
+  const updateService = useCallback((index: number, service: Service) => {
+    const cfg = configRef.current;
+    const newServices = [...cfg.services];
     newServices[index] = service;
-    setConfig({ ...config, services: newServices });
-  };
+    setConfig({ ...cfg, services: newServices });
+  }, [setConfig]);
 
-  const addService = (service: Service) => {
-    const newServices = [...config.services, service];
-    const categoryOrder = config.categoryOrder.includes(service.category)
-      ? config.categoryOrder
-      : [...config.categoryOrder, service.category];
-    setConfig({ ...config, services: newServices, categoryOrder });
-  };
+  const addService = useCallback((service: Service) => {
+    const cfg = configRef.current;
+    const newServices = [...cfg.services, service];
+    const categoryOrder = cfg.categoryOrder.includes(service.category)
+      ? cfg.categoryOrder
+      : [...cfg.categoryOrder, service.category];
+    setConfig({ ...cfg, services: newServices, categoryOrder });
+  }, [setConfig]);
 
-  const deleteService = (index: number) => {
-    const newServices = config.services.filter((_, i) => i !== index);
-    setConfig({ ...config, services: newServices });
-  };
+  const deleteService = useCallback((index: number) => {
+    const cfg = configRef.current;
+    const newServices = cfg.services.filter((_, i) => i !== index);
+    setConfig({ ...cfg, services: newServices });
+  }, [setConfig]);
 
-  const updateCategory = (oldName: string, newName: string) => {
-    const newServices = config.services.map(service =>
+  const updateCategory = useCallback((oldName: string, newName: string) => {
+    const cfg = configRef.current;
+    const newServices = cfg.services.map(service =>
       service.category === oldName ? { ...service, category: newName } : service
     );
-    const newCategoryOrder = config.categoryOrder.map(cat =>
+    const newCategoryOrder = cfg.categoryOrder.map(cat =>
       cat === oldName ? newName : cat
     );
-    setConfig({ ...config, services: newServices, categoryOrder: newCategoryOrder });
-  };
+    setConfig({ ...cfg, services: newServices, categoryOrder: newCategoryOrder });
+  }, [setConfig]);
 
-  const addCategory = (name: string) => {
-    if (!config.categoryOrder.includes(name)) {
-      setConfig({ ...config, categoryOrder: [...config.categoryOrder, name] });
+  const addCategory = useCallback((name: string) => {
+    const cfg = configRef.current;
+    if (!cfg.categoryOrder.includes(name)) {
+      setConfig({ ...cfg, categoryOrder: [...cfg.categoryOrder, name] });
     }
-  };
+  }, [setConfig]);
 
-  const deleteCategory = (name: string) => {
-    const newServices = config.services.filter(s => s.category !== name);
-    const newCategoryOrder = config.categoryOrder.filter(c => c !== name);
-    setConfig({ ...config, services: newServices, categoryOrder: newCategoryOrder });
-  };
+  const deleteCategory = useCallback((name: string) => {
+    const cfg = configRef.current;
+    const newServices = cfg.services.filter(s => s.category !== name);
+    const newCategoryOrder = cfg.categoryOrder.filter(c => c !== name);
+    setConfig({ ...cfg, services: newServices, categoryOrder: newCategoryOrder });
+  }, [setConfig]);
 
-  const reorderCategories = (newOrder: string[]) => {
-    setConfig({ ...config, categoryOrder: newOrder });
-  };
+  const reorderCategories = useCallback((newOrder: string[]) => {
+    setConfig({ ...configRef.current, categoryOrder: newOrder });
+  }, [setConfig]);
 
-  const moveServiceToCategory = (serviceIndex: number, targetCategory: string, targetPosition?: number) => {
-    const service = config.services[serviceIndex];
+  const moveServiceToCategory = useCallback((serviceIndex: number, targetCategory: string, targetPosition?: number) => {
+    const cfg = configRef.current;
+    const service = cfg.services[serviceIndex];
     if (!service) return;
 
     // Update service category
     const updatedService = { ...service, category: targetCategory };
     
     // Get services in target category (excluding the moving service if it's already there)
-    const targetCategoryServices = config.services.filter(
+    const targetCategoryServices = cfg.services.filter(
       (s, i) => s.category === targetCategory && i !== serviceIndex
     );
     
     // Get all other services
-    const otherServices = config.services.filter(
+    const otherServices = cfg.services.filter(
       (s, i) => s.category !== targetCategory && i !== serviceIndex
     );
 
@@ -292,7 +320,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
     // Rebuild services array maintaining category order
     const newServices: Service[] = [];
-    for (const category of config.categoryOrder) {
+    for (const category of cfg.categoryOrder) {
       if (category === targetCategory) {
         newServices.push(...newTargetCategoryServices);
       } else {
@@ -300,20 +328,21 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       }
     }
     // Add any uncategorized services
-    const categorized = new Set(config.categoryOrder);
+    const categorized = new Set(cfg.categoryOrder);
     newServices.push(...otherServices.filter(s => !categorized.has(s.category)));
 
     // Ensure target category exists in categoryOrder
-    const categoryOrder = config.categoryOrder.includes(targetCategory)
-      ? config.categoryOrder
-      : [...config.categoryOrder, targetCategory];
+    const categoryOrder = cfg.categoryOrder.includes(targetCategory)
+      ? cfg.categoryOrder
+      : [...cfg.categoryOrder, targetCategory];
 
-    setConfig({ ...config, services: newServices, categoryOrder });
-  };
+    setConfig({ ...cfg, services: newServices, categoryOrder });
+  }, [setConfig]);
 
-  const reorderServicesInCategory = (category: string, fromIndex: number, toIndex: number) => {
+  const reorderServicesInCategory = useCallback((category: string, fromIndex: number, toIndex: number) => {
+    const cfg = configRef.current;
     // Get services in this category with their original indices
-    const categoryServices = config.services
+    const categoryServices = cfg.services
       .map((s, i) => ({ service: s, originalIndex: i }))
       .filter(({ service }) => service.category === category);
 
@@ -329,7 +358,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     const newServices: Service[] = [];
     let categoryIndex = 0;
     
-    for (const original of config.services) {
+    for (const original of cfg.services) {
       if (original.category === category) {
         // Use the reordered service at this position
         newServices.push(categoryServices[categoryIndex].service);
@@ -339,19 +368,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    setConfig({ ...config, services: newServices });
-  };
+    setConfig({ ...cfg, services: newServices });
+  }, [setConfig]);
 
-  const createBackup = async (name?: string) => {
+  const createBackup = useCallback(async (name?: string) => {
     try {
       await configApi.createBackup(name);
       await refreshBackups();
     } catch (error) {
       console.error('Failed to create backup:', error);
     }
-  };
+  }, [refreshBackups]);
 
-  const restoreBackup = async (backup: ServerBackup) => {
+  const restoreBackup = useCallback(async (backup: ServerBackup) => {
     try {
       await configApi.restoreBackup(backup.filename);
       const { config: serverConfig, lastModified } = await configApi.getConfig();
@@ -361,23 +390,23 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } catch (error) {
       console.error('Failed to restore backup:', error);
     }
-  };
+  }, []);
 
-  const deleteBackup = async (filename: string) => {
+  const deleteBackup = useCallback(async (filename: string) => {
     try {
       await configApi.deleteBackup(filename);
       await refreshBackups();
     } catch (error) {
       console.error('Failed to delete backup:', error);
     }
-  };
+  }, [refreshBackups]);
 
-  const uploadIcon = async (file: File): Promise<string> => {
+  const uploadIcon = useCallback(async (file: File): Promise<string> => {
     const result = await configApi.uploadIcon(file);
     return result.url;
-  };
+  }, []);
 
-  const clips: Clip[] = config.clips ?? [];
+  const clips: Clip[] = useMemo(() => config.clips ?? [], [config.clips]);
 
   // O(1) lookup of a service's global index, rebuilt only when the
   // services array reference changes. Replaces the per-render O(n)
@@ -388,9 +417,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return map;
   }, [config.services]);
 
-  const setClips = (next: Clip[]) => {
-    setConfig({ ...config, clips: next });
-  };
+  const setClips = useCallback((next: Clip[]) => {
+    setConfig({ ...configRef.current, clips: next });
+  }, [setConfig]);
 
   const generateClipId = () => {
     if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -399,7 +428,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   };
 
-  const addClip = (label: string, content: string) => {
+  const addClip = useCallback((label: string, content: string) => {
     const now = new Date().toISOString();
     const newClip: Clip = {
       id: generateClipId(),
@@ -409,33 +438,33 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       createdAt: now,
       updatedAt: now,
     };
-    setClips([newClip, ...clips]);
-  };
+    setClips([newClip, ...(configRef.current.clips ?? [])]);
+  }, [setClips]);
 
-  const updateClip = (id: string, patch: Partial<Pick<Clip, 'label' | 'content' | 'pinned'>>) => {
-    const next = clips.map(c =>
+  const updateClip = useCallback((id: string, patch: Partial<Pick<Clip, 'label' | 'content' | 'pinned'>>) => {
+    const next = (configRef.current.clips ?? []).map(c =>
       c.id === id
         ? { ...c, ...patch, updatedAt: new Date().toISOString() }
         : c
     );
     setClips(next);
-  };
+  }, [setClips]);
 
-  const deleteClip = (id: string) => {
-    setClips(clips.filter(c => c.id !== id));
-  };
+  const deleteClip = useCallback((id: string) => {
+    setClips((configRef.current.clips ?? []).filter(c => c.id !== id));
+  }, [setClips]);
 
-  const toggleClipPin = (id: string) => {
-    const target = clips.find(c => c.id === id);
+  const toggleClipPin = useCallback((id: string) => {
+    const target = (configRef.current.clips ?? []).find(c => c.id === id);
     if (!target) return;
     updateClip(id, { pinned: !target.pinned });
-  };
+  }, [updateClip]);
 
-  const reorderClips = (newOrder: Clip[]) => {
+  const reorderClips = useCallback((newOrder: Clip[]) => {
     setClips(newOrder);
-  };
+  }, [setClips]);
 
-  const copyClipToSystemClipboard = async (content: string): Promise<boolean> => {
+  const copyClipToSystemClipboard = useCallback(async (content: string): Promise<boolean> => {
     // Async clipboard API is only available in secure contexts. Fall back to
     // the deprecated execCommand path for plain-HTTP homelab setups.
     if (typeof navigator !== 'undefined' && navigator.clipboard && window.isSecureContext) {
@@ -461,16 +490,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     } catch {
       return false;
     }
-  };
+  }, []);
 
-  const importConfig = async (file: File) => {
+  const importConfig = useCallback(async (file: File) => {
     const text = await file.text();
     const importedConfig = JSON.parse(text) as DashboardConfig;
     setConfig(importedConfig);
-  };
+  }, [setConfig]);
 
-  const exportConfig = () => {
-    const dataStr = JSON.stringify(config, null, 2);
+  const exportConfig = useCallback(() => {
+    const dataStr = JSON.stringify(configRef.current, null, 2);
     const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
@@ -478,9 +507,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     link.download = `homedash-config-${new Date().toISOString().split('T')[0]}.json`;
     link.click();
     URL.revokeObjectURL(url);
-  };
+  }, []);
 
-  const toggleCategoryCollapse = (category: string) => {
+  const toggleCategoryCollapse = useCallback((category: string) => {
     setCollapsedCategories(prev => {
       const newCollapsed = prev.includes(category)
         ? prev.filter(c => c !== category)
@@ -489,48 +518,61 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       localStorage.setItem('homedash-collapsed', JSON.stringify(newCollapsed));
       return newCollapsed;
     });
-  };
+  }, []);
+
+  // Memoize the context value so it only changes when a piece of state it
+  // exposes actually changes. All callbacks above have stable identities, so
+  // the dependency list is just the reactive values.
+  const value = useMemo<DashboardContextType>(() => ({
+    config,
+    setConfig,
+    updateService,
+    addService,
+    deleteService,
+    updateCategory,
+    addCategory,
+    deleteCategory,
+    reorderCategories,
+    moveServiceToCategory,
+    reorderServicesInCategory,
+    backups,
+    createBackup,
+    restoreBackup,
+    deleteBackup,
+    refreshBackups,
+    importConfig,
+    exportConfig,
+    isEditMode,
+    setIsEditMode,
+    collapsedCategories,
+    toggleCategoryCollapse,
+    isLoading,
+    isSyncing,
+    lastSyncTime,
+    syncError,
+    uploadIcon,
+    searchQuery,
+    setSearchQuery,
+    serviceIndexByRef,
+    clips,
+    addClip,
+    updateClip,
+    deleteClip,
+    toggleClipPin,
+    reorderClips,
+    copyClipToSystemClipboard,
+  }), [
+    config, setConfig, updateService, addService, deleteService, updateCategory,
+    addCategory, deleteCategory, reorderCategories, moveServiceToCategory,
+    reorderServicesInCategory, backups, createBackup, restoreBackup, deleteBackup,
+    refreshBackups, importConfig, exportConfig, isEditMode, collapsedCategories,
+    toggleCategoryCollapse, isLoading, isSyncing, lastSyncTime, syncError, uploadIcon,
+    searchQuery, serviceIndexByRef, clips, addClip, updateClip, deleteClip,
+    toggleClipPin, reorderClips, copyClipToSystemClipboard,
+  ]);
 
   return (
-    <DashboardContext.Provider value={{
-      config,
-      setConfig,
-      updateService,
-      addService,
-      deleteService,
-      updateCategory,
-      addCategory,
-      deleteCategory,
-      reorderCategories,
-      moveServiceToCategory,
-      reorderServicesInCategory,
-      backups,
-      createBackup,
-      restoreBackup,
-      deleteBackup,
-      refreshBackups,
-      importConfig,
-      exportConfig,
-      isEditMode,
-      setIsEditMode,
-      collapsedCategories,
-      toggleCategoryCollapse,
-      isLoading,
-      isSyncing,
-      lastSyncTime,
-      syncError,
-      uploadIcon,
-      searchQuery,
-      setSearchQuery,
-      serviceIndexByRef,
-      clips,
-      addClip,
-      updateClip,
-      deleteClip,
-      toggleClipPin,
-      reorderClips,
-      copyClipToSystemClipboard,
-    }}>
+    <DashboardContext.Provider value={value}>
       {children}
     </DashboardContext.Provider>
   );

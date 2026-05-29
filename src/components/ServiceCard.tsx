@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { memo, useState, useEffect } from 'react';
 import type { Service } from '../types';
 import { ExternalLink, Edit2, Trash2, GripVertical } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
@@ -8,9 +8,9 @@ import { useConfirm, useToast } from './ui';
 interface ServiceCardProps {
   service: Service;
   index: number;
-  localIndex?: number;
+  localIndex: number;
   onEdit: (index: number) => void;
-  onDragStart?: (e: React.DragEvent) => void;
+  onDragStart?: (e: React.DragEvent, service: Service, localIndex: number) => void;
   onDragEnd?: () => void;
 }
 
@@ -23,7 +23,7 @@ function isExternalIcon(url: string): boolean {
   return url.startsWith('http://') || url.startsWith('https://');
 }
 
-export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: ServiceCardProps) {
+export const ServiceCard = memo(function ServiceCard({ service, index, localIndex, onEdit, onDragStart, onDragEnd }: ServiceCardProps) {
   const { isEditMode, deleteService } = useDashboard();
   const confirm = useConfirm();
   const toast = useToast();
@@ -56,10 +56,9 @@ export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: 
   };
 
   const handleDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.setData('serviceIndex', index.toString());
     setIsDragging(true);
     if (onDragStart) {
-      onDragStart(e);
+      onDragStart(e, service, localIndex);
     }
   };
 
@@ -153,4 +152,4 @@ export function ServiceCard({ service, index, onEdit, onDragStart, onDragEnd }: 
       </div>
     </div>
   );
-}
+});
