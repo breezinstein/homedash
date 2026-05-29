@@ -14,6 +14,7 @@ const SettingsModal = lazy(() => import('./components/SettingsModal').then(m => 
 const CategoryModal = lazy(() => import('./components/CategoryModal').then(m => ({ default: m.CategoryModal })));
 const FileSharing = lazy(() => import('./components/FileSharing').then(m => ({ default: m.FileSharing })));
 const ClipboardManager = lazy(() => import('./components/ClipboardManager').then(m => ({ default: m.ClipboardManager })));
+const ServerStats = lazy(() => import('./components/ServerStats').then(m => ({ default: m.ServerStats })));
 
 // Bridge: dashboard sync errors surface as toasts. Lives inside both
 // providers so it has access to both contexts. Keeps the cross-cutting
@@ -32,6 +33,7 @@ function Dashboard() {
   const [showSettings, setShowSettings] = useState(false);
   const [isFileSharingOpen, setIsFileSharingOpen] = useState(false);
   const [isClipboardOpen, setIsClipboardOpen] = useState(false);
+  const [isStatsOpen, setIsStatsOpen] = useState(false);
   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -156,6 +158,7 @@ function Dashboard() {
         onSettingsClick={() => setShowSettings(true)}
         onFileSharingClick={() => setIsFileSharingOpen(true)}
         onClipboardClick={() => setIsClipboardOpen(true)}
+        onStatsClick={() => setIsStatsOpen(true)}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -286,6 +289,10 @@ function Dashboard() {
 
         {isClipboardOpen && (
           <ClipboardManager onClose={() => setIsClipboardOpen(false)} />
+        )}
+
+        {isStatsOpen && (
+          <ServerStats onClose={() => setIsStatsOpen(false)} />
         )}
 
         {showServiceModal && (

@@ -11,6 +11,8 @@ A modern, responsive dashboard for managing homelab services built with React, T
 - **Search**: Real-time filtering with keyboard shortcuts (Ctrl+K)
 - **Multi-Clipboard**: Save labeled snippets server-side and copy any of
   them with one click — synced across all your devices (Ctrl+Shift+C)
+- **Server Stats**: Live CPU, memory, disk, uptime, and system info for the
+  host machine HomeDash runs on
 - **Responsive Design**: Works great on desktop, tablet, and mobile
 
 ### ⚙️ Configuration
@@ -169,6 +171,9 @@ The server provides a REST API for configuration management:
 GET  /api/config           # Get current configuration
 PUT  /api/config           # Save complete configuration
 GET  /api/config/check     # Check for changes (polling)
+
+# Server stats
+GET  /api/stats            # Live host metrics (CPU, memory, disk, uptime, system)
 
 # Backups
 GET  /api/backups                      # List available backups

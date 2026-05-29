@@ -9,7 +9,7 @@ services:
       - "3001:3001"
     volumes:
       - homedash-data:/app/data
-      - ./shared-files:/shared-files
+      - homedash-data:/shared-files
     environment:
       - NODE_ENV=production
       - SHARED_FILES_DIR=/shared-files
