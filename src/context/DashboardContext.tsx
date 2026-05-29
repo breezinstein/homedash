@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
-import type { Clip, DashboardConfig, Service } from '../types';
+import type { Clip, DashboardConfig, RemoteServer, Service } from '../types';
 import { configApi } from '../api/configApi';
 
 interface ServerBackup {
@@ -47,6 +47,10 @@ interface DashboardContextType {
   toggleClipPin: (id: string) => void;
   reorderClips: (newOrder: Clip[]) => void;
   copyClipToSystemClipboard: (content: string) => Promise<boolean>;
+  servers: RemoteServer[];
+  addServer: (name: string, url: string, username?: string, password?: string) => void;
+  updateServer: (id: string, patch: Partial<Pick<RemoteServer, 'name' | 'url' | 'username' | 'password'>>) => void;
+  deleteServer: (id: string) => void;
 }
 
 const defaultConfig: DashboardConfig = {
@@ -70,6 +74,7 @@ const defaultConfig: DashboardConfig = {
   },
   categoryOrder: [],
   clips: [],
+  servers: [],
   colors: {
     primary: "#6366f1",
     secondary: "#475569",
@@ -476,6 +481,43 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setClips(newOrder);
   }, [setClips]);
 
+  const servers: RemoteServer[] = useMemo(() => config.servers ?? [], [config.servers]);
+
+  const setServers = useCallback((next: RemoteServer[]) => {
+    setConfig({ ...configRef.current, servers: next });
+  }, [setConfig]);
+
+  const addServer = useCallback((name: string, url: string, username?: string, password?: string) => {
+    const newServer: RemoteServer = {
+      id: generateClipId(),
+      name: name.trim() || 'Untitled Server',
+      url: url.trim(),
+      ...(username ? { username: username.trim() } : {}),
+      ...(password ? { password } : {}),
+      createdAt: new Date().toISOString(),
+    };
+    setServers([...(configRef.current.servers ?? []), newServer]);
+  }, [setServers]);
+
+  const updateServer = useCallback((id: string, patch: Partial<Pick<RemoteServer, 'name' | 'url' | 'username' | 'password'>>) => {
+    const next = (configRef.current.servers ?? []).map(s =>
+      s.id === id
+        ? {
+            ...s,
+            ...(patch.name !== undefined ? { name: patch.name.trim() || s.name } : {}),
+            ...(patch.url !== undefined ? { url: patch.url.trim() } : {}),
+            ...(patch.username !== undefined ? { username: patch.username.trim() || undefined } : {}),
+            ...(patch.password !== undefined ? { password: patch.password || undefined } : {}),
+          }
+        : s
+    );
+    setServers(next);
+  }, [setServers]);
+
+  const deleteServer = useCallback((id: string) => {
+    setServers((configRef.current.servers ?? []).filter(s => s.id !== id));
+  }, [setServers]);
+
   const copyClipToSystemClipboard = useCallback(async (content: string): Promise<boolean> => {
     // Async clipboard API is only available in secure contexts. Fall back to
     // the deprecated execCommand path for plain-HTTP homelab setups.
@@ -573,6 +615,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     toggleClipPin,
     reorderClips,
     copyClipToSystemClipboard,
+    servers,
+    addServer,
+    updateServer,
+    deleteServer,
   }), [
     config, setConfig, updateService, addService, deleteService, updateCategory,
     addCategory, deleteCategory, reorderCategories, moveServiceToCategory,
@@ -581,6 +627,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     toggleCategoryCollapse, isLoading, isSyncing, lastSyncTime, syncError, uploadIcon,
     searchQuery, serviceIndexByRef, clips, addClip, updateClip, deleteClip,
     toggleClipPin, reorderClips, copyClipToSystemClipboard,
+    servers, addServer, updateServer, deleteServer,
   ]);
 
   return (

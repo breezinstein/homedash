@@ -537,6 +537,166 @@ app.get('/api/stats', async (req, res) => {
   }
 });
 
+// Parse a Glances uptime string (e.g. "7 days, 3:59:51" or "3:59:51") into
+// seconds + keep the human-readable string for display.
+function parseGlancesUptime(value) {
+  if (typeof value !== 'string') return { seconds: null, formatted: null };
+  const m = value.match(/(?:(\d+)\s*days?,\s*)?(\d+):(\d+):(\d+)/);
+  if (!m) return { seconds: null, formatted: value };
+  const days = parseInt(m[1] || '0', 10);
+  const hours = parseInt(m[2], 10);
+  const mins = parseInt(m[3], 10);
+  const secs = parseInt(m[4], 10);
+  return { seconds: days * 86400 + hours * 3600 + mins * 60 + secs, formatted: value };
+}
+
+// Pick the most relevant filesystem from the Glances fs list: prefer root "/",
+// otherwise the largest mounted filesystem.
+function pickRootFs(fsList) {
+  if (!Array.isArray(fsList) || fsList.length === 0) return {};
+  const root = fsList.find(f => f && f.mnt_point === '/');
+  if (root) return root;
+  return fsList.slice().sort((a, b) => (b.size || 0) - (a.size || 0))[0] || {};
+}
+
+const round1 = n => (typeof n === 'number' ? Math.round(n * 10) / 10 : null);
+
+// Transform a Glances `/api/4/all` payload into the ServerStats shape used by the
+// frontend, adding a `containers` array (Docker/Podman) and `source: 'glances'`.
+function normalizeGlances(all) {
+  const cpu = all.cpu || {};
+  const core = all.core || {};
+  const mem = all.mem || {};
+  const load = all.load || {};
+  const sys = all.system || {};
+  const quick = all.quicklook || {};
+  const fs = pickRootFs(all.fs);
+  const uptime = parseGlancesUptime(all.uptime);
+  // Glances v4 returns a flat container list; v3's /all nests it under
+  // { version, version_podman, containers: [...] }.
+  const containers = Array.isArray(all.containers)
+    ? all.containers
+    : (Array.isArray(all.containers?.containers) ? all.containers.containers : []);
+
+  return {
+    cpu: {
+      percent: round1(cpu.total),
+      cores: cpu.cpucore ?? core.log ?? null,
+      model: quick.cpu_name || null,
+      load: {
+        '1m': typeof load.min1 === 'number' ? load.min1 : null,
+        '5m': typeof load.min5 === 'number' ? load.min5 : null,
+        '15m': typeof load.min15 === 'number' ? load.min15 : null,
+      },
+    },
+    memory: {
+      total: mem.total ?? null,
+      used: mem.used ?? null,
+      free: mem.free ?? null,
+      percent: round1(mem.percent),
+    },
+    disk: {
+      total: fs.size ?? null,
+      used: fs.used ?? null,
+      free: fs.free ?? null,
+      percent: round1(fs.percent),
+    },
+    uptime,
+    system: {
+      hostname: sys.hostname || 'unknown',
+      platform: sys.os_name || 'unknown',
+      arch: sys.platform || '',
+      release: sys.os_version || '',
+      type: sys.os_name || '',
+      distro: sys.linux_distro || sys.hr_name || '',
+      glancesVersion: typeof all.version === 'string' ? all.version : undefined,
+    },
+    containers: containers.map(c => {
+      const image = c.image ?? c.Image;
+      const mem = c.memory || {};
+      return {
+        name: c.name || '—',
+        image: Array.isArray(image) ? image.join(', ') : (image || ''),
+        status: c.status || c.Status || '',
+        cpuPercent: round1(typeof c.cpu_percent === 'number' ? c.cpu_percent : c.cpu?.total),
+        memoryUsage: typeof c.memory_usage === 'number' ? c.memory_usage
+          : (typeof mem.usage === 'number' ? mem.usage : null),
+        memoryLimit: typeof c.memory_limit === 'number' ? c.memory_limit
+          : (typeof mem.limit === 'number' ? mem.limit : null),
+        uptime: c.uptime || c.Uptime || null,
+        engine: c.engine || null,
+      };
+    }),
+    source: 'glances',
+    timestamp: Date.now(),
+  };
+}
+
+// GET /api/stats/remote?url=<glancesBase> - Proxy + normalize stats from a Glances
+// instance (REST API on port 61208). The browser can't reach private-network hosts
+// directly (CORS / mixed content), so the server fetches `${base}/api/4/all` on its
+// behalf and maps the response into the ServerStats shape (incl. Docker containers).
+// Supports password-protected instances via HTTP Basic auth: credentials may be sent
+// in the `x-glances-username` / `x-glances-password` headers or embedded in the URL
+// (http://user:pass@host). Falls back to the Glances v3 API for older instances.
+app.get('/api/stats/remote', async (req, res) => {
+  const raw = req.query.url;
+  if (!raw || typeof raw !== 'string') {
+    return res.status(400).json({ error: 'url parameter required' });
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return res.status(400).json({ error: 'Only http/https URLs are supported' });
+  }
+
+  // Basic auth credentials: prefer dedicated headers, fall back to URL userinfo.
+  const username = (req.get('x-glances-username') || decodeURIComponent(parsed.username) || '').trim();
+  const password = req.get('x-glances-password') ?? decodeURIComponent(parsed.password);
+  const reqHeaders = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
+  if (username) {
+    reqHeaders.Authorization = 'Basic ' + Buffer.from(`${username}:${password || ''}`).toString('base64');
+  }
+
+  // Rebuild the base from host only (drops any userinfo) so credentials never leak
+  // into the request path / logs.
+  const base = `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`;
+  const targets = /\/api\/\d+$/.test(base)
+    ? [`${base}/all`]
+    : [`${base}/api/4/all`, `${base}/api/3/all`];
+
+  let lastError = 'Unable to reach remote server';
+  for (const target of targets) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch(target, { headers: reqHeaders, signal: controller.signal });
+      clearTimeout(timeout);
+      if (response.status === 404) {
+        lastError = 'Glances API not found (is Glances web server running?)';
+        continue; // try the next API version
+      }
+      if (response.status === 401) {
+        return res.status(502).json({ error: 'Authentication required or invalid credentials (HTTP 401)' });
+      }
+      if (!response.ok) {
+        return res.status(502).json({ error: `Glances responded with ${response.status}` });
+      }
+      const data = await response.json();
+      return res.json(normalizeGlances(data));
+    } catch (error) {
+      clearTimeout(timeout);
+      lastError = error.name === 'AbortError' ? 'Request timed out' : 'Unable to reach Glances instance';
+    }
+  }
+  res.status(502).json({ error: lastError });
+});
+
 // Resolve a URL sub-path (relative to /api/files) to a real filesystem path.
 // Returns null if the resolved path escapes SHARED_FILES_DIR (path traversal guard).
 function resolveSharedPath(urlSubPath) {

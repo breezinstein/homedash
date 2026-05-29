@@ -12,7 +12,12 @@ A modern, responsive dashboard for managing homelab services built with React, T
 - **Multi-Clipboard**: Save labeled snippets server-side and copy any of
   them with one click — synced across all your devices (Ctrl+Shift+C)
 - **Server Stats**: Live CPU, memory, disk, uptime, and system info for the
-  host machine HomeDash runs on
+  host machine HomeDash runs on — plus any other servers you add. Remote
+  servers run [Glances](https://nicolargo.github.io/glances/) (web server on
+  port 61208); HomeDash reads their REST API (v4 with automatic v3 fallback) to
+  show metrics **and the Docker containers** running on each host, all from one
+  panel. Password-protected Glances instances are supported via optional
+  username/password (HTTP Basic auth)
 - **Responsive Design**: Works great on desktop, tablet, and mobile
 
 ### ⚙️ Configuration
@@ -174,6 +179,7 @@ GET  /api/config/check     # Check for changes (polling)
 
 # Server stats
 GET  /api/stats            # Live host metrics (CPU, memory, disk, uptime, system)
+GET  /api/stats/remote?url=<glancesBase>  # Proxy + normalize stats from a Glances instance (incl. Docker containers)
 
 # Backups
 GET  /api/backups                      # List available backups

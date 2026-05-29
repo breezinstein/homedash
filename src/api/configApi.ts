@@ -140,5 +140,32 @@ export const configApi = {
     const res = await fetch(`${API_BASE}/api/stats`);
     if (!res.ok) throw new Error('Failed to fetch server stats');
     return res.json();
+  },
+
+  // Get live server stats from a remote Glances instance (proxied by our server).
+  // Optional Basic-auth credentials are sent via headers (kept out of the URL/query
+  // so they aren't logged) for password-protected Glances instances.
+  async getRemoteStats(
+    url: string,
+    auth?: { username?: string; password?: string }
+  ): Promise<ServerStats> {
+    const headers: Record<string, string> = {};
+    if (auth?.username) {
+      headers['X-Glances-Username'] = auth.username;
+      headers['X-Glances-Password'] = auth.password ?? '';
+    }
+    const res = await fetch(
+      `${API_BASE}/api/stats/remote?url=${encodeURIComponent(url)}`,
+      { headers }
+    );
+    if (!res.ok) {
+      let message = 'Failed to fetch remote server stats';
+      try {
+        const body = await res.json();
+        if (body?.error) message = body.error;
+      } catch { /* ignore parse errors */ }
+      throw new Error(message);
+    }
+    return res.json();
   }
 };
