@@ -228,6 +228,10 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               </button>
             </div>
 
+            {/* Notifications — surfaced directly in the bar (not buried in the
+                menu) so the unread badge is always visible on mobile. */}
+            <NotificationsBell onClick={onNotificationsClick} />
+
             {/* Menu Toggle */}
             <button
               ref={mobileMenuToggleRef}
@@ -300,15 +304,6 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               <Activity className="w-5 h-5" />
               <span className="text-sm">Server Stats</span>
             </button>
-
-            {/* Mobile Notifications Button */}
-            <NotificationsBell
-              variant="menu"
-              onClick={() => {
-                onNotificationsClick();
-                setMobileMenuOpen(false);
-              }}
-            />
 
             {/* Mobile Settings Button */}
             <button
