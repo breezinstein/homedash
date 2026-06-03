@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { NotificationsBell } from './notifications/NotificationsBell';
 import { 
   Settings, 
   Eye, 
@@ -20,9 +21,10 @@ interface HeaderProps {
   onFileSharingClick: () => void;
   onClipboardClick: () => void;
   onStatsClick: () => void;
+  onNotificationsClick: () => void;
 }
 
-export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, onStatsClick }: HeaderProps) {
+export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, onStatsClick, onNotificationsClick }: HeaderProps) {
   const { isEditMode, setIsEditMode, searchQuery, setSearchQuery, isSyncing, syncError } = useDashboard();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -185,6 +187,9 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               <Clipboard className="w-5 h-5" />
             </button>
 
+            {/* Notifications */}
+            <NotificationsBell onClick={onNotificationsClick} />
+
             {/* Settings */}
             <button
               onClick={onSettingsClick}
@@ -295,6 +300,15 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               <Activity className="w-5 h-5" />
               <span className="text-sm">Server Stats</span>
             </button>
+
+            {/* Mobile Notifications Button */}
+            <NotificationsBell
+              variant="menu"
+              onClick={() => {
+                onNotificationsClick();
+                setMobileMenuOpen(false);
+              }}
+            />
 
             {/* Mobile Settings Button */}
             <button

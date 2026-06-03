@@ -1,6 +1,29 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
-import type { Clip, DashboardConfig, RemoteServer, Service } from '../types';
+import type {
+  Clip,
+  DashboardConfig,
+  NotificationItem,
+  NotificationsConfig,
+  NotificationsStatus,
+  NtfyMessage,
+  RemoteServer,
+  Service,
+} from '../types';
 import { configApi } from '../api/configApi';
+import {
+  backfillToSince,
+  connectNotificationStream,
+  NtfyAuthError,
+} from '../api/notificationsApi';
+
+const defaultNotifications: NotificationsConfig = {
+  enabled: false,
+  serverUrl: '',
+  topics: [],
+  backfill: '12h',
+  maxHistory: 200,
+  browserNotifications: false,
+};
 
 interface ServerBackup {
   name: string;
@@ -51,6 +74,15 @@ interface DashboardContextType {
   addServer: (name: string, url: string, username?: string, password?: string) => void;
   updateServer: (id: string, patch: Partial<Pick<RemoteServer, 'name' | 'url' | 'username' | 'password'>>) => void;
   deleteServer: (id: string) => void;
+  notifications: NotificationItem[];
+  unreadCount: number;
+  notificationsStatus: NotificationsStatus;
+  notificationsError: string | null;
+  latestNotification: NotificationItem | null;
+  markAllNotificationsRead: () => void;
+  dismissNotification: (id: string) => void;
+  clearAllNotifications: () => void;
+  reconnectNotifications: () => void;
 }
 
 const defaultConfig: DashboardConfig = {
@@ -75,6 +107,7 @@ const defaultConfig: DashboardConfig = {
   categoryOrder: [],
   clips: [],
   servers: [],
+  notifications: defaultNotifications,
   colors: {
     primary: "#6366f1",
     secondary: "#475569",
@@ -105,7 +138,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  
+
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [notificationsStatus, setNotificationsStatus] = useState<NotificationsStatus>('disabled');
+  const [notificationsError, setNotificationsError] = useState<string | null>(null);
+  // Bumped to force the subscription effect to tear down and reconnect.
+  const [reconnectNonce, setReconnectNonce] = useState(0);
+  // Most recent message id seen, so reconnects resume without duplicates.
+  const lastNotificationIdRef = useRef<string | null>(null);
+
   const lastModifiedRef = useRef<number>(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isSavingRef = useRef(false);
@@ -574,6 +615,144 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  // --- Notifications (ntfy) ---------------------------------------------
+  const notificationsConfig: NotificationsConfig = useMemo(
+    () => config.notifications ?? defaultNotifications,
+    [config.notifications]
+  );
+
+  const {
+    enabled: ntfyEnabled,
+    serverUrl: ntfyUrl,
+    topics: ntfyTopics,
+    username: ntfyUser,
+    password: ntfyPass,
+    backfill: ntfyBackfill,
+    maxHistory: ntfyMaxHistory,
+  } = notificationsConfig;
+  const ntfyTopicKey = ntfyTopics.join(',');
+
+  // Owns the long-lived subscription. Reconnects with capped exponential
+  // backoff and resumes from the last seen message id so an outage does not
+  // create gaps or duplicates.
+  useEffect(() => {
+    if (!ntfyEnabled || !ntfyUrl || ntfyTopics.length === 0) {
+      setNotificationsStatus('disabled');
+      setNotificationsError(null);
+      return;
+    }
+
+    let cancelled = false;
+    let controller: AbortController | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let attempt = 0;
+
+    const auth = ntfyUser ? { username: ntfyUser, password: ntfyPass ?? '' } : undefined;
+    const maxHistory = Math.max(20, ntfyMaxHistory || 200);
+    const lastReadAt = config.notifications?.lastReadAt ?? 0;
+
+    const handleMessage = (msg: NtfyMessage) => {
+      if (msg.event !== 'message') return;
+      lastNotificationIdRef.current = msg.id;
+      setNotifications(prev => {
+        if (prev.some(n => n.id === msg.id)) return prev;
+        const item: NotificationItem = {
+          ...msg,
+          read: msg.time * 1000 <= lastReadAt,
+          dismissed: false,
+        };
+        return [item, ...prev].slice(0, maxHistory);
+      });
+    };
+
+    const run = async () => {
+      if (cancelled) return;
+      controller = new AbortController();
+      setNotificationsStatus('connecting');
+      // First attempt backfills a window; reconnects resume from last id.
+      const since = lastNotificationIdRef.current ?? backfillToSince(ntfyBackfill);
+      try {
+        await connectNotificationStream({
+          serverUrl: ntfyUrl,
+          topics: ntfyTopics,
+          auth,
+          since,
+          signal: controller.signal,
+          onMessage: handleMessage,
+          onOpen: () => {
+            if (cancelled) return;
+            attempt = 0;
+            setNotificationsStatus('open');
+            setNotificationsError(null);
+          },
+        });
+        // Stream ended cleanly (server closed); reconnect after a short delay.
+        if (!cancelled) scheduleRetry();
+      } catch (err) {
+        if (cancelled || controller?.signal.aborted) return;
+        if (err instanceof NtfyAuthError) {
+          setNotificationsStatus('error');
+          setNotificationsError('Authentication failed — check username and password.');
+          return; // Do not retry on auth failure; user must fix credentials.
+        }
+        setNotificationsStatus('error');
+        setNotificationsError(err instanceof Error ? err.message : 'Connection failed');
+        scheduleRetry();
+      }
+    };
+
+    const scheduleRetry = () => {
+      if (cancelled) return;
+      attempt += 1;
+      const base = Math.min(30000, 1000 * 2 ** (attempt - 1));
+      const delay = base / 2 + Math.random() * (base / 2); // jitter
+      retryTimer = setTimeout(run, delay);
+    };
+
+    run();
+
+    return () => {
+      cancelled = true;
+      controller?.abort();
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ntfyEnabled, ntfyUrl, ntfyTopicKey, ntfyUser, ntfyPass, ntfyBackfill, reconnectNonce]);
+
+  const visibleNotifications = useMemo(
+    () => notifications.filter(n => !n.dismissed),
+    [notifications]
+  );
+
+  const unreadCount = useMemo(
+    () => visibleNotifications.reduce((acc, n) => acc + (n.read ? 0 : 1), 0),
+    [visibleNotifications]
+  );
+
+  const latestNotification = visibleNotifications[0] ?? null;
+
+  const markAllNotificationsRead = useCallback(() => {
+    setNotifications(prev =>
+      prev.some(n => !n.read) ? prev.map(n => (n.read ? n : { ...n, read: true })) : prev
+    );
+    const cfg = configRef.current;
+    const current = cfg.notifications ?? defaultNotifications;
+    setConfig({ ...cfg, notifications: { ...current, lastReadAt: Date.now() } });
+  }, [setConfig]);
+
+  const dismissNotification = useCallback((id: string) => {
+    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, dismissed: true } : n)));
+  }, []);
+
+  const clearAllNotifications = useCallback(() => {
+    setNotifications(prev => prev.map(n => ({ ...n, dismissed: true, read: true })));
+  }, []);
+
+  const reconnectNotifications = useCallback(() => {
+    lastNotificationIdRef.current = null;
+    setReconnectNonce(n => n + 1);
+  }, []);
+
   // Memoize the context value so it only changes when a piece of state it
   // exposes actually changes. All callbacks above have stable identities, so
   // the dependency list is just the reactive values.
@@ -619,6 +798,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     addServer,
     updateServer,
     deleteServer,
+    notifications: visibleNotifications,
+    unreadCount,
+    notificationsStatus,
+    notificationsError,
+    latestNotification,
+    markAllNotificationsRead,
+    dismissNotification,
+    clearAllNotifications,
+    reconnectNotifications,
   }), [
     config, setConfig, updateService, addService, deleteService, updateCategory,
     addCategory, deleteCategory, reorderCategories, moveServiceToCategory,
@@ -628,6 +816,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     searchQuery, serviceIndexByRef, clips, addClip, updateClip, deleteClip,
     toggleClipPin, reorderClips, copyClipToSystemClipboard,
     servers, addServer, updateServer, deleteServer,
+    visibleNotifications, unreadCount, notificationsStatus, notificationsError,
+    latestNotification, markAllNotificationsRead, dismissNotification,
+    clearAllNotifications, reconnectNotifications,
   ]);
 
   return (

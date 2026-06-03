@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
 import { Header, CategorySection } from './components';
 import { ConfirmProvider, ToastProvider, useToast } from './components/ui';
+import { useBrowserNotifications } from './components/notifications/useBrowserNotifications';
 import type { Service } from './types';
 import { Plus, FolderPlus, Search } from 'lucide-react';
 
@@ -15,6 +16,7 @@ const CategoryModal = lazy(() => import('./components/CategoryModal').then(m => 
 const FileSharing = lazy(() => import('./components/FileSharing').then(m => ({ default: m.FileSharing })));
 const ClipboardManager = lazy(() => import('./components/ClipboardManager').then(m => ({ default: m.ClipboardManager })));
 const ServerStats = lazy(() => import('./components/ServerStats').then(m => ({ default: m.ServerStats })));
+const NotificationsPanel = lazy(() => import('./components/notifications/NotificationsPanel').then(m => ({ default: m.NotificationsPanel })));
 
 // Bridge: dashboard sync errors surface as toasts. Lives inside both
 // providers so it has access to both contexts. Keeps the cross-cutting
@@ -34,6 +36,7 @@ function Dashboard() {
   const [isFileSharingOpen, setIsFileSharingOpen] = useState(false);
   const [isClipboardOpen, setIsClipboardOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -52,6 +55,10 @@ function Dashboard() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, []);
+
+  // Surface incoming ntfy messages as desktop notifications when the tab is
+  // hidden and the user has opted in.
+  useBrowserNotifications(config.notifications?.browserNotifications ?? false);
 
   // Debounce the query that actually drives filtering/grouping so typing stays
   // snappy on large service lists — the controlled input (in Header) still
@@ -159,6 +166,7 @@ function Dashboard() {
         onFileSharingClick={() => setIsFileSharingOpen(true)}
         onClipboardClick={() => setIsClipboardOpen(true)}
         onStatsClick={() => setIsStatsOpen(true)}
+        onNotificationsClick={() => setIsNotificationsOpen(true)}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -293,6 +301,10 @@ function Dashboard() {
 
         {isStatsOpen && (
           <ServerStats onClose={() => setIsStatsOpen(false)} />
+        )}
+
+        {isNotificationsOpen && (
+          <NotificationsPanel onClose={() => setIsNotificationsOpen(false)} />
         )}
 
         {showServiceModal && (
