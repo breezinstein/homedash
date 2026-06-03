@@ -8,3 +8,5 @@ export { BackupManager } from './BackupManager';
 export { FileSharing } from './FileSharing';
 export { ClipboardManager } from './ClipboardManager';
 export { ServerStats } from './ServerStats';
+export { NotificationsPanel } from './notifications/NotificationsPanel';
+export { NotificationsBell } from './notifications/NotificationsBell';

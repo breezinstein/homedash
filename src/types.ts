@@ -49,7 +49,78 @@ export interface DashboardConfig {
   colors: Colors;
   clips?: Clip[];
   servers?: RemoteServer[];
+  notifications?: NotificationsConfig;
 }
+
+// How long of a history window to request from ntfy on first connect.
+export type NotificationBackfill = '1h' | '6h' | '12h' | '24h' | 'all';
+
+// User-configured connection to a self-hosted ntfy server. Persisted as part
+// of DashboardConfig. Credentials, when present, are stored in plain text in
+// data/config.json (consistent with RemoteServer); see README security note.
+export interface NotificationsConfig {
+  enabled: boolean;
+  serverUrl: string;          // e.g. https://ntfy.sh
+  topics: string[];           // subscribed topic names
+  username?: string;
+  password?: string;
+  backfill: NotificationBackfill;
+  maxHistory: number;         // cap on in-memory items
+  browserNotifications: boolean;
+  // Epoch ms of the last time the user opened the panel. Persisted so the
+  // unread badge survives reloads even though message history is not stored.
+  lastReadAt?: number;
+}
+
+// A single action button attached to an ntfy message.
+export interface NtfyAction {
+  id?: string;
+  action: 'view' | 'http' | 'broadcast';
+  label: string;
+  url?: string;
+  method?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  clear?: boolean;
+}
+
+// An attachment reference on an ntfy message.
+export interface NtfyAttachment {
+  name: string;
+  url: string;
+  type?: string;
+  size?: number;
+  expires?: number;
+}
+
+// Raw message as delivered by ntfy's /json stream endpoint.
+export interface NtfyMessage {
+  id: string;
+  time: number;               // epoch seconds
+  event: 'open' | 'keepalive' | 'message' | 'poll_request';
+  topic: string;
+  message?: string;
+  title?: string;
+  tags?: string[];
+  priority?: 1 | 2 | 3 | 4 | 5;
+  click?: string;
+  actions?: NtfyAction[];
+  attachment?: NtfyAttachment;
+  icon?: string;
+  content_type?: string;
+}
+
+// An NtfyMessage augmented with client-only UI state. Held in memory only.
+export interface NotificationItem extends NtfyMessage {
+  read: boolean;
+  dismissed: boolean;
+}
+
+export type NotificationsStatus =
+  | 'disabled'
+  | 'connecting'
+  | 'open'
+  | 'error';
 
 // A remote HomeDash instance whose server stats can be viewed.
 export interface RemoteServer {

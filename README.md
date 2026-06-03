@@ -18,6 +18,16 @@ A modern, responsive dashboard for managing homelab services built with React, T
   show metrics **and the Docker containers** running on each host, all from one
   panel. Password-protected Glances instances are supported via optional
   username/password (HTTP Basic auth)
+- **Notifications**: Subscribe to a self-hosted
+  [ntfy](https://ntfy.sh/) server and receive push notifications from your
+  other services directly in the dashboard. A header bell shows an unread
+  count and opens a live panel with priority colours, tags, click-through
+  links, action buttons, and attachment previews. Optional desktop
+  notifications fire when the tab is in the background. Configure the server
+  URL, topics, and optional Basic-auth credentials under **Settings →
+  Notifications**. _Note: ntfy credentials are stored in `data/config.json`
+  in plain text (consistent with remote server credentials), so protect that
+  file accordingly._
 - **Responsive Design**: Works great on desktop, tablet, and mobile
 
 ### ⚙️ Configuration
