@@ -1,26 +1,13 @@
-import type { NotificationBackfill, NtfyMessage } from '../types';
+import type { NotificationsStatus, NtfyMessage } from '../types';
 
-// ntfy subscription client built on fetch + ReadableStream rather than the
-// native EventSource API. EventSource cannot attach an Authorization header,
-// which is required for basic-auth-protected topics, so we stream the
-// newline-delimited JSON endpoint (/<topics>/json) ourselves. This also gives
-// us full control over reconnection and resume-from-last-id semantics.
+// Client for HomeDash's own notification API. The actual ntfy subscription
+// lives on the server (see notifications.js); the browser only reads history
+// and receives live updates over a same-origin Server-Sent Events stream.
+// This keeps ntfy credentials on the server and lets messages be captured even
+// when no dashboard tab is open.
 
-export interface NtfyAuth {
-  username: string;
-  password: string;
-}
-
-export interface ConnectOptions {
-  serverUrl: string;
-  topics: string[];
-  auth?: NtfyAuth;
-  /** ntfy `since` value: a duration window, a message id, or 'all'. */
-  since?: string;
-  signal: AbortSignal;
-  onMessage: (msg: NtfyMessage) => void;
-  onOpen?: () => void;
-}
+// Use relative URLs for reverse-proxy compatibility (mirrors configApi).
+const API_BASE = '';
 
 export class NtfyAuthError extends Error {
   constructor(message = 'Authentication failed') {
@@ -29,86 +16,100 @@ export class NtfyAuthError extends Error {
   }
 }
 
-function normaliseBaseUrl(serverUrl: string): string {
-  return serverUrl.replace(/\/+$/, '');
+export interface NtfyAuth {
+  username: string;
+  password: string;
 }
 
-export function backfillToSince(backfill: NotificationBackfill): string {
-  return backfill === 'all' ? 'all' : backfill;
+// A stored notification as returned by the server: an ntfy message plus the
+// server-tracked dismissed flag.
+export interface ServerNotification extends NtfyMessage {
+  dismissed?: boolean;
 }
 
-function buildAuthHeader(auth?: NtfyAuth): Record<string, string> {
-  if (!auth || !auth.username) return {};
-  // btoa is fine for the username:password ASCII case ntfy expects.
-  const token = btoa(`${auth.username}:${auth.password}`);
-  return { Authorization: `Basic ${token}` };
+export interface NotificationsState {
+  items: ServerNotification[];
+  status: NotificationsStatus;
+  error: string | null;
 }
 
-/**
- * Open a long-lived subscription to one or more ntfy topics. Resolves when the
- * stream ends or the abort signal fires; rejects on network/HTTP errors so the
- * caller can schedule a reconnect. Throws NtfyAuthError on 401/403.
- */
-export async function connectNotificationStream({
-  serverUrl,
-  topics,
-  auth,
-  since,
-  signal,
-  onMessage,
-  onOpen,
-}: ConnectOptions): Promise<void> {
-  const base = normaliseBaseUrl(serverUrl);
-  const topicPath = topics.map((t) => encodeURIComponent(t)).join(',');
-  const params = new URLSearchParams();
-  if (since) params.set('since', since);
-  const url = `${base}/${topicPath}/json?${params.toString()}`;
+// Fetch the current history + connection status from the server.
+export async function fetchNotifications(): Promise<NotificationsState> {
+  const res = await fetch(`${API_BASE}/api/notifications`);
+  if (!res.ok) throw new Error('Failed to fetch notifications');
+  return res.json();
+}
 
-  const res = await fetch(url, {
-    headers: { ...buildAuthHeader(auth) },
-    signal,
+export interface StreamHandlers {
+  onMessage: (msg: ServerNotification) => void;
+  onStatus: (status: NotificationsStatus, error: string | null) => void;
+  onDismiss: (id: string) => void;
+  onClear: () => void;
+  onOpen?: () => void;
+}
+
+// Open the live SSE stream. Returns the EventSource so the caller can close it.
+// EventSource reconnects automatically; onOpen fires on each (re)connection,
+// which the caller uses to resync history and avoid gaps.
+export function openNotificationStream(handlers: StreamHandlers): EventSource {
+  const es = new EventSource(`${API_BASE}/api/notifications/stream`);
+
+  es.addEventListener('open', () => handlers.onOpen?.());
+
+  es.addEventListener('message', (e) => {
+    try {
+      handlers.onMessage(JSON.parse((e as MessageEvent).data) as ServerNotification);
+    } catch {
+      /* ignore malformed payloads */
+    }
   });
 
-  if (res.status === 401 || res.status === 403) {
-    throw new NtfyAuthError();
-  }
-  if (!res.ok || !res.body) {
-    throw new Error(`ntfy stream failed (${res.status})`);
-  }
-
-  onOpen?.();
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-
-  // Read the stream line by line; each non-empty line is a JSON message.
-  // ntfy emits an `open` event first and periodic `keepalive` events that the
-  // caller can ignore.
-  // eslint-disable-next-line no-constant-condition
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-
-    let newlineIndex: number;
-    while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-      const line = buffer.slice(0, newlineIndex).trim();
-      buffer = buffer.slice(newlineIndex + 1);
-      if (!line) continue;
-      try {
-        onMessage(JSON.parse(line) as NtfyMessage);
-      } catch {
-        // Ignore malformed lines rather than killing the whole stream.
-      }
+  es.addEventListener('status', (e) => {
+    try {
+      const { status, error } = JSON.parse((e as MessageEvent).data) as {
+        status: NotificationsStatus;
+        error: string | null;
+      };
+      handlers.onStatus(status, error ?? null);
+    } catch {
+      /* ignore */
     }
-  }
+  });
+
+  es.addEventListener('dismiss', (e) => {
+    try {
+      const { id } = JSON.parse((e as MessageEvent).data) as { id: string };
+      if (id) handlers.onDismiss(id);
+    } catch {
+      /* ignore */
+    }
+  });
+
+  es.addEventListener('clear', () => handlers.onClear());
+
+  return es;
 }
 
-/**
- * One-shot connectivity check used by the Settings "Test connection" button.
- * Uses ntfy's poll mode so it returns immediately instead of streaming.
- */
+// Dismiss a single notification (server-side, broadcast to other tabs).
+export async function dismissNotificationOnServer(id: string): Promise<void> {
+  await fetch(`${API_BASE}/api/notifications/dismiss`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id }),
+  });
+}
+
+// Dismiss all notifications (server-side, broadcast to other tabs).
+export async function clearNotificationsOnServer(): Promise<void> {
+  await fetch(`${API_BASE}/api/notifications/dismiss`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ all: true }),
+  });
+}
+
+// One-shot connectivity check for the Settings "Test connection" button. The
+// server performs the actual probe so credentials never leave it.
 export async function testNotificationConnection({
   serverUrl,
   topics,
@@ -118,10 +119,15 @@ export async function testNotificationConnection({
   topics: string[];
   auth?: NtfyAuth;
 }): Promise<void> {
-  const base = normaliseBaseUrl(serverUrl);
-  const topicPath = topics.map((t) => encodeURIComponent(t)).join(',');
-  const res = await fetch(`${base}/${topicPath}/json?poll=1`, {
-    headers: { ...buildAuthHeader(auth) },
+  const res = await fetch(`${API_BASE}/api/notifications/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      serverUrl,
+      topics,
+      username: auth?.username,
+      password: auth?.password,
+    }),
   });
   if (res.status === 401 || res.status === 403) {
     throw new NtfyAuthError();
@@ -129,6 +135,4 @@ export async function testNotificationConnection({
   if (!res.ok) {
     throw new Error(`Connection failed (${res.status})`);
   }
-  // Drain the body so the connection can close cleanly.
-  await res.text();
 }

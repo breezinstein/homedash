@@ -11,9 +11,10 @@ import type {
 } from '../types';
 import { configApi } from '../api/configApi';
 import {
-  backfillToSince,
-  connectNotificationStream,
-  NtfyAuthError,
+  clearNotificationsOnServer,
+  dismissNotificationOnServer,
+  fetchNotifications,
+  openNotificationStream,
 } from '../api/notificationsApi';
 
 const defaultNotifications: NotificationsConfig = {
@@ -144,8 +145,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [notificationsError, setNotificationsError] = useState<string | null>(null);
   // Bumped to force the subscription effect to tear down and reconnect.
   const [reconnectNonce, setReconnectNonce] = useState(0);
-  // Most recent message id seen, so reconnects resume without duplicates.
-  const lastNotificationIdRef = useRef<string | null>(null);
 
   const lastModifiedRef = useRef<number>(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -616,108 +615,73 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // --- Notifications (ntfy) ---------------------------------------------
-  const notificationsConfig: NotificationsConfig = useMemo(
-    () => config.notifications ?? defaultNotifications,
-    [config.notifications]
-  );
+  // The upstream ntfy subscription lives on the server. Here we mirror the
+  // server's history + connection status: seed from GET /api/notifications and
+  // keep it current over a same-origin SSE stream. Read state is derived
+  // locally from lastReadAt (persisted in config); dismissed state is owned by
+  // the server and broadcast to every connected tab.
+  const ntfyEnabled = !!config.notifications?.enabled;
 
-  const {
-    enabled: ntfyEnabled,
-    serverUrl: ntfyUrl,
-    topics: ntfyTopics,
-    username: ntfyUser,
-    password: ntfyPass,
-    backfill: ntfyBackfill,
-    maxHistory: ntfyMaxHistory,
-  } = notificationsConfig;
-  const ntfyTopicKey = ntfyTopics.join(',');
-
-  // Owns the long-lived subscription. Reconnects with capped exponential
-  // backoff and resumes from the last seen message id so an outage does not
-  // create gaps or duplicates.
   useEffect(() => {
-    if (!ntfyEnabled || !ntfyUrl || ntfyTopics.length === 0) {
+    if (!ntfyEnabled) {
+      setNotifications([]);
       setNotificationsStatus('disabled');
       setNotificationsError(null);
       return;
     }
 
-    let cancelled = false;
-    let controller: AbortController | null = null;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    let attempt = 0;
+    let closed = false;
 
-    const auth = ntfyUser ? { username: ntfyUser, password: ntfyPass ?? '' } : undefined;
-    const maxHistory = Math.max(20, ntfyMaxHistory || 200);
-    const lastReadAt = config.notifications?.lastReadAt ?? 0;
-
-    const handleMessage = (msg: NtfyMessage) => {
-      if (msg.event !== 'message') return;
-      lastNotificationIdRef.current = msg.id;
-      setNotifications(prev => {
-        if (prev.some(n => n.id === msg.id)) return prev;
-        const item: NotificationItem = {
-          ...msg,
-          read: msg.time * 1000 <= lastReadAt,
-          dismissed: false,
-        };
-        return [item, ...prev].slice(0, maxHistory);
-      });
+    const toItem = (m: NtfyMessage & { dismissed?: boolean }): NotificationItem => {
+      const lastReadAt = configRef.current.notifications?.lastReadAt ?? 0;
+      return {
+        ...m,
+        read: m.time * 1000 <= lastReadAt,
+        dismissed: !!m.dismissed,
+      };
     };
 
-    const run = async () => {
-      if (cancelled) return;
-      controller = new AbortController();
-      setNotificationsStatus('connecting');
-      // First attempt backfills a window; reconnects resume from last id.
-      const since = lastNotificationIdRef.current ?? backfillToSince(ntfyBackfill);
+    const resync = async () => {
       try {
-        await connectNotificationStream({
-          serverUrl: ntfyUrl,
-          topics: ntfyTopics,
-          auth,
-          since,
-          signal: controller.signal,
-          onMessage: handleMessage,
-          onOpen: () => {
-            if (cancelled) return;
-            attempt = 0;
-            setNotificationsStatus('open');
-            setNotificationsError(null);
-          },
-        });
-        // Stream ended cleanly (server closed); reconnect after a short delay.
-        if (!cancelled) scheduleRetry();
-      } catch (err) {
-        if (cancelled || controller?.signal.aborted) return;
-        if (err instanceof NtfyAuthError) {
-          setNotificationsStatus('error');
-          setNotificationsError('Authentication failed — check username and password.');
-          return; // Do not retry on auth failure; user must fix credentials.
-        }
-        setNotificationsStatus('error');
-        setNotificationsError(err instanceof Error ? err.message : 'Connection failed');
-        scheduleRetry();
+        const state = await fetchNotifications();
+        if (closed) return;
+        setNotifications(state.items.map(toItem));
+        setNotificationsStatus(state.status);
+        setNotificationsError(state.error);
+      } catch {
+        // Leave existing state; SSE status events will correct it.
       }
     };
 
-    const scheduleRetry = () => {
-      if (cancelled) return;
-      attempt += 1;
-      const base = Math.min(30000, 1000 * 2 ** (attempt - 1));
-      const delay = base / 2 + Math.random() * (base / 2); // jitter
-      retryTimer = setTimeout(run, delay);
-    };
-
-    run();
+    // Seed immediately, then open the live stream. onOpen re-syncs after any
+    // automatic EventSource reconnect so gaps during an outage are filled.
+    resync();
+    const es = openNotificationStream({
+      onOpen: resync,
+      onMessage: (m) => {
+        setNotifications((prev) =>
+          prev.some((n) => n.id === m.id) ? prev : [toItem(m), ...prev]
+        );
+      },
+      onStatus: (status, error) => {
+        setNotificationsStatus(status);
+        setNotificationsError(error);
+      },
+      onDismiss: (id) => {
+        setNotifications((prev) =>
+          prev.map((n) => (n.id === id ? { ...n, dismissed: true } : n))
+        );
+      },
+      onClear: () => {
+        setNotifications((prev) => prev.map((n) => ({ ...n, dismissed: true })));
+      },
+    });
 
     return () => {
-      cancelled = true;
-      controller?.abort();
-      if (retryTimer) clearTimeout(retryTimer);
+      closed = true;
+      es.close();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ntfyEnabled, ntfyUrl, ntfyTopicKey, ntfyUser, ntfyPass, ntfyBackfill, reconnectNonce]);
+  }, [ntfyEnabled, reconnectNonce]);
 
   const visibleNotifications = useMemo(
     () => notifications.filter(n => !n.dismissed),
@@ -742,14 +706,15 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const dismissNotification = useCallback((id: string) => {
     setNotifications(prev => prev.map(n => (n.id === id ? { ...n, dismissed: true } : n)));
+    void dismissNotificationOnServer(id);
   }, []);
 
   const clearAllNotifications = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, dismissed: true, read: true })));
+    void clearNotificationsOnServer();
   }, []);
 
   const reconnectNotifications = useCallback(() => {
-    lastNotificationIdRef.current = null;
     setReconnectNonce(n => n + 1);
   }, []);
 

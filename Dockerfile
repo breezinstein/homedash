@@ -36,6 +36,7 @@ COPY --from=builder /app/dist ./dist
 
 # Copy server file
 COPY server.js ./
+COPY notifications.js ./
 
 # Create data directories (including icons cache) with proper permissions.
 # The entrypoint script re-applies ownership at runtime to handle cases where

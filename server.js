@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join, basename, extname, resolve, sep } from 'path';
 import crypto from 'crypto';
 import os from 'os';
+import { NotificationManager } from './notifications.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -18,6 +19,10 @@ const PORT = 3001;
 const CONFIG_PATH = join(__dirname, 'data', 'config.json');
 const BACKUPS_DIR = join(__dirname, 'data', 'backups');
 const ICONS_CACHE_DIR = join(__dirname, 'data', 'icons');
+const NOTIFICATIONS_PATH = join(__dirname, 'data', 'notifications.json');
+
+// Single server-side ntfy subscription shared by all dashboard clients.
+const notificationManager = new NotificationManager(NOTIFICATIONS_PATH);
 
 // In-memory config cache. The config file is read once at startup, then
 // served from memory; PUT updates both the file and the cache atomically.
@@ -51,8 +56,15 @@ let lastModified = 0;
 app.use(cors());
 // gzip text-ish responses. The default filter skips images / already
 // compressed payloads, so the cached-icons /icons static mount is
-// unaffected.
-app.use(compression());
+// unaffected. Server-Sent Events must never be buffered/compressed, so the
+// /api/notifications/stream response (Content-Type: text/event-stream) is
+// explicitly excluded.
+app.use(compression({
+  filter: (req, res) => {
+    if (res.getHeader('Content-Type') === 'text/event-stream') return false;
+    return compression.filter(req, res);
+  },
+}));
 app.use(express.json({ limit: '10mb' }));
 
 // Ensure data directory exists (with error handling for disk space issues)
@@ -124,6 +136,15 @@ updateLastModified();
 // on demand if this fails for any reason).
 refreshConfigCache();
 
+// Start the server-side ntfy subscription: load any persisted history, then
+// apply the current notifications config. Runs independently of any browser,
+// so messages are captured even when no dashboard tab is open.
+(async () => {
+  await notificationManager.load();
+  if (configCache.config === null) await refreshConfigCache();
+  notificationManager.reconfigure(configCache.config?.notifications);
+})();
+
 // GET /api/config - Read config (served from in-memory cache when fresh)
 app.get('/api/config', async (req, res) => {
   try {
@@ -157,6 +178,9 @@ app.put('/api/config', async (req, res) => {
     configCache.config = config;
     configCache.mtimeMs = stats.mtimeMs;
     configCache.serialized = serialized;
+    // Re-apply notifications config (no-op unless a connection-relevant field
+    // actually changed, so routine saves don't drop the upstream stream).
+    notificationManager.reconfigure(config.notifications);
     res.json({ success: true, lastModified });
   } catch (error) {
     res.status(500).json({ error: 'Failed to write config' });
@@ -239,6 +263,9 @@ app.post('/api/backups/restore/:filename', (req, res) => {
     const backup = readFileSync(backupPath, 'utf-8');
     writeFileSync(CONFIG_PATH, backup);
     updateLastModified();
+    refreshConfigCache().then(() => {
+      notificationManager.reconfigure(configCache.config?.notifications);
+    });
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to restore backup' });
@@ -813,6 +840,60 @@ app.delete('/api/files{/*path}', (req, res) => {
     console.error('Delete error:', err.message);
     res.status(500).json({ error: 'Delete failed' });
   }
+});
+
+// ---------------------------------------------------------------------------
+// Notifications (ntfy) — the upstream subscription lives in the
+// NotificationManager (server-side). Browsers read history here and receive
+// live updates over a same-origin SSE stream, so ntfy credentials never reach
+// the client and messages are captured even with no tab open.
+// ---------------------------------------------------------------------------
+
+// GET /api/notifications - current history + connection status
+app.get('/api/notifications', (req, res) => {
+  res.json(notificationManager.getState());
+});
+
+// GET /api/notifications/stream - Server-Sent Events: live messages + status
+app.get('/api/notifications/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // disable proxy buffering (nginx)
+  if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+  notificationManager.addClient(res);
+
+  // Comment heartbeat keeps idle connections (and proxies) from timing out.
+  const heartbeat = setInterval(() => {
+    try { res.write(': ping\n\n'); } catch { /* client gone */ }
+  }, 25000);
+  req.on('close', () => clearInterval(heartbeat));
+});
+
+// POST /api/notifications/test - server-side connectivity check
+app.post('/api/notifications/test', async (req, res) => {
+  try {
+    await notificationManager.test(req.body || {});
+    res.json({ success: true });
+  } catch (err) {
+    if (err.code === 'AUTH') {
+      return res.status(401).json({ error: 'Authentication failed' });
+    }
+    res.status(502).json({ error: err.message || 'Connection failed' });
+  }
+});
+
+// POST /api/notifications/dismiss - dismiss one ({ id }) or all ({ all: true })
+app.post('/api/notifications/dismiss', (req, res) => {
+  const { id, all } = req.body || {};
+  if (all) {
+    notificationManager.clear();
+    return res.json({ success: true });
+  }
+  if (!id) return res.status(400).json({ error: 'id required' });
+  notificationManager.dismiss(id);
+  res.json({ success: true });
 });
 
 // Serve static files in production
