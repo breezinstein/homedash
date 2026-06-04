@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from 'react';
-import { X, Bell, Trash2, RefreshCw, BellOff } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { X, Bell, Trash2, RefreshCw, BellOff, ChevronDown, ChevronRight } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
 import { ModalShell, useConfirm } from '../ui';
 import { NotificationCard } from './NotificationCard';
@@ -27,6 +27,18 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
     reconnectNotifications,
   } = useDashboard();
   const confirm = useConfirm();
+
+  // Topics the user has collapsed. Expanded by default.
+  const [collapsedTopics, setCollapsedTopics] = useState<Set<string>>(new Set());
+
+  const toggleTopic = (topic: string) => {
+    setCollapsedTopics((prev) => {
+      const next = new Set(prev);
+      if (next.has(topic)) next.delete(topic);
+      else next.add(topic);
+      return next;
+    });
+  };
 
   // Opening the panel marks everything as read (and persists lastReadAt).
   useEffect(() => {
@@ -132,12 +144,24 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
             groups.map((group) => (
               <div key={group.topic} className="space-y-2">
                 <div className="flex items-center gap-2 px-1 sticky top-0 bg-[var(--color-surface)] py-1 z-10">
-                  <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--color-text-secondary)] truncate">
-                    {group.topic}
-                  </h3>
-                  <span className="text-[10px] font-medium text-[var(--color-text-secondary)] bg-[var(--color-background)] px-1.5 py-0.5 rounded-full">
-                    {group.items.length}
-                  </span>
+                  <button
+                    onClick={() => toggleTopic(group.topic)}
+                    className="flex items-center gap-1.5 min-w-0 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
+                    aria-expanded={!collapsedTopics.has(group.topic)}
+                    title={collapsedTopics.has(group.topic) ? 'Expand topic' : 'Collapse topic'}
+                  >
+                    {collapsedTopics.has(group.topic) ? (
+                      <ChevronRight className="w-3.5 h-3.5 shrink-0" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <h3 className="text-xs font-semibold uppercase tracking-wide truncate">
+                      {group.topic}
+                    </h3>
+                    <span className="text-[10px] font-medium text-[var(--color-text-secondary)] bg-[var(--color-background)] px-1.5 py-0.5 rounded-full shrink-0">
+                      {group.items.length}
+                    </span>
+                  </button>
                   <div className="flex-1 h-px bg-[var(--color-border)]" />
                   <button
                     onClick={() => handleClearTopic(group.topic)}
@@ -148,9 +172,10 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                {group.items.map((item) => (
-                  <NotificationCard key={item.id} item={item} onDismiss={dismissNotification} />
-                ))}
+                {!collapsedTopics.has(group.topic) &&
+                  group.items.map((item) => (
+                    <NotificationCard key={item.id} item={item} onDismiss={dismissNotification} />
+                  ))}
               </div>
             ))
           )}

@@ -39,10 +39,55 @@ function formatBytes(bytes?: number): string | null {
   return `${value.toFixed(value < 10 && unit > 0 ? 1 : 0)} ${units[unit]}`;
 }
 
+interface StructuredMessage {
+  heading?: string;
+  body?: string;
+}
+
+// Some services (e.g. Emby webhooks) publish a JSON document as the message
+// body rather than human-readable text. Detect that case and pull out a
+// sensible heading + body so the card does not show a wall of raw JSON.
+// Returns null for plain-text messages, which are rendered as-is.
+function parseStructuredMessage(message?: string): StructuredMessage | null {
+  if (!message) return null;
+  const trimmed = message.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return null;
+
+  let data: unknown;
+  try {
+    data = JSON.parse(trimmed);
+  } catch {
+    return null;
+  }
+  if (typeof data !== 'object' || data === null) return null;
+
+  const obj = data as Record<string, unknown>;
+  const pick = (...keys: string[]): string | undefined => {
+    for (const key of keys) {
+      const value = obj[key];
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
+    return undefined;
+  };
+
+  const heading = pick('Title', 'title', 'subject', 'name', 'Name');
+  const body = pick('Description', 'description', 'Overview', 'overview', 'message', 'Message', 'body', 'text');
+
+  // Only treat it as structured if we recovered something readable; otherwise
+  // fall back to a pretty-printed dump so no information is lost.
+  if (heading || body) return { heading, body };
+  return { body: JSON.stringify(obj, null, 2) };
+}
+
 export function NotificationCard({ item, onDismiss }: NotificationCardProps) {
   const toast = useToast();
   const border = PRIORITY_BORDER[item.priority ?? 3] ?? PRIORITY_BORDER[3];
   const isImage = item.attachment?.type?.startsWith('image/');
+  const structured = parseStructuredMessage(item.message);
+  // When the JSON body carries its own title, prefer it only if the ntfy
+  // message has no title of its own.
+  const displayTitle = item.title || structured?.heading;
+  const displayBody = structured ? structured.body : item.message;
 
   const handleHttpAction = async (action: NtfyAction) => {
     if (!action.url) return;
@@ -86,17 +131,17 @@ export function NotificationCard({ item, onDismiss }: NotificationCardProps) {
           {!item.read && (
             <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] flex-shrink-0" />
           )}
-          {item.title && (
+          {displayTitle && (
             <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-              {item.title}
+              {displayTitle}
             </span>
           )}
           {item.click && <ExternalLink className="w-3.5 h-3.5 text-[var(--color-text-secondary)]" />}
         </div>
 
-        {item.message && (
+        {displayBody && (
           <p className="mt-1 text-sm text-[var(--color-text-primary)] whitespace-pre-wrap break-words">
-            {item.message}
+            {displayBody}
           </p>
         )}
       </div>
