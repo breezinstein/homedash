@@ -1,5 +1,8 @@
+import { useEffect, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
+import { useAuth } from '../../context/AuthContext';
+import { fetchNotificationsCount } from '../../api/notificationsApi';
 
 interface NotificationsBellProps {
   onClick: () => void;
@@ -7,14 +10,64 @@ interface NotificationsBellProps {
   variant?: 'icon' | 'menu';
 }
 
+const PUBLIC_POLL_MS = 20000;
+
 export function NotificationsBell({ onClick, variant = 'icon' }: NotificationsBellProps) {
-  const { config, unreadCount, notificationsStatus } = useDashboard();
+  const { config, unreadCount: adminUnread, notificationsStatus } = useDashboard();
+  const { authenticated } = useAuth();
+  const [publicUnread, setPublicUnread] = useState(0);
+  const [publicHasError, setPublicHasError] = useState(false);
+  // Server-reported notifications status for anonymous viewers (we don't
+  // have access to the redacted config's `enabled` flag, so we hide the bell
+  // when the server says the feature isn't configured).
+  const [publicStatus, setPublicStatus] = useState<string>('disabled');
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Hidden entirely unless the feature is enabled in settings.
-  if (!config.notifications?.enabled) return null;
+  // Anonymous-mode polling: poll /api/notifications/count every 20 s so the
+  // bell badge reflects the same number an admin would see, without exposing
+  // any message content. Authenticated users already get live updates via
+  // DashboardContext's SSE subscription, so this loop only runs for
+  // unauthenticated viewers.
+  useEffect(() => {
+    if (authenticated) {
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      return;
+    }
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const data = await fetchNotificationsCount();
+        if (cancelled) return;
+        setPublicUnread(data.unread);
+        setPublicStatus(data.status);
+        setPublicHasError(!data.connected && data.status === 'error');
+      } catch {
+        if (cancelled) return;
+        setPublicHasError(true);
+      }
+    };
+    tick();
+    pollRef.current = setInterval(tick, PUBLIC_POLL_MS);
+    return () => {
+      cancelled = true;
+      if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    };
+  }, [authenticated]);
 
+  // Visibility:
+  //   - admin (or open mode): honour the per-config `enabled` setting.
+  //   - anonymous: bell shows when the server has the feature configured
+  //     (status != 'disabled'), so anonymous viewers see the badge but no
+  //     bell appears on instances that don't use ntfy at all.
+  if (authenticated) {
+    if (!config.notifications?.enabled) return null;
+  } else {
+    if (publicStatus === 'disabled') return null;
+  }
+
+  const unreadCount = authenticated ? adminUnread : publicUnread;
   const badge = unreadCount > 99 ? '99+' : String(unreadCount);
-  const hasError = notificationsStatus === 'error';
+  const hasError = authenticated ? notificationsStatus === 'error' : publicHasError;
 
   if (variant === 'menu') {
     return (

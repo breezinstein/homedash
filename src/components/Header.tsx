@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { useAuth } from '../context/AuthContext';
 import { NotificationsBell } from './notifications/NotificationsBell';
 import { 
   Settings, 
@@ -14,6 +15,8 @@ import {
   RefreshCw,
   CloudOff,
   Activity,
+  LogIn,
+  LogOut,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -22,15 +25,22 @@ interface HeaderProps {
   onClipboardClick: () => void;
   onStatsClick: () => void;
   onNotificationsClick: () => void;
+  onSignInClick: () => void;
 }
 
-export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, onStatsClick, onNotificationsClick }: HeaderProps) {
+export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, onStatsClick, onNotificationsClick, onSignInClick }: HeaderProps) {
   const { isEditMode, setIsEditMode, searchQuery, setSearchQuery, isSyncing, syncError } = useDashboard();
+  const { authEnabled, authenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const mobileSearchInputRef = useRef<HTMLInputElement>(null);
   const mobileMenuRef = useRef<HTMLDivElement>(null);
   const mobileMenuToggleRef = useRef<HTMLButtonElement>(null);
+
+  // "View Only" badge shows when an admin password is configured but the
+  // current session isn't authenticated. Hidden in open mode (no auth) so
+  // that deployments without a password don't get a confusing chip.
+  const showViewOnlyBadge = authEnabled && !authenticated;
 
   // Global keyboard shortcuts: Ctrl/Cmd+K focuses search.
   useEffect(() => {
@@ -109,6 +119,18 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
                 <span className="text-xs hidden sm:inline">Syncing…</span>
               </span>
             ) : null}
+
+            {/* View Only badge — shown when auth is enabled but the visitor
+                hasn't signed in. Tells them why edit/settings/etc. are gone. */}
+            {showViewOnlyBadge && (
+              <span
+                className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)]"
+                title="Sign in to manage services"
+              >
+                <Eye className="w-3 h-3" />
+                <span className="hidden sm:inline">View only</span>
+              </span>
+            )}
           </div>
 
           {/* Desktop Controls */}
@@ -134,33 +156,37 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               )}
             </div>
 
-            {/* View/Edit Toggle */}
-            <div className="flex items-center bg-[var(--color-background)] rounded-lg p-1">
-              <button
-                onClick={() => setIsEditMode(false)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                  !isEditMode
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                }`}
-              >
-                <Eye className="w-4 h-4" />
-                <span className="hidden lg:inline">View</span>
-              </button>
-              <button
-                onClick={() => setIsEditMode(true)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                  isEditMode
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                }`}
-              >
-                <Edit3 className="w-4 h-4" />
-                <span className="hidden lg:inline">Edit</span>
-              </button>
-            </div>
+            {/* View/Edit Toggle — admin only. View-only viewers don't get an
+                edit mode, so showing the toggle would be misleading. */}
+            {authenticated && (
+              <div className="flex items-center bg-[var(--color-background)] rounded-lg p-1">
+                <button
+                  onClick={() => setIsEditMode(false)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    !isEditMode
+                      ? 'bg-[var(--color-primary)] text-white'
+                      : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                  }`}
+                >
+                  <Eye className="w-4 h-4" />
+                  <span className="hidden lg:inline">View</span>
+                </button>
+                <button
+                  onClick={() => setIsEditMode(true)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                    isEditMode
+                      ? 'bg-[var(--color-primary)] text-white'
+                      : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                  }`}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span className="hidden lg:inline">Edit</span>
+                </button>
+              </div>
+            )}
 
-            {/* Files */}
+            {/* Files — visible to all (anonymous gets the public read-only
+                view; admins see the two-pane Private/Public switcher). */}
             <button
               onClick={onFileSharingClick}
               className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
@@ -169,68 +195,110 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               <FolderOpen className="w-5 h-5" />
             </button>
 
-            {/* Server Stats */}
-            <button
-              onClick={onStatsClick}
-              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-              title="Server Stats"
-            >
-              <Activity className="w-5 h-5" />
-            </button>
+            {/* Server Stats — admin only */}
+            {authenticated && (
+              <button
+                onClick={onStatsClick}
+                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+                title="Server Stats"
+              >
+                <Activity className="w-5 h-5" />
+              </button>
+            )}
 
-            {/* Clipboard */}
-            <button
-              onClick={onClipboardClick}
-              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-              title="Clipboard (Ctrl+Shift+C)"
-            >
-              <Clipboard className="w-5 h-5" />
-            </button>
+            {/* Clipboard — admin only (clips can contain secrets) */}
+            {authenticated && (
+              <button
+                onClick={onClipboardClick}
+                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+                title="Clipboard (Ctrl+Shift+C)"
+              >
+                <Clipboard className="w-5 h-5" />
+              </button>
+            )}
 
-            {/* Notifications */}
-            <NotificationsBell onClick={onNotificationsClick} />
+            {/* Notifications — bell always visible (Phase 2 will make the
+                unread count public); panel itself requires auth. */}
+            <NotificationsBell onClick={authenticated ? onNotificationsClick : onSignInClick} />
 
-            {/* Settings */}
-            <button
-              onClick={onSettingsClick}
-              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-              title="Settings"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
+            {/* Settings — admin only */}
+            {authenticated && (
+              <button
+                onClick={onSettingsClick}
+                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+                title="Settings"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            )}
+
+            {/* Sign in / out */}
+            {authEnabled && !authenticated && (
+              <button
+                onClick={onSignInClick}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-[var(--color-text-primary)] bg-[var(--color-background)] hover:bg-[var(--color-border)] rounded-lg transition-colors"
+                title="Sign in"
+              >
+                <LogIn className="w-4 h-4" />
+                <span className="hidden lg:inline">Sign in</span>
+              </button>
+            )}
+            {authEnabled && authenticated && (
+              <button
+                onClick={() => { void logout(); }}
+                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+                title="Sign out"
+              >
+                <LogOut className="w-5 h-5" />
+              </button>
+            )}
           </div>
 
           {/* Mobile Controls */}
           <div className="flex md:hidden items-center gap-2">
-            {/* View/Edit Toggle - Compact */}
-            <div className="flex items-center bg-[var(--color-background)] rounded-lg p-0.5">
-              <button
-                onClick={() => setIsEditMode(false)}
-                className={`p-1.5 rounded-md transition-all ${
-                  !isEditMode
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : 'text-[var(--color-text-secondary)]'
-                }`}
-                title="View Mode"
-              >
-                <Eye className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setIsEditMode(true)}
-                className={`p-1.5 rounded-md transition-all ${
-                  isEditMode
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : 'text-[var(--color-text-secondary)]'
-                }`}
-                title="Edit Mode"
-              >
-                <Edit3 className="w-4 h-4" />
-              </button>
-            </div>
+            {/* View/Edit Toggle - Compact (admin only) */}
+            {authenticated && (
+              <div className="flex items-center bg-[var(--color-background)] rounded-lg p-0.5">
+                <button
+                  onClick={() => setIsEditMode(false)}
+                  className={`p-1.5 rounded-md transition-all ${
+                    !isEditMode
+                      ? 'bg-[var(--color-primary)] text-white'
+                      : 'text-[var(--color-text-secondary)]'
+                  }`}
+                  title="View Mode"
+                >
+                  <Eye className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setIsEditMode(true)}
+                  className={`p-1.5 rounded-md transition-all ${
+                    isEditMode
+                      ? 'bg-[var(--color-primary)] text-white'
+                      : 'text-[var(--color-text-secondary)]'
+                  }`}
+                  title="Edit Mode"
+                >
+                  <Edit3 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
 
             {/* Notifications — surfaced directly in the bar (not buried in the
                 menu) so the unread badge is always visible on mobile. */}
-            <NotificationsBell onClick={onNotificationsClick} />
+            <NotificationsBell onClick={authenticated ? onNotificationsClick : onSignInClick} />
+
+            {/* Sign in (mobile) */}
+            {authEnabled && !authenticated && (
+              <button
+                onClick={onSignInClick}
+                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+                title="Sign in"
+                aria-label="Sign in"
+              >
+                <LogIn className="w-5 h-5" />
+              </button>
+            )}
 
             {/* Menu Toggle */}
             <button
@@ -269,7 +337,8 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               )}
             </div>
 
-            {/* Mobile Files Button */}
+            {/* Mobile Files Button — visible to all (Phase 3 public read-only
+                view for anonymous, admin two-pane for authenticated). */}
             <button
               onClick={() => {
                 onFileSharingClick();
@@ -281,41 +350,73 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               <span className="text-sm">File Sharing</span>
             </button>
 
-            {/* Mobile Clipboard Button */}
-            <button
-              onClick={() => {
-                onClipboardClick();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-            >
-              <Clipboard className="w-5 h-5" />
-              <span className="text-sm">Clipboard</span>
-            </button>
+            {/* Mobile Clipboard Button (admin only) */}
+            {authenticated && (
+              <button
+                onClick={() => {
+                  onClipboardClick();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              >
+                <Clipboard className="w-5 h-5" />
+                <span className="text-sm">Clipboard</span>
+              </button>
+            )}
 
-            {/* Mobile Server Stats Button */}
-            <button
-              onClick={() => {
-                onStatsClick();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-            >
-              <Activity className="w-5 h-5" />
-              <span className="text-sm">Server Stats</span>
-            </button>
+            {/* Mobile Server Stats Button (admin only) */}
+            {authenticated && (
+              <button
+                onClick={() => {
+                  onStatsClick();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              >
+                <Activity className="w-5 h-5" />
+                <span className="text-sm">Server Stats</span>
+              </button>
+            )}
 
-            {/* Mobile Settings Button */}
-            <button
-              onClick={() => {
-                onSettingsClick();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-            >
-              <Settings className="w-5 h-5" />
-              <span className="text-sm">Settings</span>
-            </button>
+            {/* Mobile Settings Button (admin only) */}
+            {authenticated && (
+              <button
+                onClick={() => {
+                  onSettingsClick();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              >
+                <Settings className="w-5 h-5" />
+                <span className="text-sm">Settings</span>
+              </button>
+            )}
+
+            {/* Mobile Sign in/out */}
+            {authEnabled && !authenticated && (
+              <button
+                onClick={() => {
+                  onSignInClick();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              >
+                <LogIn className="w-5 h-5" />
+                <span className="text-sm">Sign in</span>
+              </button>
+            )}
+            {authEnabled && authenticated && (
+              <button
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  void logout();
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="text-sm">Sign out</span>
+              </button>
+            )}
           </div>
         )}
       </div>

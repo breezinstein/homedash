@@ -34,9 +34,11 @@ RUN npm ci --omit=dev && npm cache clean --force
 # Copy built frontend from builder stage
 COPY --from=builder /app/dist ./dist
 
-# Copy server file
+# Copy server files
 COPY server.js ./
 COPY notifications.js ./
+COPY auth.js ./
+COPY configRedaction.js ./
 
 # Create data directories (including icons cache) with proper permissions.
 # The entrypoint script re-applies ownership at runtime to handle cases where

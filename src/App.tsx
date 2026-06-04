@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { Header, CategorySection } from './components';
 import { ConfirmProvider, ToastProvider, useToast } from './components/ui';
 import { useBrowserNotifications } from './components/notifications/useBrowserNotifications';
@@ -17,6 +18,7 @@ const FileSharing = lazy(() => import('./components/FileSharing').then(m => ({ d
 const ClipboardManager = lazy(() => import('./components/ClipboardManager').then(m => ({ default: m.ClipboardManager })));
 const ServerStats = lazy(() => import('./components/ServerStats').then(m => ({ default: m.ServerStats })));
 const NotificationsPanel = lazy(() => import('./components/notifications/NotificationsPanel').then(m => ({ default: m.NotificationsPanel })));
+const LoginModal = lazy(() => import('./components/LoginModal').then(m => ({ default: m.LoginModal })));
 
 // Bridge: dashboard sync errors surface as toasts. Lives inside both
 // providers so it has access to both contexts. Keeps the cross-cutting
@@ -31,7 +33,8 @@ function SyncErrorReporter() {
 }
 
 function Dashboard() {
-  const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories, isLoading } = useDashboard();
+  const { config, isEditMode, addCategory, updateCategory, searchQuery, reorderCategories, isLoading, setIsEditMode } = useDashboard();
+  const { authEnabled, authenticated, loginRequired, acknowledgeLoginRequired } = useAuth();
   const [showSettings, setShowSettings] = useState(false);
   const [isFileSharingOpen, setIsFileSharingOpen] = useState(false);
   const [isClipboardOpen, setIsClipboardOpen] = useState(false);
@@ -43,18 +46,40 @@ function Dashboard() {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [draggedCategory, setDraggedCategory] = useState<string | null>(null);
   const [categoryDraggedOver, setCategoryDraggedOver] = useState<string | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
-  // Global shortcut: Ctrl/Cmd+Shift+C opens the multi-clipboard.
+  // When the API replies 401 anywhere, the AuthContext flips loginRequired.
+  // Open the forced login modal and exit edit mode so the UI snaps back to a
+  // valid anonymous state.
+  useEffect(() => {
+    if (loginRequired) {
+      setShowLoginModal(true);
+      setIsEditMode(false);
+      setShowSettings(false);
+      setIsClipboardOpen(false);
+      setIsStatsOpen(false);
+      setIsNotificationsOpen(false);
+      setShowServiceModal(false);
+      setShowCategoryModal(false);
+    }
+  }, [loginRequired, setIsEditMode]);
+
+  // Global shortcut: Ctrl/Cmd+Shift+C opens the multi-clipboard. Gated on
+  // auth so anonymous users get the login prompt instead of a no-op.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'c') {
         e.preventDefault();
-        setIsClipboardOpen(prev => !prev);
+        if (authEnabled && !authenticated) {
+          setShowLoginModal(true);
+        } else {
+          setIsClipboardOpen(prev => !prev);
+        }
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, []);
+  }, [authEnabled, authenticated]);
 
   // Surface incoming ntfy messages as desktop notifications when the tab is
   // hidden and the user has opted in.
@@ -167,11 +192,12 @@ function Dashboard() {
         onClipboardClick={() => setIsClipboardOpen(true)}
         onStatsClick={() => setIsStatsOpen(true)}
         onNotificationsClick={() => setIsNotificationsOpen(true)}
+        onSignInClick={() => setShowLoginModal(true)}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Edit Mode Actions */}
-        {isEditMode && (
+        {/* Edit Mode Actions (admin only) */}
+        {isEditMode && authenticated && (
           <div className="flex flex-wrap gap-2 mb-6">
             <button
               onClick={() => {
@@ -285,9 +311,12 @@ function Dashboard() {
         )}
       </main>
 
-      {/* Modals (lazy-loaded; tiny chunk fetched on first open) */}
+      {/* Modals (lazy-loaded; tiny chunk fetched on first open).
+          Admin-only modals never mount for anonymous viewers, which is both a
+          UX win (no flash) and defence-in-depth (no admin code paths reachable
+          without a session). */}
       <Suspense fallback={null}>
-        {showSettings && (
+        {showSettings && authenticated && (
           <SettingsModal onClose={() => setShowSettings(false)} />
         )}
 
@@ -295,19 +324,19 @@ function Dashboard() {
           <FileSharing onClose={() => setIsFileSharingOpen(false)} />
         )}
 
-        {isClipboardOpen && (
+        {isClipboardOpen && authenticated && (
           <ClipboardManager onClose={() => setIsClipboardOpen(false)} />
         )}
 
-        {isStatsOpen && (
+        {isStatsOpen && authenticated && (
           <ServerStats onClose={() => setIsStatsOpen(false)} />
         )}
 
-        {isNotificationsOpen && (
+        {isNotificationsOpen && authenticated && (
           <NotificationsPanel onClose={() => setIsNotificationsOpen(false)} />
         )}
 
-        {showServiceModal && (
+        {showServiceModal && authenticated && (
           <ServiceModal
             service={editingServiceIndex !== null ? config.services[editingServiceIndex] : null}
             serviceIndex={editingServiceIndex}
@@ -318,13 +347,23 @@ function Dashboard() {
           />
         )}
 
-        {showCategoryModal && (
+        {showCategoryModal && authenticated && (
           <CategoryModal
             category={editingCategory}
             onSave={handleCategorySave}
             onClose={() => {
               setShowCategoryModal(false);
               setEditingCategory(null);
+            }}
+          />
+        )}
+
+        {showLoginModal && (
+          <LoginModal
+            forced={loginRequired}
+            onClose={() => {
+              setShowLoginModal(false);
+              acknowledgeLoginRequired();
             }}
           />
         )}
@@ -337,10 +376,12 @@ function App() {
   return (
     <ToastProvider>
       <ConfirmProvider>
-        <DashboardProvider>
-          <SyncErrorReporter />
-          <Dashboard />
-        </DashboardProvider>
+        <AuthProvider>
+          <DashboardProvider>
+            <SyncErrorReporter />
+            <Dashboard />
+          </DashboardProvider>
+        </AuthProvider>
       </ConfirmProvider>
     </ToastProvider>
   );
