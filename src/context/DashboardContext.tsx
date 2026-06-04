@@ -83,6 +83,7 @@ interface DashboardContextType {
   markAllNotificationsRead: () => void;
   dismissNotification: (id: string) => void;
   clearAllNotifications: () => void;
+  clearTopicNotifications: (topic: string) => void;
   reconnectNotifications: () => void;
 }
 
@@ -672,8 +673,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
           prev.map((n) => (n.id === id ? { ...n, dismissed: true } : n))
         );
       },
-      onClear: () => {
-        setNotifications((prev) => prev.map((n) => ({ ...n, dismissed: true })));
+      onClear: (topic) => {
+        setNotifications((prev) =>
+          prev.map((n) =>
+            topic && n.topic !== topic ? n : { ...n, dismissed: true }
+          )
+        );
       },
     });
 
@@ -712,6 +717,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const clearAllNotifications = useCallback(() => {
     setNotifications(prev => prev.map(n => ({ ...n, dismissed: true, read: true })));
     void clearNotificationsOnServer();
+  }, []);
+
+  const clearTopicNotifications = useCallback((topic: string) => {
+    setNotifications(prev =>
+      prev.map(n => (n.topic === topic ? { ...n, dismissed: true, read: true } : n))
+    );
+    void clearNotificationsOnServer(topic);
   }, []);
 
   const reconnectNotifications = useCallback(() => {
@@ -771,6 +783,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     markAllNotificationsRead,
     dismissNotification,
     clearAllNotifications,
+    clearTopicNotifications,
     reconnectNotifications,
   }), [
     config, setConfig, updateService, addService, deleteService, updateCategory,
@@ -783,7 +796,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     servers, addServer, updateServer, deleteServer,
     visibleNotifications, unreadCount, notificationsStatus, notificationsError,
     latestNotification, markAllNotificationsRead, dismissNotification,
-    clearAllNotifications, reconnectNotifications,
+    clearAllNotifications, clearTopicNotifications, reconnectNotifications,
   ]);
 
   return (

@@ -44,7 +44,8 @@ export interface StreamHandlers {
   onMessage: (msg: ServerNotification) => void;
   onStatus: (status: NotificationsStatus, error: string | null) => void;
   onDismiss: (id: string) => void;
-  onClear: () => void;
+  /** Cleared all when topic is undefined, otherwise just that topic. */
+  onClear: (topic?: string) => void;
   onOpen?: () => void;
 }
 
@@ -85,7 +86,14 @@ export function openNotificationStream(handlers: StreamHandlers): EventSource {
     }
   });
 
-  es.addEventListener('clear', () => handlers.onClear());
+  es.addEventListener('clear', (e) => {
+    try {
+      const { topic } = JSON.parse((e as MessageEvent).data || '{}') as { topic?: string };
+      handlers.onClear(topic);
+    } catch {
+      handlers.onClear();
+    }
+  });
 
   return es;
 }
@@ -99,12 +107,13 @@ export async function dismissNotificationOnServer(id: string): Promise<void> {
   });
 }
 
-// Dismiss all notifications (server-side, broadcast to other tabs).
-export async function clearNotificationsOnServer(): Promise<void> {
+// Dismiss all notifications, or just one topic when `topic` is provided
+// (server-side, broadcast to other tabs).
+export async function clearNotificationsOnServer(topic?: string): Promise<void> {
   await fetch(`${API_BASE}/api/notifications/dismiss`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ all: true }),
+    body: JSON.stringify(topic ? { topic } : { all: true }),
   });
 }
 

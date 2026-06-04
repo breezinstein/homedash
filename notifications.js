@@ -268,10 +268,12 @@ export class NotificationManager extends EventEmitter {
     return changed;
   }
 
-  clear() {
-    this.items = this.items.map((n) => (n.dismissed ? n : { ...n, dismissed: true }));
+  clear(topic) {
+    this.items = this.items.map((n) =>
+      n.dismissed || (topic && n.topic !== topic) ? n : { ...n, dismissed: true }
+    );
     this.schedulePersist();
-    this.broadcast('clear', {});
+    this.broadcast('clear', topic ? { topic } : {});
   }
 
   // One-shot connectivity check for the Settings "Test connection" button.

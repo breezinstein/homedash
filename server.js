@@ -884,11 +884,16 @@ app.post('/api/notifications/test', async (req, res) => {
   }
 });
 
-// POST /api/notifications/dismiss - dismiss one ({ id }) or all ({ all: true })
+// POST /api/notifications/dismiss - dismiss one ({ id }), a whole topic
+// ({ topic }), or all ({ all: true })
 app.post('/api/notifications/dismiss', (req, res) => {
-  const { id, all } = req.body || {};
+  const { id, all, topic } = req.body || {};
   if (all) {
     notificationManager.clear();
+    return res.json({ success: true });
+  }
+  if (topic) {
+    notificationManager.clear(topic);
     return res.json({ success: true });
   }
   if (!id) return res.status(400).json({ error: 'id required' });
