@@ -156,10 +156,14 @@ export async function testNotificationConnection({
       password: auth?.password,
     }),
   });
-  if (res.status === 401 || res.status === 403) {
-    throw new NtfyAuthError();
-  }
   if (!res.ok) {
+    // The server flags an ntfy credential rejection with code 'NTFY_AUTH'
+    // (a genuine 401 is intercepted earlier by apiFetch as a HomeDash login).
+    let body: { code?: string } | undefined;
+    try { body = await res.json(); } catch { /* ignore */ }
+    if (body?.code === 'NTFY_AUTH') {
+      throw new NtfyAuthError();
+    }
     throw new Error(`Connection failed (${res.status})`);
   }
 }

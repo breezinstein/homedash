@@ -18,7 +18,12 @@ function proxyIconCoalesced(url: string): Promise<ProxyIconResult> {
   if (resolved) return Promise.resolve(resolved);
   const existing = inFlightIconRequests.get(url);
   if (existing) return existing;
-  const promise = fetch(`${API_BASE}/api/icons/proxy?url=${encodeURIComponent(url)}`)
+  // Icons are a public, read-only concern: use plain fetch (with credentials
+  // so a logged-in admin still gets any future scoped behaviour) rather than
+  // apiFetch, so a stray 401 here never hijacks the login modal.
+  const promise = fetch(`${API_BASE}/api/icons/proxy?url=${encodeURIComponent(url)}`, {
+    credentials: 'include',
+  })
     .then(res => {
       if (!res.ok) throw new Error('Failed to proxy icon');
       return res.json() as Promise<ProxyIconResult>;
@@ -70,7 +75,7 @@ export const configApi = {
 
   // List backups
   async listBackups(): Promise<Array<{ name: string; date: string; filename: string; serviceCount: number }>> {
-    const res = await fetch(`${API_BASE}/api/backups`);
+    const res = await apiFetch(`${API_BASE}/api/backups`);
     if (!res.ok) throw new Error('Failed to list backups');
     return res.json();
   },
@@ -122,7 +127,7 @@ export const configApi = {
 
   // Get icon cache info
   async getIconCacheInfo(): Promise<{ count: number; totalSize: number; totalSizeFormatted: string }> {
-    const res = await fetch(`${API_BASE}/api/icons/cache-info`);
+    const res = await apiFetch(`${API_BASE}/api/icons/cache-info`);
     if (!res.ok) throw new Error('Failed to get cache info');
     return res.json();
   },
@@ -138,7 +143,7 @@ export const configApi = {
 
   // Get live server stats for the host machine
   async getStats(): Promise<ServerStats> {
-    const res = await fetch(`${API_BASE}/api/stats`);
+    const res = await apiFetch(`${API_BASE}/api/stats`);
     if (!res.ok) throw new Error('Failed to fetch server stats');
     return res.json();
   },
@@ -155,7 +160,7 @@ export const configApi = {
       headers['X-Glances-Username'] = auth.username;
       headers['X-Glances-Password'] = auth.password ?? '';
     }
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE}/api/stats/remote?url=${encodeURIComponent(url)}`,
       { headers }
     );

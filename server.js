@@ -374,7 +374,10 @@ app.use('/icons', express.static(ICONS_CACHE_DIR));
 
 // GET /api/icons/proxy - Proxy and cache external icon (admin: outbound
 // fetcher = SSRF vector, so it must not be reachable anonymously)
-app.get('/api/icons/proxy', requireAuth, async (req, res) => {
+// Public: icons are part of the read-only dashboard view, so anonymous
+// visitors must be able to resolve them. Only the cache-management endpoints
+// below stay admin-gated.
+app.get('/api/icons/proxy', async (req, res) => {
   try {
     const iconUrl = req.query.url;
     if (!iconUrl) {
@@ -1096,7 +1099,10 @@ app.post('/api/notifications/test', requireAuth, async (req, res) => {
     res.json({ success: true });
   } catch (err) {
     if (err.code === 'AUTH') {
-      return res.status(401).json({ error: 'Authentication failed' });
+      // Distinct from a 401 (which the client treats as "HomeDash login
+      // required"): this means the ntfy server rejected the supplied
+      // credentials, so report it as an upstream failure with a marker code.
+      return res.status(502).json({ error: 'Authentication failed', code: 'NTFY_AUTH' });
     }
     res.status(502).json({ error: err.message || 'Connection failed' });
   }
