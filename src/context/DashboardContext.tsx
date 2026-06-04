@@ -129,7 +129,7 @@ const defaultConfig: DashboardConfig = {
 const DashboardContext = createContext<DashboardContextType | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
-  const { authenticated, authEnabled } = useAuth();
+  const { authenticated, authEnabled, ready: authReady } = useAuth();
   const [config, setConfigState] = useState<DashboardConfig>(defaultConfig);
   const [backups, setBackups] = useState<ServerBackup[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -158,9 +158,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const configRef = useRef(config);
   configRef.current = config;
   // Mirror auth state into a ref so the debounced save callback can read the
-  // current value without re-creating itself on every auth change.
-  const canWriteRef = useRef(!authEnabled || authenticated);
-  canWriteRef.current = !authEnabled || authenticated;
+  // current value without re-creating itself on every auth change. Until auth
+  // status has resolved (`authReady`) we must assume we CANNOT write: the
+  // default `authEnabled === false` would otherwise read as "open" on first
+  // paint and fire admin-only requests (e.g. /api/backups) before we know an
+  // auth wall exists, producing a spurious 401 + forced login modal.
+  const canWriteRef = useRef(false);
+  canWriteRef.current = authReady && (!authEnabled || authenticated);
 
   // Load config from server on mount
   useEffect(() => {
@@ -184,7 +188,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       }
     };
     loadConfig();
-    refreshBackups();
   }, []);
 
   // Auth-state change: reload config so admins get the full payload after
@@ -206,11 +209,21 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         console.error('Failed to reload config after auth change:', error);
       }
-      refreshBackups();
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authenticated]);
+
+  // Load backups only once auth has resolved AND we're allowed to write.
+  // refreshBackups() no-ops internally when !canWriteRef.current, but keying
+  // this effect on `authReady`/`authenticated` ensures it actually fires the
+  // moment we transition into an authorised state (initial load or sign-in)
+  // instead of racing the auth status request on first paint.
+  useEffect(() => {
+    if (!authReady) return;
+    refreshBackups();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authReady, authenticated]);
 
   // Poll for changes from server
   useEffect(() => {
