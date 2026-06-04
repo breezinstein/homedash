@@ -1,4 +1,5 @@
 import type { CopypartyListing } from '../types';
+import { AuthRequiredError } from './http';
 
 const FILES_BASE = '/api/files';
 
@@ -14,7 +15,8 @@ function encodeFilePath(path: string): string {
 /** List directory contents at the given virtual path. Returns JSON with dirs and files arrays. */
 export async function listDirectory(path: string): Promise<CopypartyListing> {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const res = await fetch(`${FILES_BASE}${encodeFilePath(cleanPath)}`);
+  const res = await fetch(`${FILES_BASE}${encodeFilePath(cleanPath)}`, { credentials: 'include' });
+  if (res.status === 401) throw new AuthRequiredError();
   if (!res.ok) throw new Error(`Failed to list directory (${res.status})`);
   return res.json();
 }
@@ -40,6 +42,10 @@ export function uploadFile(
 
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
+    xhr.withCredentials = true;
+    // Stamp the CSRF token header so the server's csrfGuard accepts the upload
+    // (state-changing /api/* requests require X-Requested-With: HomeDash).
+    xhr.setRequestHeader('X-Requested-With', 'HomeDash');
 
     if (onProgress) {
       xhr.upload.onprogress = (e) => {
@@ -50,6 +56,10 @@ export function uploadFile(
     }
 
     xhr.onload = () => {
+      if (xhr.status === 401) {
+        reject(new AuthRequiredError());
+        return;
+      }
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
       } else {
@@ -65,6 +75,11 @@ export function uploadFile(
 /** Delete a file or directory at the given virtual path. */
 export async function deleteItem(path: string): Promise<void> {
   const cleanPath = path.startsWith('/') ? path : `/${path}`;
-  const res = await fetch(`${FILES_BASE}${encodeFilePath(cleanPath)}`, { method: 'DELETE' });
+  const res = await fetch(`${FILES_BASE}${encodeFilePath(cleanPath)}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    headers: { 'X-Requested-With': 'HomeDash' },
+  });
+  if (res.status === 401) throw new AuthRequiredError();
   if (!res.ok) throw new Error(`Delete failed: ${res.status}`);
 }

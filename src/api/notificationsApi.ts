@@ -1,4 +1,5 @@
 import type { NotificationsStatus, NtfyMessage } from '../types';
+import { apiFetch } from './http';
 
 // Client for HomeDash's own notification API. The actual ntfy subscription
 // lives on the server (see notifications.js); the browser only reads history
@@ -35,8 +36,25 @@ export interface NotificationsState {
 
 // Fetch the current history + connection status from the server.
 export async function fetchNotifications(): Promise<NotificationsState> {
-  const res = await fetch(`${API_BASE}/api/notifications`);
+  const res = await apiFetch(`${API_BASE}/api/notifications`);
   if (!res.ok) throw new Error('Failed to fetch notifications');
+  return res.json();
+}
+
+export interface NotificationsCount {
+  unread: number;
+  connected: boolean;
+  status: string;
+  lastMessageAt: number | null;
+}
+
+// Public unread count for the always-visible header bell. No auth required;
+// no message content is exposed, only the unread tally and connection state.
+export async function fetchNotificationsCount(): Promise<NotificationsCount> {
+  const res = await fetch(`${API_BASE}/api/notifications/count`, {
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error('Failed to fetch notifications count');
   return res.json();
 }
 
@@ -100,7 +118,7 @@ export function openNotificationStream(handlers: StreamHandlers): EventSource {
 
 // Dismiss a single notification (server-side, broadcast to other tabs).
 export async function dismissNotificationOnServer(id: string): Promise<void> {
-  await fetch(`${API_BASE}/api/notifications/dismiss`, {
+  await apiFetch(`${API_BASE}/api/notifications/dismiss`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id }),
@@ -110,7 +128,7 @@ export async function dismissNotificationOnServer(id: string): Promise<void> {
 // Dismiss all notifications, or just one topic when `topic` is provided
 // (server-side, broadcast to other tabs).
 export async function clearNotificationsOnServer(topic?: string): Promise<void> {
-  await fetch(`${API_BASE}/api/notifications/dismiss`, {
+  await apiFetch(`${API_BASE}/api/notifications/dismiss`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(topic ? { topic } : { all: true }),
@@ -128,7 +146,7 @@ export async function testNotificationConnection({
   topics: string[];
   auth?: NtfyAuth;
 }): Promise<void> {
-  const res = await fetch(`${API_BASE}/api/notifications/test`, {
+  const res = await apiFetch(`${API_BASE}/api/notifications/test`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

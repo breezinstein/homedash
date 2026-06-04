@@ -16,6 +16,7 @@ import {
   fetchNotifications,
   openNotificationStream,
 } from '../api/notificationsApi';
+import { useAuth } from './AuthContext';
 
 const defaultNotifications: NotificationsConfig = {
   enabled: false,
@@ -128,6 +129,7 @@ const defaultConfig: DashboardConfig = {
 const DashboardContext = createContext<DashboardContextType | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
+  const { authenticated, authEnabled } = useAuth();
   const [config, setConfigState] = useState<DashboardConfig>(defaultConfig);
   const [backups, setBackups] = useState<ServerBackup[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -155,6 +157,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // every handler — and therefore the context value — change each render).
   const configRef = useRef(config);
   configRef.current = config;
+  // Mirror auth state into a ref so the debounced save callback can read the
+  // current value without re-creating itself on every auth change.
+  const canWriteRef = useRef(!authEnabled || authenticated);
+  canWriteRef.current = !authEnabled || authenticated;
 
   // Load config from server on mount
   useEffect(() => {
@@ -180,6 +186,31 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     loadConfig();
     refreshBackups();
   }, []);
+
+  // Auth-state change: reload config so admins get the full payload after
+  // sign-in and anonymous viewers get the redacted projection after sign-out.
+  // Also re-fetches backups (admin-only endpoint) so the Settings panel has
+  // fresh data right after sign-in. Guarded by `isLoading` so the initial
+  // fetch isn't duplicated on first paint.
+  useEffect(() => {
+    if (isLoading) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { config: serverConfig, lastModified } = await configApi.getConfig();
+        if (cancelled) return;
+        setConfigState(serverConfig);
+        lastModifiedRef.current = lastModified;
+        setSyncError(null);
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Failed to reload config after auth change:', error);
+      }
+      refreshBackups();
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated]);
 
   // Poll for changes from server
   useEffect(() => {
@@ -221,10 +252,19 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     };
   }, [config.settings?.syncInterval]);
 
-  // Save to server with debounce
+  // Save to server with debounce. Skips the network when the current viewer
+  // doesn't have write access (anonymous + auth enabled) — local state still
+  // updates so the UI feels responsive, but we don't trigger 401 toasts and
+  // forced login popups for things like collapse-toggles.
   const saveToServer = useCallback(async (newConfig: DashboardConfig) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
+    }
+
+    if (!canWriteRef.current) {
+      // Anonymous: persist to localStorage only.
+      try { localStorage.setItem('homedash-config', JSON.stringify(newConfig)); } catch { /* ignore */ }
+      return;
     }
 
     saveTimeoutRef.current = setTimeout(async () => {
@@ -287,6 +327,13 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, [saveToServer]);
 
   const refreshBackups = useCallback(async () => {
+    // /api/backups is admin-gated; skip the request entirely when not
+    // authenticated so the anonymous viewer doesn't trigger a 401 + forced
+    // login modal on initial load.
+    if (!canWriteRef.current) {
+      setBackups([]);
+      return;
+    }
     try {
       const serverBackups = await configApi.listBackups();
       setBackups(serverBackups);

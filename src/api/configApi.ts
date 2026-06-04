@@ -1,4 +1,5 @@
 import type { ServerStats } from '../types';
+import { apiFetch } from './http';
 
 // Use relative URLs for reverse proxy compatibility
 const API_BASE = '';
@@ -51,7 +52,7 @@ export const configApi = {
 
   // Save config to server
   async saveConfig(config: any): Promise<{ success: boolean; lastModified: number }> {
-    const res = await fetch(`${API_BASE}/api/config`, {
+    const res = await apiFetch(`${API_BASE}/api/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(config)
@@ -76,7 +77,7 @@ export const configApi = {
 
   // Create backup
   async createBackup(name?: string): Promise<{ success: boolean; filename: string }> {
-    const res = await fetch(`${API_BASE}/api/backups`, {
+    const res = await apiFetch(`${API_BASE}/api/backups`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name })
@@ -87,7 +88,7 @@ export const configApi = {
 
   // Restore backup
   async restoreBackup(filename: string): Promise<{ success: boolean }> {
-    const res = await fetch(`${API_BASE}/api/backups/restore/${filename}`, {
+    const res = await apiFetch(`${API_BASE}/api/backups/restore/${filename}`, {
       method: 'POST'
     });
     if (!res.ok) throw new Error('Failed to restore backup');
@@ -96,7 +97,7 @@ export const configApi = {
 
   // Delete backup
   async deleteBackup(filename: string): Promise<{ success: boolean }> {
-    const res = await fetch(`${API_BASE}/api/backups/${filename}`, {
+    const res = await apiFetch(`${API_BASE}/api/backups/${filename}`, {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Failed to delete backup');
@@ -105,7 +106,7 @@ export const configApi = {
 
   // Upload icon
   async uploadIcon(file: File): Promise<{ url: string }> {
-    const res = await fetch(`${API_BASE}/api/upload-icon?name=${encodeURIComponent(file.name)}`, {
+    const res = await apiFetch(`${API_BASE}/api/upload-icon?name=${encodeURIComponent(file.name)}`, {
       method: 'POST',
       headers: { 'Content-Type': file.type },
       body: file
@@ -128,7 +129,7 @@ export const configApi = {
 
   // Clear icon cache
   async clearIconCache(): Promise<{ success: boolean; deletedCount: number }> {
-    const res = await fetch(`${API_BASE}/api/icons/cache`, {
+    const res = await apiFetch(`${API_BASE}/api/icons/cache`, {
       method: 'DELETE'
     });
     if (!res.ok) throw new Error('Failed to clear cache');

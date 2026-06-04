@@ -8,6 +8,15 @@ import { dirname, join, basename, extname, resolve, sep } from 'path';
 import crypto from 'crypto';
 import os from 'os';
 import { NotificationManager } from './notifications.js';
+import {
+  authEnabled,
+  optionalAuth,
+  requireAuth,
+  csrfGuard,
+  registerAuthRoutes,
+  startupLogLine as authStartupLogLine,
+} from './auth.js';
+import { redactConfigForPublic, mergePrivateSections } from './configRedaction.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -66,6 +75,17 @@ app.use(compression({
   },
 }));
 app.use(express.json({ limit: '10mb' }));
+
+// CSRF defence-in-depth: SameSite=Lax on the session cookie blocks cross-site
+// form posts; the X-Requested-With check below blocks the remaining
+// state-changing paths from third-party origins.
+app.use(csrfGuard);
+// Populate req.authenticated for every request so route handlers can render
+// public/redacted vs. admin responses uniformly. Does NOT reject anyone.
+app.use(optionalAuth);
+
+// Auth endpoints (/api/auth/status, /api/auth/login, /api/auth/logout).
+registerAuthRoutes(app);
 
 // Ensure data directory exists (with error handling for disk space issues)
 try {
@@ -145,15 +165,21 @@ refreshConfigCache();
   notificationManager.reconfigure(configCache.config?.notifications);
 })();
 
-// GET /api/config - Read config (served from in-memory cache when fresh)
+// GET /api/config - Read config (served from in-memory cache when fresh).
+// Anonymous viewers receive a redacted projection that omits secrets and
+// admin-only sections (notifications, servers, clips, restore metadata).
+// Admin sessions receive the full document.
 app.get('/api/config', async (req, res) => {
   try {
     const stats = await stat(CONFIG_PATH);
     if (configCache.config === null || stats.mtimeMs !== configCache.mtimeMs) {
       await refreshConfigCache();
     }
+    const payload = req.authenticated
+      ? configCache.config
+      : redactConfigForPublic(configCache.config);
     res.json({
-      config: configCache.config,
+      config: payload,
       lastModified: configCache.mtimeMs,
     });
   } catch (error) {
@@ -161,13 +187,18 @@ app.get('/api/config', async (req, res) => {
   }
 });
 
-// PUT /api/config - Write config (updates file and cache together)
-app.put('/api/config', async (req, res) => {
+// PUT /api/config - Write config (admin only). Missing private sections in
+// the incoming body are preserved from the on-disk config so a save from a
+// browser that loaded the redacted view never silently clears secrets.
+app.put('/api/config', requireAuth, async (req, res) => {
   try {
+    if (configCache.config === null) await refreshConfigCache();
+    const incoming = req.body || {};
+    const merged = mergePrivateSections(incoming, configCache.config || {});
     const config = {
-      ...req.body,
+      ...merged,
       metadata: {
-        ...req.body.metadata,
+        ...(merged.metadata || {}),
         lastModified: new Date().toISOString()
       }
     };
@@ -199,8 +230,8 @@ app.get('/api/config/check', async (req, res) => {
   }
 });
 
-// GET /api/backups - List backups
-app.get('/api/backups', (req, res) => {
+// GET /api/backups - List backups (admin)
+app.get('/api/backups', requireAuth, (req, res) => {
   try {
     const files = readdirSync(BACKUPS_DIR)
       .filter(f => f.endsWith('.json'))
@@ -222,8 +253,8 @@ app.get('/api/backups', (req, res) => {
   }
 });
 
-// POST /api/backups - Create backup
-app.post('/api/backups', (req, res) => {
+// POST /api/backups - Create backup (admin)
+app.post('/api/backups', requireAuth, (req, res) => {
   try {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const name = req.body.name || `backup-${timestamp}`;
@@ -252,8 +283,8 @@ function resolveBackupPath(rawName) {
   return resolved;
 }
 
-// POST /api/backups/restore/:filename - Restore backup
-app.post('/api/backups/restore/:filename', (req, res) => {
+// POST /api/backups/restore/:filename - Restore backup (admin)
+app.post('/api/backups/restore/:filename', requireAuth, (req, res) => {
   try {
     const backupPath = resolveBackupPath(req.params.filename);
     if (!backupPath) return res.status(400).json({ error: 'Invalid filename' });
@@ -272,8 +303,8 @@ app.post('/api/backups/restore/:filename', (req, res) => {
   }
 });
 
-// DELETE /api/backups/:filename - Delete backup
-app.delete('/api/backups/:filename', (req, res) => {
+// DELETE /api/backups/:filename - Delete backup (admin)
+app.delete('/api/backups/:filename', requireAuth, (req, res) => {
   try {
     const backupPath = resolveBackupPath(req.params.filename);
     if (!backupPath) return res.status(400).json({ error: 'Invalid filename' });
@@ -292,8 +323,9 @@ app.use('/uploads', express.static(join(__dirname, 'data', 'uploads')));
 // Serve cached icons
 app.use('/icons', express.static(ICONS_CACHE_DIR));
 
-// GET /api/icons/proxy - Proxy and cache external icon
-app.get('/api/icons/proxy', async (req, res) => {
+// GET /api/icons/proxy - Proxy and cache external icon (admin: outbound
+// fetcher = SSRF vector, so it must not be reachable anonymously)
+app.get('/api/icons/proxy', requireAuth, async (req, res) => {
   try {
     const iconUrl = req.query.url;
     if (!iconUrl) {
@@ -400,8 +432,8 @@ app.get('/api/icons/proxy', async (req, res) => {
   }
 });
 
-// GET /api/icons/cache-info - Get cache statistics
-app.get('/api/icons/cache-info', (req, res) => {
+// GET /api/icons/cache-info - Get cache statistics (admin)
+app.get('/api/icons/cache-info', requireAuth, (req, res) => {
   try {
     const files = readdirSync(ICONS_CACHE_DIR);
     let totalSize = 0;
@@ -421,8 +453,8 @@ app.get('/api/icons/cache-info', (req, res) => {
   }
 });
 
-// DELETE /api/icons/cache - Clear icon cache
-app.delete('/api/icons/cache', (req, res) => {
+// DELETE /api/icons/cache - Clear icon cache (admin)
+app.delete('/api/icons/cache', requireAuth, (req, res) => {
   try {
     const files = readdirSync(ICONS_CACHE_DIR);
     let deletedCount = 0;
@@ -519,8 +551,9 @@ function formatUptime(seconds) {
   return parts.join(' ');
 }
 
-// GET /api/stats - Live host metrics (CPU, memory, disk, uptime, system)
-app.get('/api/stats', async (req, res) => {
+// GET /api/stats - Live host metrics (CPU, memory, disk, uptime, system).
+// Admin only: leaks hostname/OS/kernel/load + reachable container list.
+app.get('/api/stats', requireAuth, async (req, res) => {
   try {
     const cpuUsage = await sampleCpuUsage(150);
     const cpus = os.cpus();
@@ -666,7 +699,8 @@ function normalizeGlances(all) {
 // Supports password-protected instances via HTTP Basic auth: credentials may be sent
 // in the `x-glances-username` / `x-glances-password` headers or embedded in the URL
 // (http://user:pass@host). Falls back to the Glances v3 API for older instances.
-app.get('/api/stats/remote', async (req, res) => {
+// Admin only: this is an open outbound proxy (SSRF) and forwards Basic-auth creds.
+app.get('/api/stats/remote', requireAuth, async (req, res) => {
   const raw = req.query.url;
   if (!raw || typeof raw !== 'string') {
     return res.status(400).json({ error: 'url parameter required' });
@@ -750,7 +784,8 @@ function resolveSharedPath(urlSubPath) {
 }
 
 // GET /api/files/* - list directory (?ls) or download file
-app.get('/api/files{/*path}', (req, res) => {
+// Admin only in Phase 1; Phase 3 will introduce public/private scopes.
+app.get('/api/files{/*path}', requireAuth, (req, res) => {
   const subPath = req.path.slice('/api/files'.length) || '/';
   const fsPath = resolveSharedPath(subPath);
   if (!fsPath) return res.status(403).json({ error: 'Forbidden' });
@@ -789,8 +824,8 @@ app.get('/api/files{/*path}', (req, res) => {
   }
 });
 
-// PUT /api/files/* - upload a file
-app.put('/api/files{/*path}', (req, res) => {
+// PUT /api/files/* - upload a file (admin)
+app.put('/api/files{/*path}', requireAuth, (req, res) => {
   const subPath = req.path.slice('/api/files'.length) || '/';
   if (subPath.endsWith('/')) return res.status(400).json({ error: 'Path must point to a file' });
   const fsPath = resolveSharedPath(subPath);
@@ -816,8 +851,8 @@ app.put('/api/files{/*path}', (req, res) => {
   });
 });
 
-// DELETE /api/files/* - delete a file or directory
-app.delete('/api/files{/*path}', (req, res) => {
+// DELETE /api/files/* - delete a file or directory (admin)
+app.delete('/api/files{/*path}', requireAuth, (req, res) => {
   const subPath = req.path.slice('/api/files'.length) || '/';
   const fsPath = resolveSharedPath(subPath);
   if (!fsPath) return res.status(403).json({ error: 'Forbidden' });
@@ -849,13 +884,23 @@ app.delete('/api/files{/*path}', (req, res) => {
 // the client and messages are captured even with no tab open.
 // ---------------------------------------------------------------------------
 
-// GET /api/notifications - current history + connection status
-app.get('/api/notifications', (req, res) => {
+// GET /api/notifications - current history + connection status (admin)
+app.get('/api/notifications', requireAuth, (req, res) => {
   res.json(notificationManager.getState());
 });
 
-// GET /api/notifications/stream - Server-Sent Events: live messages + status
-app.get('/api/notifications/stream', (req, res) => {
+// GET /api/notifications/count - public unread count + connection state.
+// Used by the always-visible header bell so anonymous viewers can see "there
+// are pending alerts" without exposing message content. Reads lastReadAt
+// from the server-side config so the count reflects the admin's most recent
+// panel visit (same value the authenticated panel uses).
+app.get('/api/notifications/count', (req, res) => {
+  const lastReadAt = configCache.config?.notifications?.lastReadAt ?? 0;
+  res.json(notificationManager.getCount(lastReadAt));
+});
+
+// GET /api/notifications/stream - Server-Sent Events: live messages + status (admin)
+app.get('/api/notifications/stream', requireAuth, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -871,8 +916,8 @@ app.get('/api/notifications/stream', (req, res) => {
   req.on('close', () => clearInterval(heartbeat));
 });
 
-// POST /api/notifications/test - server-side connectivity check
-app.post('/api/notifications/test', async (req, res) => {
+// POST /api/notifications/test - server-side connectivity check (admin)
+app.post('/api/notifications/test', requireAuth, async (req, res) => {
   try {
     await notificationManager.test(req.body || {});
     res.json({ success: true });
@@ -885,8 +930,8 @@ app.post('/api/notifications/test', async (req, res) => {
 });
 
 // POST /api/notifications/dismiss - dismiss one ({ id }), a whole topic
-// ({ topic }), or all ({ all: true })
-app.post('/api/notifications/dismiss', (req, res) => {
+// ({ topic }), or all ({ all: true }) — admin
+app.post('/api/notifications/dismiss', requireAuth, (req, res) => {
   const { id, all, topic } = req.body || {};
   if (all) {
     notificationManager.clear();
@@ -907,8 +952,8 @@ if (existsSync(distPath)) {
   app.use(express.static(distPath));
 }
 
-// POST /api/upload-icon - Upload icon file
-app.post('/api/upload-icon', express.raw({ type: 'image/*', limit: '5mb' }), (req, res) => {
+// POST /api/upload-icon - Upload icon file (admin)
+app.post('/api/upload-icon', requireAuth, express.raw({ type: 'image/*', limit: '5mb' }), (req, res) => {
   try {
     const uploadsDir = join(__dirname, 'data', 'uploads');
     mkdirSync(uploadsDir, { recursive: true });
@@ -934,5 +979,7 @@ if (existsSync(distPath)) {
 app.listen(PORT, () => {
   console.log(`\n🚀 Config API server running on http://localhost:${PORT}`);
   console.log(`📁 Config file: ${CONFIG_PATH}`);
-  console.log(`💾 Backups dir: ${BACKUPS_DIR}\n`);
+  console.log(`💾 Backups dir: ${BACKUPS_DIR}`);
+  console.log(authStartupLogLine());
+  console.log('');
 });

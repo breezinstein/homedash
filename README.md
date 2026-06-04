@@ -46,6 +46,56 @@ A modern, responsive dashboard for managing homelab services built with React, T
 - **Keyboard Shortcuts**: Quick navigation and search
 - **Image Upload**: Upload custom icons/logos with automatic management
 
+### 🔐 Authentication (optional)
+
+HomeDash supports a **single-admin password** so destructive and sensitive
+surfaces aren't exposed to anyone on the LAN. Auth is opt-in: when no
+credential env var is set the server runs in open mode (identical to
+pre-auth releases) and a startup log line makes the mode explicit.
+
+| Env var | Purpose |
+|---|---|
+| `HOMEDASH_ADMIN_PASSWORD` | Plaintext admin password. Easiest to set, but lives in your compose file. |
+| `HOMEDASH_ADMIN_PASSWORD_HASH` | Prefer this. Format `scrypt:<saltHex>:<derivedKeyHex>` — see compose example for a one-liner that generates it. Takes precedence over the plaintext form. |
+| `HOMEDASH_SESSION_SECRET` | HMAC key signing session cookies. If unset, a per-process random value is used (sessions invalidate on every restart). Set this to a stable random value to survive restarts. |
+| `HOMEDASH_SESSION_TTL_HOURS` | Session lifetime. Default `720` (30 days). |
+| `HOMEDASH_AUTH_DISABLED` | Dev escape hatch; explicitly disable auth even when a password is set. Honoured only outside production. |
+
+What's gated when auth is enabled:
+
+- **Anonymous viewers** still see the launcher (services, categories, theme,
+  custom CSS, search) — the public config payload is a **redacted projection**
+  that omits secrets (notifications credentials, remote-server credentials,
+  clipboard snippets).
+- **Notification badge** is visible to everyone: the header bell polls a
+  public `GET /api/notifications/count` endpoint every 20 s and shows the
+  unread tally. Message content (titles, bodies, links, the full panel)
+  still requires sign-in — clicking the bell anonymously opens the login
+  modal.
+- **Admin actions** (Settings, Edit mode, Backups, Server Stats, Clipboard,
+  Notifications panel, File Sharing, all writes, icon proxy, ntfy config) all
+  require sign-in.
+- A "View only" badge in the header tells anonymous viewers they're in read
+  mode and offers a Sign in button.
+- A 401 from any admin action automatically opens the login modal.
+
+Login brute-force is throttled in-process: 5 failed attempts per IP per 15
+minutes returns 429 with a `Retry-After` header.
+
+Cookies are HttpOnly, SameSite=Lax, and `Secure` when the request arrives
+over HTTPS (works behind a reverse proxy via `X-Forwarded-Proto`). CSRF
+defence relies on SameSite plus a custom `X-Requested-With: HomeDash` header
+on state-changing requests; the frontend sets it automatically.
+
+> **Note:** the admin password is the only credential that protects the
+> dashboard. Store it via your container secrets manager rather than
+> committing it.
+
+> **Phase 3 (planned):** the file sharing area will split into a
+> `SHARED_PUBLIC_DIR` (anonymous OK) and `SHARED_PRIVATE_DIR` (admin only),
+> with the ability to move/copy files between them. Phase 1 keeps the
+> existing single-root layout entirely admin-gated.
+
 ## Quick Start
 
 ### Option 1: Docker Compose (Recommended)
