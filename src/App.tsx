@@ -320,7 +320,7 @@ function Dashboard() {
           <SettingsModal onClose={() => setShowSettings(false)} />
         )}
 
-        {isFileSharingOpen && authenticated && (
+        {isFileSharingOpen && (
           <FileSharing onClose={() => setIsFileSharingOpen(false)} />
         )}
 

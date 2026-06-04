@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import compression from 'compression';
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync, createReadStream, createWriteStream, statfsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync, createReadStream, createWriteStream, statfsSync, renameSync, copyFileSync } from 'fs';
 import { readFile, writeFile, stat } from 'fs/promises';
 import { fileURLToPath } from 'url';
 import { dirname, join, basename, extname, resolve, sep } from 'path';
@@ -22,6 +22,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const SHARED_FILES_DIR = process.env.SHARED_FILES_DIR || join(__dirname, '..', 'shared-files');
+// Phase 3: file sharing splits into a public area (anonymous-readable, used
+// for share-link distribution) and a private area (admin-only). Default
+// layout is `SHARED_FILES_DIR/{public,private}` so existing single-volume
+// docker mounts keep working; both subpaths can be overridden independently
+// for setups that want to back them with different storage.
+const SHARED_PUBLIC_DIR = process.env.SHARED_PUBLIC_DIR || join(SHARED_FILES_DIR, 'public');
+const SHARED_PRIVATE_DIR = process.env.SHARED_PRIVATE_DIR || join(SHARED_FILES_DIR, 'private');
+const SHARED_MIGRATION_SENTINEL = join(SHARED_FILES_DIR, '.migrated');
 
 const app = express();
 const PORT = 3001;
@@ -93,10 +101,51 @@ try {
   mkdirSync(BACKUPS_DIR, { recursive: true });
   mkdirSync(ICONS_CACHE_DIR, { recursive: true });
   mkdirSync(SHARED_FILES_DIR, { recursive: true });
+  mkdirSync(SHARED_PUBLIC_DIR, { recursive: true });
+  mkdirSync(SHARED_PRIVATE_DIR, { recursive: true });
 } catch (error) {
   console.error('Warning: Could not create data directories:', error.message);
   // Continue anyway - the app can still work without icon caching
 }
+
+// One-shot migration: if the legacy single-root shared-files layout has
+// entries other than `public/` / `private/`, move them into `private/` (the
+// safe default — admin can later publish individual items). Writes a sentinel
+// to guarantee idempotence even when the sentinel-less SHARED_FILES_DIR
+// happens to be empty on a fresh install.
+function migrateLegacySharedLayout() {
+  try {
+    if (existsSync(SHARED_MIGRATION_SENTINEL)) return;
+    // Custom-pathed deployments (where public/private live on different
+    // volumes) have no legacy contents to migrate by definition.
+    if (resolve(dirname(SHARED_PUBLIC_DIR)) !== resolve(SHARED_FILES_DIR)
+        || resolve(dirname(SHARED_PRIVATE_DIR)) !== resolve(SHARED_FILES_DIR)) {
+      writeFileSync(SHARED_MIGRATION_SENTINEL, new Date().toISOString());
+      return;
+    }
+    const entries = readdirSync(SHARED_FILES_DIR, { withFileTypes: true })
+      .filter(e => e.name !== 'public' && e.name !== 'private' && e.name !== '.migrated');
+    if (entries.length === 0) {
+      writeFileSync(SHARED_MIGRATION_SENTINEL, new Date().toISOString());
+      return;
+    }
+    console.log(`📦 Migrating shared-files layout: moving ${entries.length} entr${entries.length === 1 ? 'y' : 'ies'} into private/`);
+    for (const entry of entries) {
+      const from = join(SHARED_FILES_DIR, entry.name);
+      const to = join(SHARED_PRIVATE_DIR, entry.name);
+      try {
+        renameSync(from, to);
+      } catch (err) {
+        // Cross-device or destination exists — best-effort copy then unlink.
+        console.error(`Migration: rename failed for ${entry.name} (${err.code}); skipping. Move manually if needed.`);
+      }
+    }
+    writeFileSync(SHARED_MIGRATION_SENTINEL, new Date().toISOString());
+  } catch (err) {
+    console.error('Warning: shared-files migration failed:', err.message);
+  }
+}
+migrateLegacySharedLayout();
 
 // Default config
 const defaultConfig = {
@@ -758,13 +807,34 @@ app.get('/api/stats/remote', requireAuth, async (req, res) => {
   res.status(502).json({ error: lastError });
 });
 
-// Resolve a URL sub-path (relative to /api/files) to a real filesystem path.
-// Returns null if the resolved path escapes SHARED_FILES_DIR (path traversal guard).
-function resolveSharedPath(urlSubPath) {
-  // Express does not URL-decode req.path, so filenames with spaces or other
-  // special characters arrive percent-encoded (e.g. "%20"). Decode each segment
-  // before touching the filesystem. The traversal guard below still catches any
-  // "../" that decoding might reveal.
+// ---------------------------------------------------------------------------
+// File sharing — public/private scopes (Phase 3)
+//
+// Two roots, both rooted inside SHARED_FILES_DIR by default. The "scope" URL
+// segment selects which one is being addressed:
+//
+//   GET /api/files/public/<path>      anonymous OK (read + list)
+//   GET /api/files/private/<path>     admin only
+//   PUT /api/files/{scope}/<path>     admin only (uploads to either area)
+//   DELETE /api/files/{scope}/<path>  admin only
+//   POST /api/files/move              admin only (cross-scope or within-scope)
+//
+// The old single-root /api/files/* shape returns 410 Gone with a JSON pointer
+// for one minor release so cached clients fail loudly instead of silently
+// hitting the new public surface as the admin.
+// ---------------------------------------------------------------------------
+
+const SCOPE_ROOTS = {
+  public: SHARED_PUBLIC_DIR,
+  private: SHARED_PRIVATE_DIR,
+};
+
+// Resolve a (scope, urlSubPath) pair to an absolute path inside the scope's
+// root. Returns null on invalid scope, malformed percent-encoding, or any
+// resolved path that escapes the scope root (path-traversal guard).
+function resolveScopedPath(scope, urlSubPath) {
+  const root = SCOPE_ROOTS[scope];
+  if (!root) return null;
   let decoded;
   try {
     decoded = urlSubPath
@@ -772,31 +842,51 @@ function resolveSharedPath(urlSubPath) {
       .map(seg => (seg ? decodeURIComponent(seg) : seg))
       .join('/');
   } catch {
-    return null; // malformed percent-encoding
+    return null;
   }
-  // The UI prefixes paths with '/shared' (the virtual root name) — strip it.
-  // Use a lookahead so that only the segment '/shared' is stripped, not '/sharedsomething'.
-  const local = decoded.replace(/^\/shared(?=\/|$)/, '') || '/';
-  const resolved = resolve(join(SHARED_FILES_DIR, local));
-  const base = resolve(SHARED_FILES_DIR);
+  const local = decoded || '/';
+  const resolved = resolve(join(root, local));
+  const base = resolve(root);
   if (resolved !== base && !resolved.startsWith(base + sep)) return null;
   return resolved;
 }
 
-// GET /api/files/* - list directory (?ls) or download file
-// Admin only in Phase 1; Phase 3 will introduce public/private scopes.
-app.get('/api/files{/*path}', requireAuth, (req, res) => {
-  const subPath = req.path.slice('/api/files'.length) || '/';
-  const fsPath = resolveSharedPath(subPath);
+// 410 Gone shim for the legacy single-root /api/files/* endpoints. Helps
+// users with cached SPA bundles or scripted clients notice that the path has
+// moved instead of accidentally hitting the public scope.
+function legacyFilesGone(req, res) {
+  res.status(410).json({
+    error: 'This endpoint moved in Phase 3 of the auth split.',
+    movedTo: {
+      public: '/api/files/public/...',
+      private: '/api/files/private/...',
+      move: 'POST /api/files/move',
+    },
+  });
+}
+app.all('/api/files', legacyFilesGone);
+
+// GET — read directory listing or download a file. Public scope is anonymous;
+// private scope requires auth. Listings are allowed in the public scope by
+// design (the spec settled on a Dropbox-style browsable share area).
+app.get('/api/files/:scope{/*path}', (req, res, next) => {
+  const { scope } = req.params;
+  if (scope !== 'public' && scope !== 'private') return legacyFilesGone(req, res);
+  if (scope === 'private' && !req.authenticated) {
+    return res.status(401).json({ error: 'Authentication required' });
+  }
+  const subPath = req.path.slice(`/api/files/${scope}`.length) || '/';
+  const fsPath = resolveScopedPath(scope, subPath);
   if (!fsPath) return res.status(403).json({ error: 'Forbidden' });
 
   try {
     if (!existsSync(fsPath)) return res.status(404).json({ error: 'Not found' });
-    const stat = statSync(fsPath);
+    const st = statSync(fsPath);
 
-    if (stat.isDirectory()) {
+    if (st.isDirectory()) {
       const entries = readdirSync(fsPath, { withFileTypes: true });
-      const dirs = [], files = [];
+      const dirs = [];
+      const files = [];
       for (const entry of entries) {
         try {
           const s = statSync(join(fsPath, entry.name));
@@ -808,32 +898,36 @@ app.get('/api/files{/*path}', requireAuth, (req, res) => {
           }
         } catch { /* skip unreadable entries */ }
       }
-      return res.json({ dirs, files, path: subPath });
-    } else {
-      // File download — escape backslash and double-quote in the filename to
-      // prevent Content-Disposition header injection (RFC 6266).
-      const safeName = basename(fsPath).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-      res.setHeader('Content-Type', 'application/octet-stream');
-      res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
-      res.setHeader('Content-Length', String(stat.size));
-      createReadStream(fsPath).pipe(res);
+      return res.json({ dirs, files, path: subPath, scope });
     }
+
+    // File download — escape backslash and double-quote in the filename to
+    // prevent Content-Disposition header injection (RFC 6266).
+    const safeName = basename(fsPath).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${safeName}"`);
+    res.setHeader('Content-Length', String(st.size));
+    createReadStream(fsPath).pipe(res);
   } catch (err) {
     console.error('File server error:', err.message);
     if (!res.headersSent) res.status(500).json({ error: 'Server error' });
   }
+  return undefined;
 });
 
-// PUT /api/files/* - upload a file (admin)
-app.put('/api/files{/*path}', requireAuth, (req, res) => {
-  const subPath = req.path.slice('/api/files'.length) || '/';
+// PUT — upload to either scope. Admin only for both, because anonymous
+// writes to the public area would let any LAN visitor fill the disk.
+app.put('/api/files/:scope{/*path}', requireAuth, (req, res) => {
+  const { scope } = req.params;
+  if (!SCOPE_ROOTS[scope]) return res.status(404).json({ error: 'Unknown scope' });
+  const subPath = req.path.slice(`/api/files/${scope}`.length) || '/';
   if (subPath.endsWith('/')) return res.status(400).json({ error: 'Path must point to a file' });
-  const fsPath = resolveSharedPath(subPath);
+  const fsPath = resolveScopedPath(scope, subPath);
   if (!fsPath) return res.status(403).json({ error: 'Forbidden' });
 
   try {
     mkdirSync(dirname(fsPath), { recursive: true });
-  } catch (err) {
+  } catch {
     return res.status(500).json({ error: 'Failed to create directory' });
   }
 
@@ -849,23 +943,25 @@ app.put('/api/files{/*path}', requireAuth, (req, res) => {
     ws.destroy();
     if (!res.headersSent) res.status(500).json({ error: 'Upload failed' });
   });
+  return undefined;
 });
 
-// DELETE /api/files/* - delete a file or directory (admin)
-app.delete('/api/files{/*path}', requireAuth, (req, res) => {
-  const subPath = req.path.slice('/api/files'.length) || '/';
-  const fsPath = resolveSharedPath(subPath);
+// DELETE — admin only; refuses to delete the scope root itself.
+app.delete('/api/files/:scope{/*path}', requireAuth, (req, res) => {
+  const { scope } = req.params;
+  const root = SCOPE_ROOTS[scope];
+  if (!root) return res.status(404).json({ error: 'Unknown scope' });
+  const subPath = req.path.slice(`/api/files/${scope}`.length) || '/';
+  const fsPath = resolveScopedPath(scope, subPath);
   if (!fsPath) return res.status(403).json({ error: 'Forbidden' });
-
-  // Protect the root shared directory itself
-  if (resolve(fsPath) === resolve(SHARED_FILES_DIR)) {
+  if (resolve(fsPath) === resolve(root)) {
     return res.status(403).json({ error: 'Cannot delete root directory' });
   }
 
   try {
     if (!existsSync(fsPath)) return res.status(404).json({ error: 'Not found' });
-    const stat = statSync(fsPath);
-    if (stat.isDirectory()) {
+    const st = statSync(fsPath);
+    if (st.isDirectory()) {
       rmSync(fsPath, { recursive: true, force: true });
     } else {
       unlinkSync(fsPath);
@@ -875,7 +971,84 @@ app.delete('/api/files{/*path}', requireAuth, (req, res) => {
     console.error('Delete error:', err.message);
     res.status(500).json({ error: 'Delete failed' });
   }
+  return undefined;
 });
+
+// POST /api/files/move — publish (private->public), unpublish (public->private),
+// or rename within a single scope. Body:
+//   { from: { scope, path }, to: { scope, path }, overwrite?: boolean }
+//
+// Uses fs.renameSync when source and destination share a volume; falls back
+// to copyFile + unlink across volumes (relevant when SHARED_PUBLIC_DIR and
+// SHARED_PRIVATE_DIR are backed by different mounts). Directories are moved
+// recursively via the same fallback so admins can re-publish whole folders.
+app.post('/api/files/move', requireAuth, (req, res) => {
+  const body = req.body || {};
+  const { from, to, overwrite } = body;
+  if (!from || !to || !from.scope || !to.scope || typeof from.path !== 'string' || typeof to.path !== 'string') {
+    return res.status(400).json({ error: 'Body must include from {scope,path} and to {scope,path}' });
+  }
+  if (!SCOPE_ROOTS[from.scope] || !SCOPE_ROOTS[to.scope]) {
+    return res.status(400).json({ error: 'Invalid scope' });
+  }
+  if (to.path.endsWith('/')) {
+    return res.status(400).json({ error: 'Destination path must point to a file or folder name (no trailing slash)' });
+  }
+  const srcPath = resolveScopedPath(from.scope, from.path);
+  const dstPath = resolveScopedPath(to.scope, to.path);
+  if (!srcPath || !dstPath) return res.status(403).json({ error: 'Forbidden' });
+  if (srcPath === dstPath) return res.status(400).json({ error: 'Source and destination are the same' });
+  if (!existsSync(srcPath)) return res.status(404).json({ error: 'Source not found' });
+  if (resolve(srcPath) === resolve(SCOPE_ROOTS[from.scope])) {
+    return res.status(403).json({ error: 'Cannot move scope root' });
+  }
+  if (existsSync(dstPath) && !overwrite) {
+    return res.status(409).json({ error: 'Destination already exists' });
+  }
+
+  try {
+    mkdirSync(dirname(dstPath), { recursive: true });
+  } catch {
+    return res.status(500).json({ error: 'Failed to create destination directory' });
+  }
+
+  try {
+    if (existsSync(dstPath) && overwrite) {
+      const dstSt = statSync(dstPath);
+      if (dstSt.isDirectory()) rmSync(dstPath, { recursive: true, force: true });
+      else unlinkSync(dstPath);
+    }
+
+    try {
+      renameSync(srcPath, dstPath);
+    } catch (err) {
+      if (err.code !== 'EXDEV' && err.code !== 'EPERM' && err.code !== 'ENOTEMPTY') throw err;
+      // Cross-device or otherwise non-atomic — fall back to a recursive copy
+      // then remove the source. Directories: walk + recreate; files: copyFile.
+      copyRecursiveSync(srcPath, dstPath);
+      rmSync(srcPath, { recursive: true, force: true });
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Move error:', err.message);
+    return res.status(500).json({ error: 'Move failed' });
+  }
+});
+
+// Cross-device move helper. Kept tiny and synchronous to match the rest of
+// the file-handling code; the per-request payloads are admin-driven so size
+// is bounded by what the admin can realistically place in the shared area.
+function copyRecursiveSync(src, dst) {
+  const st = statSync(src);
+  if (st.isDirectory()) {
+    mkdirSync(dst, { recursive: true });
+    for (const entry of readdirSync(src, { withFileTypes: true })) {
+      copyRecursiveSync(join(src, entry.name), join(dst, entry.name));
+    }
+  } else {
+    copyFileSync(src, dst);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Notifications (ntfy) — the upstream subscription lives in the

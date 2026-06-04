@@ -91,10 +91,14 @@ on state-changing requests; the frontend sets it automatically.
 > dashboard. Store it via your container secrets manager rather than
 > committing it.
 
-> **Phase 3 (planned):** the file sharing area will split into a
-> `SHARED_PUBLIC_DIR` (anonymous OK) and `SHARED_PRIVATE_DIR` (admin only),
-> with the ability to move/copy files between them. Phase 1 keeps the
-> existing single-root layout entirely admin-gated.
+> **Phase 3 (implemented):** File sharing splits into a public area
+> (`SHARED_PUBLIC_DIR`, default `${SHARED_FILES_DIR}/public`, readable
+> anonymously) and a private area (`SHARED_PRIVATE_DIR`, default
+> `${SHARED_FILES_DIR}/private`, admin only). Admins can **publish** items
+> from private→public (creating a share link at
+> `<origin>/api/files/public/<filename>`) and **unpublish** them back. A
+> one-shot migration on first boot moves any legacy `shared-files/` contents
+> into `private/` so existing deployments don't lose data.
 
 ## Quick Start
 
@@ -232,27 +236,49 @@ docker buildx build --platform linux/amd64,linux/arm64 -t homedash .
 
 ## API Reference
 
-The server provides a REST API for configuration management:
+The server provides a REST API for configuration management. When auth is
+enabled, only the endpoints marked **public** are reachable without a session
+cookie; everything else returns 401.
 
 ```bash
 # Configuration
-GET  /api/config           # Get current configuration
-PUT  /api/config           # Save complete configuration
-GET  /api/config/check     # Check for changes (polling)
+GET  /api/config           # Current config (public — anonymous receives a redacted projection)
+PUT  /api/config           # Save complete configuration (admin)
+GET  /api/config/check     # Check for changes (public, polling)
+
+# Authentication
+GET  /api/auth/status      # { authEnabled, authenticated } (public)
+POST /api/auth/login       # { password } -> 204 + cookie (public)
+POST /api/auth/logout      # Clear session cookie (public)
 
 # Server stats
-GET  /api/stats            # Live host metrics (CPU, memory, disk, uptime, system)
-GET  /api/stats/remote?url=<glancesBase>  # Proxy + normalize stats from a Glances instance (incl. Docker containers)
+GET  /api/stats            # Live host metrics (admin)
+GET  /api/stats/remote?url=<glancesBase>  # Proxy + normalize stats from Glances (admin)
 
 # Backups
-GET  /api/backups                      # List available backups
-POST /api/backups                      # Create manual backup
-POST /api/backups/restore/:filename    # Restore from backup
-DELETE /api/backups/:filename          # Delete backup
+GET  /api/backups                      # List backups (admin)
+POST /api/backups                      # Create manual backup (admin)
+POST /api/backups/restore/:filename    # Restore from backup (admin)
+DELETE /api/backups/:filename          # Delete backup (admin)
 
 # Image uploads
-POST /api/upload-icon      # Upload image file for icons
-GET  /uploads/:filename    # Serve uploaded images
+POST /api/upload-icon      # Upload image file for icons (admin)
+GET  /uploads/:filename    # Serve uploaded images (public)
+
+# Notifications
+GET  /api/notifications/count          # { unread, connected, lastMessageAt } (public — bell badge)
+GET  /api/notifications                # Full message history (admin)
+GET  /api/notifications/stream         # SSE: live messages + status (admin)
+POST /api/notifications/dismiss        # Dismiss one / topic / all (admin)
+POST /api/notifications/test           # Server-side ntfy connectivity probe (admin)
+
+# File sharing (Phase 3)
+GET    /api/files/public{/*path}       # List / download from the public area (public)
+GET    /api/files/private{/*path}      # List / download from the private area (admin)
+PUT    /api/files/{public|private}{/*path}    # Upload (admin both scopes)
+DELETE /api/files/{public|private}{/*path}    # Delete (admin both scopes)
+POST   /api/files/move                 # Publish/unpublish: { from:{scope,path}, to:{scope,path}, overwrite? } (admin)
+# Legacy /api/files/* returns 410 Gone with a pointer to the new paths.
 ```
 
 ## Configuration Format

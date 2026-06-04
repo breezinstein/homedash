@@ -9,10 +9,16 @@ services:
       - "3001:3001"
     volumes:
       - homedash-data:/app/data
-      - homedash-data:/shared-files
+      - homedash-shared:/shared-files
     environment:
       - NODE_ENV=production
       - SHARED_FILES_DIR=/shared-files
+      # Phase 3: file sharing splits into a public area (anonymous-readable,
+      # used for share links) and a private area (admin-only). Defaults
+      # below put both inside SHARED_FILES_DIR — override to back them with
+      # different volumes if you want stricter separation.
+      # - SHARED_PUBLIC_DIR=/shared-files/public
+      # - SHARED_PRIVATE_DIR=/shared-files/private
       # ----- Authentication (optional) -----
       # Set HOMEDASH_ADMIN_PASSWORD to enable single-admin auth. Without it
       # the dashboard runs in open mode (identical to pre-auth releases).
@@ -34,4 +40,6 @@ services:
 
 volumes:
   homedash-data:
+    driver: local
+  homedash-shared:
     driver: local

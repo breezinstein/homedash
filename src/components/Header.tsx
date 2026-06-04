@@ -185,18 +185,15 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               </div>
             )}
 
-            {/* Files — admin only in Phase 1 (entire /api/files path is
-                admin-gated). Phase 3 will introduce a public read-only view
-                and this button will become visible to anonymous viewers. */}
-            {authenticated && (
-              <button
-                onClick={onFileSharingClick}
-                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-                title="File Sharing"
-              >
-                <FolderOpen className="w-5 h-5" />
-              </button>
-            )}
+            {/* Files — visible to all (anonymous gets the public read-only
+                view; admins see the two-pane Private/Public switcher). */}
+            <button
+              onClick={onFileSharingClick}
+              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              title="File Sharing"
+            >
+              <FolderOpen className="w-5 h-5" />
+            </button>
 
             {/* Server Stats — admin only */}
             {authenticated && (
@@ -340,20 +337,18 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               )}
             </div>
 
-            {/* Mobile Files Button — admin only in Phase 1 (Phase 3 adds
-                the public read-only view). */}
-            {authenticated && (
-              <button
-                onClick={() => {
-                  onFileSharingClick();
-                  setMobileMenuOpen(false);
-                }}
-                className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-              >
-                <FolderOpen className="w-5 h-5" />
-                <span className="text-sm">File Sharing</span>
-              </button>
-            )}
+            {/* Mobile Files Button — visible to all (Phase 3 public read-only
+                view for anonymous, admin two-pane for authenticated). */}
+            <button
+              onClick={() => {
+                onFileSharingClick();
+                setMobileMenuOpen(false);
+              }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            >
+              <FolderOpen className="w-5 h-5" />
+              <span className="text-sm">File Sharing</span>
+            </button>
 
             {/* Mobile Clipboard Button (admin only) */}
             {authenticated && (
