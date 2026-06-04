@@ -76,6 +76,32 @@ export class NotificationManager extends EventEmitter {
     return { items: this.items, status: this.status, error: this.error };
   }
 
+  // Lightweight projection for public consumers (anonymous notification
+  // badge): only the unread count, connection state, and timestamp of the
+  // most recent visible message. No titles, bodies, tags, or topics — those
+  // require an admin session.
+  //
+  // "Unread" mirrors what the panel uses: items that are neither dismissed
+  // nor older than the server's notion of lastReadAt (passed in by the
+  // caller, which has access to the live config). When no lastReadAt is
+  // supplied, every non-dismissed item counts as unread.
+  getCount(lastReadAt = 0) {
+    let unread = 0;
+    let lastMessageAt = 0;
+    for (const item of this.items) {
+      if (item.dismissed) continue;
+      const ts = (typeof item.time === 'number' ? item.time : 0) * 1000;
+      if (ts > lastMessageAt) lastMessageAt = ts;
+      if (ts > lastReadAt) unread += 1;
+    }
+    return {
+      unread,
+      connected: this.status === 'open',
+      status: this.status,
+      lastMessageAt: lastMessageAt || null,
+    };
+  }
+
   setStatus(status, error = null) {
     this.status = status;
     this.error = error;

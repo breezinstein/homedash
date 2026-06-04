@@ -8,9 +8,11 @@ mkdir -p /app/data/uploads /app/data/backups /app/data/icons
 chown -R homedash:nodejs /app/data
 
 # Fix ownership of the bind-mounted shared-files directory so the
-# homedash user can write uploaded files there.
-mkdir -p /shared-files
-chown homedash:nodejs /shared-files
+# homedash user can write uploaded files there. Pre-create the public/
+# and private/ subdirs (Phase 3) so the chown covers them before the app
+# tries to migrate any legacy contents.
+mkdir -p /shared-files /shared-files/public /shared-files/private
+chown -R homedash:nodejs /shared-files
 
 # Drop privileges to the homedash user and exec the process under
 # dumb-init for correct signal forwarding and zombie reaping.

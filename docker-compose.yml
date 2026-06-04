@@ -9,10 +9,28 @@ services:
       - "3001:3001"
     volumes:
       - homedash-data:/app/data
-      - homedash-data:/shared-files
+      - homedash-shared:/shared-files
     environment:
       - NODE_ENV=production
       - SHARED_FILES_DIR=/shared-files
+      # Phase 3: file sharing splits into a public area (anonymous-readable,
+      # used for share links) and a private area (admin-only). Defaults
+      # below put both inside SHARED_FILES_DIR — override to back them with
+      # different volumes if you want stricter separation.
+      # - SHARED_PUBLIC_DIR=/shared-files/public
+      # - SHARED_PRIVATE_DIR=/shared-files/private
+      # ----- Authentication (optional) -----
+      # Set HOMEDASH_ADMIN_PASSWORD to enable single-admin auth. Without it
+      # the dashboard runs in open mode (identical to pre-auth releases).
+      # Prefer a hashed credential: run `node -e "const c=require('crypto');
+      # const s=c.randomBytes(16);process.stdout.write('scrypt:'+s.toString('hex')+':'+c.scryptSync(process.argv[1],s,64).toString('hex'))" "my-password"`
+      # then set HOMEDASH_ADMIN_PASSWORD_HASH to the output.
+      # - HOMEDASH_ADMIN_PASSWORD=change-me
+      # - HOMEDASH_ADMIN_PASSWORD_HASH=scrypt:<saltHex>:<derivedKeyHex>
+      # Persist sessions across restarts by providing a stable secret:
+      # - HOMEDASH_SESSION_SECRET=<openssl rand -hex 32>
+      # Session lifetime in hours (default 720 = 30 days):
+      # - HOMEDASH_SESSION_TTL_HOURS=720
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/api/config/check', res => process.exit(res.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1));"]
       interval: 30s
@@ -22,4 +40,6 @@ services:
 
 volumes:
   homedash-data:
+    driver: local
+  homedash-shared:
     driver: local

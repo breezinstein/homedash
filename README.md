@@ -46,6 +46,60 @@ A modern, responsive dashboard for managing homelab services built with React, T
 - **Keyboard Shortcuts**: Quick navigation and search
 - **Image Upload**: Upload custom icons/logos with automatic management
 
+### 🔐 Authentication (optional)
+
+HomeDash supports a **single-admin password** so destructive and sensitive
+surfaces aren't exposed to anyone on the LAN. Auth is opt-in: when no
+credential env var is set the server runs in open mode (identical to
+pre-auth releases) and a startup log line makes the mode explicit.
+
+| Env var | Purpose |
+|---|---|
+| `HOMEDASH_ADMIN_PASSWORD` | Plaintext admin password. Easiest to set, but lives in your compose file. |
+| `HOMEDASH_ADMIN_PASSWORD_HASH` | Prefer this. Format `scrypt:<saltHex>:<derivedKeyHex>` — see compose example for a one-liner that generates it. Takes precedence over the plaintext form. |
+| `HOMEDASH_SESSION_SECRET` | HMAC key signing session cookies. If unset, a per-process random value is used (sessions invalidate on every restart). Set this to a stable random value to survive restarts. |
+| `HOMEDASH_SESSION_TTL_HOURS` | Session lifetime. Default `720` (30 days). |
+| `HOMEDASH_AUTH_DISABLED` | Dev escape hatch; explicitly disable auth even when a password is set. Honoured only outside production. |
+
+What's gated when auth is enabled:
+
+- **Anonymous viewers** still see the launcher (services, categories, theme,
+  custom CSS, search) — the public config payload is a **redacted projection**
+  that omits secrets (notifications credentials, remote-server credentials,
+  clipboard snippets).
+- **Notification badge** is visible to everyone: the header bell polls a
+  public `GET /api/notifications/count` endpoint every 20 s and shows the
+  unread tally. Message content (titles, bodies, links, the full panel)
+  still requires sign-in — clicking the bell anonymously opens the login
+  modal.
+- **Admin actions** (Settings, Edit mode, Backups, Server Stats, Clipboard,
+  Notifications panel, File Sharing, all writes, icon proxy, ntfy config) all
+  require sign-in.
+- A "View only" badge in the header tells anonymous viewers they're in read
+  mode and offers a Sign in button.
+- A 401 from any admin action automatically opens the login modal.
+
+Login brute-force is throttled in-process: 5 failed attempts per IP per 15
+minutes returns 429 with a `Retry-After` header.
+
+Cookies are HttpOnly, SameSite=Lax, and `Secure` when the request arrives
+over HTTPS (works behind a reverse proxy via `X-Forwarded-Proto`). CSRF
+defence relies on SameSite plus a custom `X-Requested-With: HomeDash` header
+on state-changing requests; the frontend sets it automatically.
+
+> **Note:** the admin password is the only credential that protects the
+> dashboard. Store it via your container secrets manager rather than
+> committing it.
+
+> **Phase 3 (implemented):** File sharing splits into a public area
+> (`SHARED_PUBLIC_DIR`, default `${SHARED_FILES_DIR}/public`, readable
+> anonymously) and a private area (`SHARED_PRIVATE_DIR`, default
+> `${SHARED_FILES_DIR}/private`, admin only). Admins can **publish** items
+> from private→public (creating a share link at
+> `<origin>/api/files/public/<filename>`) and **unpublish** them back. A
+> one-shot migration on first boot moves any legacy `shared-files/` contents
+> into `private/` so existing deployments don't lose data.
+
 ## Quick Start
 
 ### Option 1: Docker Compose (Recommended)
@@ -182,27 +236,49 @@ docker buildx build --platform linux/amd64,linux/arm64 -t homedash .
 
 ## API Reference
 
-The server provides a REST API for configuration management:
+The server provides a REST API for configuration management. When auth is
+enabled, only the endpoints marked **public** are reachable without a session
+cookie; everything else returns 401.
 
 ```bash
 # Configuration
-GET  /api/config           # Get current configuration
-PUT  /api/config           # Save complete configuration
-GET  /api/config/check     # Check for changes (polling)
+GET  /api/config           # Current config (public — anonymous receives a redacted projection)
+PUT  /api/config           # Save complete configuration (admin)
+GET  /api/config/check     # Check for changes (public, polling)
+
+# Authentication
+GET  /api/auth/status      # { authEnabled, authenticated } (public)
+POST /api/auth/login       # { password } -> 204 + cookie (public)
+POST /api/auth/logout      # Clear session cookie (public)
 
 # Server stats
-GET  /api/stats            # Live host metrics (CPU, memory, disk, uptime, system)
-GET  /api/stats/remote?url=<glancesBase>  # Proxy + normalize stats from a Glances instance (incl. Docker containers)
+GET  /api/stats            # Live host metrics (admin)
+GET  /api/stats/remote?url=<glancesBase>  # Proxy + normalize stats from Glances (admin)
 
 # Backups
-GET  /api/backups                      # List available backups
-POST /api/backups                      # Create manual backup
-POST /api/backups/restore/:filename    # Restore from backup
-DELETE /api/backups/:filename          # Delete backup
+GET  /api/backups                      # List backups (admin)
+POST /api/backups                      # Create manual backup (admin)
+POST /api/backups/restore/:filename    # Restore from backup (admin)
+DELETE /api/backups/:filename          # Delete backup (admin)
 
 # Image uploads
-POST /api/upload-icon      # Upload image file for icons
-GET  /uploads/:filename    # Serve uploaded images
+POST /api/upload-icon      # Upload image file for icons (admin)
+GET  /uploads/:filename    # Serve uploaded images (public)
+
+# Notifications
+GET  /api/notifications/count          # { unread, connected, lastMessageAt } (public — bell badge)
+GET  /api/notifications                # Full message history (admin)
+GET  /api/notifications/stream         # SSE: live messages + status (admin)
+POST /api/notifications/dismiss        # Dismiss one / topic / all (admin)
+POST /api/notifications/test           # Server-side ntfy connectivity probe (admin)
+
+# File sharing (Phase 3)
+GET    /api/files/public{/*path}       # List / download from the public area (public)
+GET    /api/files/private{/*path}      # List / download from the private area (admin)
+PUT    /api/files/{public|private}{/*path}    # Upload (admin both scopes)
+DELETE /api/files/{public|private}{/*path}    # Delete (admin both scopes)
+POST   /api/files/move                 # Publish/unpublish: { from:{scope,path}, to:{scope,path}, overwrite? } (admin)
+# Legacy /api/files/* returns 410 Gone with a pointer to the new paths.
 ```
 
 ## Configuration Format
