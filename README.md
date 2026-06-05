@@ -18,6 +18,14 @@ A modern, responsive dashboard for managing homelab services built with React, T
   show metrics **and the Docker containers** running on each host, all from one
   panel. Password-protected Glances instances are supported via optional
   username/password (HTTP Basic auth)
+- **Inverter Monitor**: Monitor one or more solar inverters running
+  [Solar Assistant](https://solar-assistant.io/). HomeDash proxies their REST
+  API (`/api/v1/metrics`) and shows live PV, load, grid and battery readings in
+  a dedicated panel, with a card for each inverter and battery. The device list
+  is discovered dynamically, so adding more inverters or batteries needs no
+  configuration changes. Devices are added under the panel's **Manage** view;
+  credentials (HTTP Basic auth) are stored server-side and never exposed to
+  anonymous viewers
 - **Notifications**: Subscribe to a self-hosted
   [ntfy](https://ntfy.sh/) server and receive push notifications from your
   other services directly in the dashboard. The subscription runs
@@ -254,6 +262,9 @@ POST /api/auth/logout      # Clear session cookie (public)
 # Server stats
 GET  /api/stats            # Live host metrics (admin)
 GET  /api/stats/remote?url=<glancesBase>  # Proxy + normalize stats from Glances (admin)
+
+# Inverter monitoring
+GET  /api/inverter/metrics?url=<solarAssistantBase>  # Proxy + normalize Solar Assistant metrics (admin)
 
 # Backups
 GET  /api/backups                      # List backups (admin)

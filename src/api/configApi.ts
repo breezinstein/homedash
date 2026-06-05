@@ -1,4 +1,4 @@
-import type { ServerStats } from '../types';
+import type { ServerStats, InverterStats } from '../types';
 import { apiFetch } from './http';
 
 // Use relative URLs for reverse proxy compatibility
@@ -166,6 +166,33 @@ export const configApi = {
     );
     if (!res.ok) {
       let message = 'Failed to fetch remote server stats';
+      try {
+        const body = await res.json();
+        if (body?.error) message = body.error;
+      } catch { /* ignore parse errors */ }
+      throw new Error(message);
+    }
+    return res.json();
+  },
+
+  // Get normalized metrics from a Solar Assistant inverter (proxied by our
+  // server). Optional Basic-auth credentials are sent via headers (kept out of
+  // the URL/query so they aren't logged).
+  async getInverterStats(
+    url: string,
+    auth?: { username?: string; password?: string }
+  ): Promise<InverterStats> {
+    const headers: Record<string, string> = {};
+    if (auth?.username) {
+      headers['X-Inverter-Username'] = auth.username;
+      headers['X-Inverter-Password'] = auth.password ?? '';
+    }
+    const res = await apiFetch(
+      `${API_BASE}/api/inverter/metrics?url=${encodeURIComponent(url)}`,
+      { headers }
+    );
+    if (!res.ok) {
+      let message = 'Failed to fetch inverter metrics';
       try {
         const body = await res.json();
         if (body?.error) message = body.error;

@@ -17,6 +17,7 @@ const CategoryModal = lazy(() => import('./components/CategoryModal').then(m => 
 const FileSharing = lazy(() => import('./components/FileSharing').then(m => ({ default: m.FileSharing })));
 const ClipboardManager = lazy(() => import('./components/ClipboardManager').then(m => ({ default: m.ClipboardManager })));
 const ServerStats = lazy(() => import('./components/ServerStats').then(m => ({ default: m.ServerStats })));
+const InverterPanel = lazy(() => import('./components/InverterPanel').then(m => ({ default: m.InverterPanel })));
 const NotificationsPanel = lazy(() => import('./components/notifications/NotificationsPanel').then(m => ({ default: m.NotificationsPanel })));
 const LoginModal = lazy(() => import('./components/LoginModal').then(m => ({ default: m.LoginModal })));
 
@@ -39,6 +40,7 @@ function Dashboard() {
   const [isFileSharingOpen, setIsFileSharingOpen] = useState(false);
   const [isClipboardOpen, setIsClipboardOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isInverterOpen, setIsInverterOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
@@ -191,6 +193,7 @@ function Dashboard() {
         onFileSharingClick={() => setIsFileSharingOpen(true)}
         onClipboardClick={() => setIsClipboardOpen(true)}
         onStatsClick={() => setIsStatsOpen(true)}
+        onInverterClick={() => setIsInverterOpen(true)}
         onNotificationsClick={() => setIsNotificationsOpen(true)}
         onSignInClick={() => setShowLoginModal(true)}
       />
@@ -330,6 +333,10 @@ function Dashboard() {
 
         {isStatsOpen && authenticated && (
           <ServerStats onClose={() => setIsStatsOpen(false)} />
+        )}
+
+        {isInverterOpen && authenticated && (
+          <InverterPanel onClose={() => setIsInverterOpen(false)} />
         )}
 
         {isNotificationsOpen && authenticated && (

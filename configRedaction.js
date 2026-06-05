@@ -4,7 +4,7 @@
 // launcher and theme, but must NOT receive secrets or admin-only data.
 // Centralised here so every read path uses the same rules.
 
-const PRIVATE_TOP_LEVEL = ['notifications', 'servers', 'clips'];
+const PRIVATE_TOP_LEVEL = ['notifications', 'servers', 'inverters', 'clips'];
 const PRIVATE_METADATA = ['restoredFrom', 'restoredAt'];
 
 // Whitelist of `settings` keys exposed publicly. Anything else stays hidden

@@ -15,6 +15,7 @@ import {
   RefreshCw,
   CloudOff,
   Activity,
+  Sun,
   LogIn,
   LogOut,
 } from 'lucide-react';
@@ -24,11 +25,12 @@ interface HeaderProps {
   onFileSharingClick: () => void;
   onClipboardClick: () => void;
   onStatsClick: () => void;
+  onInverterClick: () => void;
   onNotificationsClick: () => void;
   onSignInClick: () => void;
 }
 
-export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, onStatsClick, onNotificationsClick, onSignInClick }: HeaderProps) {
+export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, onStatsClick, onInverterClick, onNotificationsClick, onSignInClick }: HeaderProps) {
   const { isEditMode, setIsEditMode, searchQuery, setSearchQuery, isSyncing, syncError } = useDashboard();
   const { authEnabled, authenticated, logout } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -206,6 +208,17 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               </button>
             )}
 
+            {/* Inverter Monitor — admin only */}
+            {authenticated && (
+              <button
+                onClick={onInverterClick}
+                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+                title="Inverter Monitor"
+              >
+                <Sun className="w-5 h-5" />
+              </button>
+            )}
+
             {/* Clipboard — admin only (clips can contain secrets) */}
             {authenticated && (
               <button
@@ -375,6 +388,20 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               >
                 <Activity className="w-5 h-5" />
                 <span className="text-sm">Server Stats</span>
+              </button>
+            )}
+
+            {/* Mobile Inverter Monitor Button (admin only) */}
+            {authenticated && (
+              <button
+                onClick={() => {
+                  onInverterClick();
+                  setMobileMenuOpen(false);
+                }}
+                className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              >
+                <Sun className="w-5 h-5" />
+                <span className="text-sm">Inverter Monitor</span>
               </button>
             )}
 

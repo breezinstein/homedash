@@ -49,6 +49,7 @@ export interface DashboardConfig {
   colors: Colors;
   clips?: Clip[];
   servers?: RemoteServer[];
+  inverters?: InverterServer[];
   notifications?: NotificationsConfig;
 }
 
@@ -215,4 +216,56 @@ export interface ContainerStat {
   memoryLimit: number | null;
   uptime: string | null;
   engine: string | null;
+}
+
+// A configured Solar Assistant device (stored in config.json under `inverters`).
+export interface InverterServer {
+  id: string;
+  name: string;
+  url: string;
+  username?: string;
+  password?: string;
+  createdAt: string;
+}
+
+// A single normalized metric from the Solar Assistant API.
+export interface InverterMetric {
+  name: string;
+  value: number | string | null;
+  unit: string;
+  group: string;
+}
+
+// A discovered device (inverter_N / battery_N) with its metric map.
+export interface InverterDevice {
+  id: string;
+  label: string;
+  metrics: Record<string, InverterMetric>;
+}
+
+// Normalized inverter metrics returned by GET /api/inverter/metrics
+export interface InverterStats {
+  source: 'solar-assistant';
+  overview: {
+    pvPower: number | string | null;
+    loadPower: number | string | null;
+    gridPower: number | string | null;
+    batteryPower: number | string | null;
+    batterySoc: number | string | null;
+    batteryVoltage: number | string | null;
+    batteryCurrent: number | string | null;
+    batteryTemperature: number | string | null;
+    loadPercentage: number | string | null;
+    acOutputVoltage: number | string | null;
+    acOutputFrequency: number | string | null;
+    gridVoltage: number | string | null;
+    gridFrequency: number | string | null;
+    generatorPower: number | string | null;
+    inverterMode: string | null;
+  };
+  totals: Record<string, InverterMetric>;
+  inverters: InverterDevice[];
+  batteries: InverterDevice[];
+  other: Record<string, InverterMetric>;
+  timestamp: number;
 }

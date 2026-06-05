@@ -811,6 +811,176 @@ app.get('/api/stats/remote', requireAuth, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// Inverter monitoring — Solar Assistant REST API proxy.
+//
+// Solar Assistant exposes a flat list of metrics at /api/v1/metrics, each
+// tagged with a `topic` of the form "<deviceId>/<key>" (e.g. total/pv_power,
+// inverter_1/load_power, battery_2/voltage). We proxy + normalise it here for
+// the same reasons as the Glances proxy: the browser can't reach private hosts
+// directly, and credentials must stay server-side.
+//
+// Normalisation is fully dynamic: devices are discovered from the topic prefix,
+// so any number of inverters / batteries (or future device types) work without
+// code changes.
+// ---------------------------------------------------------------------------
+
+// Pretty-print a metric key ("battery_state_of_charge" -> "Battery state of
+// charge") as a fallback when the API doesn't supply a `name`.
+function humaniseKey(key) {
+  return key
+    .replace(/_/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^\w/, c => c.toUpperCase());
+}
+
+// Pretty-print a device id ("inverter_1" -> "Inverter 1").
+function humaniseDeviceId(id) {
+  return id
+    .split('_')
+    .map(p => (/^\d+$/.test(p) ? p : p.replace(/^\w/, c => c.toUpperCase())))
+    .join(' ');
+}
+
+// Pull a numeric value for a known total/* key, tolerating string numbers.
+function pickTotal(totals, key) {
+  const m = totals[key];
+  if (!m) return null;
+  const v = m.value;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'string') {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : v;
+  }
+  return v ?? null;
+}
+
+// Transform Solar Assistant's flat metric array into a structured shape.
+function normalizeInverter(list) {
+  const totals = {};
+  const deviceMap = new Map(); // deviceId -> { id, label, metrics }
+  const other = {};
+
+  for (const m of Array.isArray(list) ? list : []) {
+    if (!m || typeof m.topic !== 'string') continue;
+    const slash = m.topic.indexOf('/');
+    if (slash === -1) continue;
+    const deviceId = m.topic.slice(0, slash);
+    const key = m.topic.slice(slash + 1);
+    const entry = {
+      name: typeof m.name === 'string' && m.name ? m.name : humaniseKey(key),
+      value: m.value ?? null,
+      unit: typeof m.unit === 'string' ? m.unit : '',
+      group: typeof m.group === 'string' ? m.group : '',
+    };
+
+    if (deviceId === 'total') {
+      totals[key] = entry;
+    } else if (/^inverter_\d+$/.test(deviceId) || /^battery_\d+$/.test(deviceId)) {
+      let dev = deviceMap.get(deviceId);
+      if (!dev) {
+        dev = { id: deviceId, label: humaniseDeviceId(deviceId), metrics: {} };
+        deviceMap.set(deviceId, dev);
+      }
+      dev.metrics[key] = entry;
+    } else {
+      other[m.topic] = entry;
+    }
+  }
+
+  const byNumericId = (a, b) => {
+    const na = parseInt(a.id.split('_')[1] || '0', 10);
+    const nb = parseInt(b.id.split('_')[1] || '0', 10);
+    return na - nb;
+  };
+  const inverters = [...deviceMap.values()].filter(d => d.id.startsWith('inverter_')).sort(byNumericId);
+  const batteries = [...deviceMap.values()].filter(d => d.id.startsWith('battery_')).sort(byNumericId);
+
+  const overview = {
+    pvPower: pickTotal(totals, 'pv_power'),
+    loadPower: pickTotal(totals, 'load_power'),
+    gridPower: pickTotal(totals, 'grid_power'),
+    batteryPower: pickTotal(totals, 'battery_power'),
+    batterySoc: pickTotal(totals, 'battery_state_of_charge'),
+    batteryVoltage: pickTotal(totals, 'battery_voltage'),
+    batteryCurrent: pickTotal(totals, 'battery_current'),
+    batteryTemperature: pickTotal(totals, 'battery_temperature'),
+    loadPercentage: pickTotal(totals, 'load_percentage'),
+    acOutputVoltage: pickTotal(totals, 'ac_output_voltage'),
+    acOutputFrequency: pickTotal(totals, 'ac_output_frequency'),
+    gridVoltage: pickTotal(totals, 'grid_voltage'),
+    gridFrequency: pickTotal(totals, 'grid_frequency'),
+    generatorPower: pickTotal(totals, 'generator_power'),
+    inverterMode: (totals['inverter_mode'] && totals['inverter_mode'].value) ?? null,
+  };
+
+  return {
+    source: 'solar-assistant',
+    overview,
+    totals,
+    inverters,
+    batteries,
+    other,
+    timestamp: Date.now(),
+  };
+}
+
+// GET /api/inverter/metrics?url=<base> - Proxy + normalize Solar Assistant metrics.
+// Admin only: open outbound proxy (SSRF) that forwards Basic-auth credentials.
+app.get('/api/inverter/metrics', requireAuth, async (req, res) => {
+  const raw = req.query.url;
+  if (!raw || typeof raw !== 'string') {
+    return res.status(400).json({ error: 'url parameter required' });
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return res.status(400).json({ error: 'Only http/https URLs are supported' });
+  }
+
+  // Basic auth credentials: prefer dedicated headers, fall back to URL userinfo.
+  const username = (req.get('x-inverter-username') || decodeURIComponent(parsed.username) || '').trim();
+  const password = req.get('x-inverter-password') ?? decodeURIComponent(parsed.password);
+  const reqHeaders = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
+  if (username) {
+    reqHeaders.Authorization = 'Basic ' + Buffer.from(`${username}:${password || ''}`).toString('base64');
+  }
+
+  // Rebuild the base from host only (drops any userinfo) so credentials never
+  // leak into the request path / logs. If the user already pointed at the
+  // metrics endpoint, use it as-is; otherwise append the default path.
+  const base = `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`;
+  const target = /\/api\/v1\/metrics$/.test(base) ? base : `${base}/api/v1/metrics`;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(target, { headers: reqHeaders, signal: controller.signal });
+    clearTimeout(timeout);
+    if (response.status === 401) {
+      return res.status(502).json({ error: 'Authentication required or invalid credentials (HTTP 401)' });
+    }
+    if (response.status === 404) {
+      return res.status(502).json({ error: 'Metrics endpoint not found (is this a Solar Assistant device?)' });
+    }
+    if (!response.ok) {
+      return res.status(502).json({ error: `Inverter responded with ${response.status}` });
+    }
+    const data = await response.json();
+    return res.json(normalizeInverter(data));
+  } catch (error) {
+    clearTimeout(timeout);
+    const message = error.name === 'AbortError' ? 'Request timed out' : 'Unable to reach the inverter';
+    return res.status(502).json({ error: message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // File sharing — public/private scopes (Phase 3)
 //
 // Two roots, both rooted inside SHARED_FILES_DIR by default. The "scope" URL

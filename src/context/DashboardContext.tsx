@@ -7,6 +7,7 @@ import type {
   NotificationsStatus,
   NtfyMessage,
   RemoteServer,
+  InverterServer,
   Service,
 } from '../types';
 import { configApi } from '../api/configApi';
@@ -76,6 +77,10 @@ interface DashboardContextType {
   addServer: (name: string, url: string, username?: string, password?: string) => void;
   updateServer: (id: string, patch: Partial<Pick<RemoteServer, 'name' | 'url' | 'username' | 'password'>>) => void;
   deleteServer: (id: string) => void;
+  inverters: InverterServer[];
+  addInverter: (name: string, url: string, username?: string, password?: string) => void;
+  updateInverter: (id: string, patch: Partial<Pick<InverterServer, 'name' | 'url' | 'username' | 'password'>>) => void;
+  deleteInverter: (id: string) => void;
   notifications: NotificationItem[];
   unreadCount: number;
   notificationsStatus: NotificationsStatus;
@@ -110,6 +115,7 @@ const defaultConfig: DashboardConfig = {
   categoryOrder: [],
   clips: [],
   servers: [],
+  inverters: [],
   notifications: defaultNotifications,
   colors: {
     primary: "#6366f1",
@@ -619,6 +625,43 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setServers((configRef.current.servers ?? []).filter(s => s.id !== id));
   }, [setServers]);
 
+  const inverters: InverterServer[] = useMemo(() => config.inverters ?? [], [config.inverters]);
+
+  const setInverters = useCallback((next: InverterServer[]) => {
+    setConfig({ ...configRef.current, inverters: next });
+  }, [setConfig]);
+
+  const addInverter = useCallback((name: string, url: string, username?: string, password?: string) => {
+    const newInverter: InverterServer = {
+      id: generateClipId(),
+      name: name.trim() || 'Untitled Inverter',
+      url: url.trim(),
+      ...(username ? { username: username.trim() } : {}),
+      ...(password ? { password } : {}),
+      createdAt: new Date().toISOString(),
+    };
+    setInverters([...(configRef.current.inverters ?? []), newInverter]);
+  }, [setInverters]);
+
+  const updateInverter = useCallback((id: string, patch: Partial<Pick<InverterServer, 'name' | 'url' | 'username' | 'password'>>) => {
+    const next = (configRef.current.inverters ?? []).map(s =>
+      s.id === id
+        ? {
+            ...s,
+            ...(patch.name !== undefined ? { name: patch.name.trim() || s.name } : {}),
+            ...(patch.url !== undefined ? { url: patch.url.trim() } : {}),
+            ...(patch.username !== undefined ? { username: patch.username.trim() || undefined } : {}),
+            ...(patch.password !== undefined ? { password: patch.password || undefined } : {}),
+          }
+        : s
+    );
+    setInverters(next);
+  }, [setInverters]);
+
+  const deleteInverter = useCallback((id: string) => {
+    setInverters((configRef.current.inverters ?? []).filter(s => s.id !== id));
+  }, [setInverters]);
+
   const copyClipToSystemClipboard = useCallback(async (content: string): Promise<boolean> => {
     // Async clipboard API is only available in secure contexts. Fall back to
     // the deprecated execCommand path for plain-HTTP homelab setups.
@@ -835,6 +878,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     addServer,
     updateServer,
     deleteServer,
+    inverters,
+    addInverter,
+    updateInverter,
+    deleteInverter,
     notifications: visibleNotifications,
     unreadCount,
     notificationsStatus,
@@ -854,6 +901,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     searchQuery, serviceIndexByRef, clips, addClip, updateClip, deleteClip,
     toggleClipPin, reorderClips, copyClipToSystemClipboard,
     servers, addServer, updateServer, deleteServer,
+    inverters, addInverter, updateInverter, deleteInverter,
     visibleNotifications, unreadCount, notificationsStatus, notificationsError,
     latestNotification, markAllNotificationsRead, dismissNotification,
     clearAllNotifications, clearTopicNotifications, reconnectNotifications,
