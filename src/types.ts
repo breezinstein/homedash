@@ -243,6 +243,16 @@ export interface InverterDevice {
   metrics: Record<string, InverterMetric>;
 }
 
+// Server-computed battery runtime estimate (overview.batteryRuntime).
+export type BatteryRuntimeState = 'charging' | 'discharging' | 'idle' | 'full' | 'calculating' | 'unknown';
+
+export interface BatteryRuntime {
+  state: BatteryRuntimeState;
+  minutes: number | null;
+  floorSoc: number;
+  soc: number | null;
+}
+
 // Normalized inverter metrics returned by GET /api/inverter/metrics
 export interface InverterStats {
   source: 'solar-assistant';
@@ -262,6 +272,7 @@ export interface InverterStats {
     gridFrequency: number | string | null;
     generatorPower: number | string | null;
     inverterMode: string | null;
+    batteryRuntime?: BatteryRuntime;
   };
   totals: Record<string, InverterMetric>;
   inverters: InverterDevice[];

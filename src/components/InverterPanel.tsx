@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import { configApi } from '../api/configApi';
 import { useDashboard } from '../context/DashboardContext';
-import type { InverterServer, InverterStats, InverterMetric, InverterDevice } from '../types';
+import type { InverterServer, InverterStats, InverterMetric, InverterDevice, BatteryRuntime } from '../types';
 import { ModalShell, useConfirm } from './ui';
 
 interface InverterPanelProps {
@@ -61,83 +61,10 @@ function barColor(percent: number | null): string {
 }
 
 // --- Battery runtime estimation -------------------------------------------
-// The headline figure is "time until the battery is full / depleted". It is
-// derived purely from the observed state-of-charge trend (a rolling history of
-// samples), so it works for any inverter without needing a configured battery
-// capacity. Charge/discharge direction is confirmed instantly via battery
-// power sign, while the rate stabilises over the first minute of polling.
-
-const BATTERY_FLOOR_DEFAULT = 5; // % SOC treated as "depleted" when the inverter exposes no shutdown setting
-const RUNTIME_WINDOW_MS = 15 * 60 * 1000; // keep up to 15 min of SOC history
-const RUNTIME_MIN_SPAN_MS = 60 * 1000; // need >= 60s of data before quoting a time
-const RUNTIME_MIN_SLOPE = 0.02; // %/min below which the battery is treated as idle
-
-interface SocSample {
-  t: number;
-  soc: number;
-}
-
-// Least-squares slope (% per minute) of SOC across the sample window.
-function socSlopePerMin(samples: SocSample[]): number | null {
-  if (samples.length < 3) return null;
-  const t0 = samples[0].t;
-  const n = samples.length;
-  let sx = 0, sy = 0, sxx = 0, sxy = 0;
-  for (const s of samples) {
-    const x = (s.t - t0) / 60000;
-    const y = s.soc;
-    sx += x; sy += y; sxx += x * x; sxy += x * y;
-  }
-  const denom = n * sxx - sx * sx;
-  if (denom === 0) return null;
-  return (n * sxy - sx * sy) / denom;
-}
-
-type RuntimeState = 'charging' | 'discharging' | 'idle' | 'full' | 'calculating' | 'unknown';
-
-interface BatteryRuntime {
-  state: RuntimeState;
-  minutes: number | null;
-  floorSoc: number;
-  soc: number | null;
-}
-
-// Solar Assistant convention: negative battery power = charging.
-function estimateRuntime(samples: SocSample[], powerW: number | null, floorSoc: number): BatteryRuntime {
-  const soc = samples.length ? samples[samples.length - 1].soc : null;
-  if (soc === null) return { state: 'unknown', minutes: null, floorSoc, soc };
-
-  const span = samples.length ? samples[samples.length - 1].t - samples[0].t : 0;
-  const slope = span >= RUNTIME_MIN_SPAN_MS ? socSlopePerMin(samples) : null;
-  const hasPower = powerW !== null && Math.abs(powerW) > 5;
-
-  let charging: boolean | null = null;
-  if (slope !== null && Math.abs(slope) >= RUNTIME_MIN_SLOPE) {
-    charging = slope > 0;
-  } else if (hasPower) {
-    charging = powerW! < 0;
-  }
-
-  if (charging === null) {
-    // No meaningful trend or power: idle once we actually have a reading, else
-    // still warming up the history.
-    if (slope !== null || (powerW !== null && Math.abs(powerW) <= 5)) {
-      return { state: soc >= 99.5 ? 'full' : 'idle', minutes: null, floorSoc, soc };
-    }
-    return { state: 'calculating', minutes: null, floorSoc, soc };
-  }
-
-  if (charging && soc >= 99.5) return { state: 'full', minutes: null, floorSoc, soc };
-
-  if (slope === null || Math.abs(slope) < RUNTIME_MIN_SLOPE) {
-    // Direction known, but no stable rate yet.
-    return { state: charging ? 'charging' : 'discharging', minutes: null, floorSoc, soc };
-  }
-
-  const remaining = charging ? 100 - soc : soc - floorSoc;
-  const minutes = remaining <= 0 ? 0 : remaining / Math.abs(slope);
-  return { state: charging ? 'charging' : 'discharging', minutes, floorSoc, soc };
-}
+// The "time until full / depleted" headline is computed server-side (see
+// server.js) from a shared, continuously-polled state-of-charge history, so it
+// is warm immediately and survives reloads. The client just renders the
+// server-provided `overview.batteryRuntime`.
 
 function formatDuration(mins: number): string {
   if (!Number.isFinite(mins)) return '—';
@@ -151,28 +78,27 @@ function formatDuration(mins: number): string {
   return `${m}m`;
 }
 
-// Find a configured shutdown / cut-off SOC (%) from any reported metric, so the
-// "until depleted" figure honours the inverter's real low-battery limit.
-function findShutdownSoc(stats: InverterStats): number {
-  const pools: Record<string, InverterMetric>[] = [stats.totals, stats.other];
-  for (const d of [...stats.inverters, ...stats.batteries]) pools.push(d.metrics);
-  for (const pool of pools) {
-    for (const [key, m] of Object.entries(pool)) {
-      const hay = `${key} ${m.name}`.toLowerCase();
-      const isShutdown = hay.includes('shutdown') || hay.includes('cutoff') || hay.includes('cut off') || hay.includes('cut-off');
-      const isSocLike = m.unit === '%' || hay.includes('capacity') || hay.includes('soc') || hay.includes('charge');
-      if (isShutdown && isSocLike) {
-        const n = asNumber(m.value);
-        if (n !== null && n >= 0 && n <= 100) return n;
-      }
-    }
-  }
-  return BATTERY_FLOOR_DEFAULT;
+// Absolute clock time the estimate resolves to, e.g. "today 14:25",
+// "tomorrow 08:10" or "Sat 7 Jun 14:25" for points further out. Computed at
+// render time off the server's `minutes` so it stays accurate as time passes.
+function formatEta(minsFromNow: number): string {
+  if (!Number.isFinite(minsFromNow)) return '';
+  const now = new Date();
+  const target = new Date(now.getTime() + Math.max(0, minsFromNow) * 60000);
+  const time = target.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const dayDelta = Math.round((startOfDay(target) - startOfDay(now)) / 86400000);
+  if (dayDelta <= 0) return `today ${time}`;
+  if (dayDelta === 1) return `tomorrow ${time}`;
+  const date = target.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  return `${date} ${time}`;
 }
+
 
 function BatteryRuntimeBanner({ runtime }: { runtime: BatteryRuntime }) {
   const { state, minutes, floorSoc, soc } = runtime;
   const nowSuffix = soc !== null ? ` · ${Math.round(soc)}% now` : '';
+  const eta = minutes !== null ? formatEta(minutes) : '';
 
   let accent = 'var(--color-text-primary)';
   let Icon: React.ComponentType<{ className?: string }> = Battery;
@@ -188,13 +114,13 @@ function BatteryRuntimeBanner({ runtime }: { runtime: BatteryRuntime }) {
     accent = 'var(--color-success)';
     Icon = BatteryCharging;
     headline = minutes !== null ? `Full in ~${formatDuration(minutes)}` : 'Charging';
-    detail = minutes !== null ? `Charging${nowSuffix}` : `Estimating charge rate…${nowSuffix}`;
+    detail = minutes !== null ? `Full ${eta}${nowSuffix}` : `Estimating charge rate…${nowSuffix}`;
   } else if (state === 'discharging') {
     const target = floorSoc <= 0 ? 'empty' : `${Math.round(floorSoc)}%`;
     if (minutes !== null && minutes <= 30) accent = 'var(--color-error)';
     else if (minutes !== null && minutes <= 120) accent = 'var(--color-warning)';
     headline = minutes !== null ? `~${formatDuration(minutes)} until ${target}` : 'Discharging';
-    detail = minutes !== null ? `To shutdown (${target})${nowSuffix}` : `Estimating drain rate…${nowSuffix}`;
+    detail = minutes !== null ? `To shutdown (${target}) ${eta}${nowSuffix}` : `Estimating drain rate…${nowSuffix}`;
   } else if (state === 'idle') {
     accent = 'var(--color-text-secondary)';
     headline = 'Battery idle';
@@ -316,23 +242,11 @@ function InverterStatsView({ url, username, password }: { url: string; username?
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
-  const socHistoryRef = useRef<SocSample[]>([]);
 
   const fetchStats = useCallback(async () => {
     try {
       const data = await configApi.getInverterStats(url, { username, password });
       if (!mountedRef.current) return;
-      // Record the SOC sample for the runtime estimate before re-rendering.
-      const soc = asNumber(data.overview.batterySoc);
-      if (soc !== null) {
-        const hist = socHistoryRef.current;
-        const tNow = data.timestamp || Date.now();
-        if (!hist.length || tNow - hist[hist.length - 1].t > 250) {
-          hist.push({ t: tNow, soc });
-        }
-        const cutoff = tNow - RUNTIME_WINDOW_MS;
-        while (hist.length && hist[0].t < cutoff) hist.shift();
-      }
       setStats(data);
       setError(null);
     } catch (e) {
@@ -345,7 +259,6 @@ function InverterStatsView({ url, username, password }: { url: string; username?
 
   useEffect(() => {
     mountedRef.current = true;
-    socHistoryRef.current = [];
     fetchStats();
     const id = setInterval(fetchStats, POLL_INTERVAL_MS);
     return () => {
@@ -383,17 +296,17 @@ function InverterStatsView({ url, username, password }: { url: string; username?
   const gridPower = asNumber(o.gridPower);
   const socNum = asNumber(o.batterySoc);
 
-  // Solar Assistant convention: battery power negative = charging; grid power
-  // negative = exporting. Surface that as a readable sub-label.
+  // Solar Assistant convention: battery power positive = charging, negative =
+  // discharging (battery current sign matches); grid power negative = exporting.
   const batterySub = batteryPower === null
     ? (socNum !== null ? `${formatValue(o.batterySoc, '%')}` : undefined)
-    : `${batteryPower < 0 ? 'Charging' : 'Discharging'} ${formatValue(Math.abs(batteryPower), 'W')}`;
+    : `${batteryPower > 0 ? 'Charging' : 'Discharging'} ${formatValue(Math.abs(batteryPower), 'W')}`;
   const gridSub = gridPower === null
     ? undefined
     : (gridPower < 0 ? `Exporting ${formatValue(Math.abs(gridPower), 'W')}` : gridPower > 0 ? 'Importing' : 'Idle');
 
-  const floorSoc = findShutdownSoc(stats);
-  const runtime = estimateRuntime(socHistoryRef.current, batteryPower, floorSoc);
+  // The runtime estimate is computed server-side and arrives in the payload.
+  const runtime = stats.overview.batteryRuntime ?? null;
 
   return (
     <>
@@ -405,7 +318,7 @@ function InverterStatsView({ url, username, password }: { url: string; username?
       )}
 
       {/* Headline: estimated time until the battery is full or depleted. */}
-      {runtime.soc !== null && <BatteryRuntimeBanner runtime={runtime} />}
+      {runtime && runtime.soc !== null && <BatteryRuntimeBanner runtime={runtime} />}
 
       {o.inverterMode && (
         <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)]">

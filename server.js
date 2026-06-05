@@ -925,6 +925,225 @@ function normalizeInverter(list) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Battery runtime estimation (server-side).
+//
+// The "time until full / depleted" headline used to be computed in the browser
+// from a per-tab rolling state-of-charge (SOC) history, so every client had to
+// warm up for ~60s and lost its history on reload. We now keep that history on
+// the server, keyed by the inverter's base URL, so the estimate is shared
+// across clients and is warm immediately (a background poller keeps it fed even
+// with no browser open). Direction is derived primarily from the SOC trend;
+// battery power sign is only a fast fallback.
+//
+// Solar Assistant convention: positive battery power = charging, negative =
+// discharging (battery current sign matches).
+// ---------------------------------------------------------------------------
+
+const INV_RUNTIME_WINDOW_MS = 15 * 60 * 1000;  // keep up to 15 min of SOC history
+const INV_RUNTIME_MIN_SPAN_MS = 60 * 1000;     // need >= 60s of data before quoting a time
+const INV_RUNTIME_MIN_SLOPE = 0.02;            // %/min below which the battery is treated as idle
+const INV_BATTERY_FLOOR_DEFAULT = 5;           // % SOC treated as "depleted" with no shutdown setting
+const INV_SAMPLE_MIN_GAP_MS = 250;             // de-dupe rapid samples
+const INV_POLL_INTERVAL_MS = 3000;             // background poll cadence per configured inverter
+const INV_HISTORY_STALE_MS = 60 * 60 * 1000;   // drop histories not touched in an hour
+
+// key -> { samples: [{ t, soc }], updatedAt }
+const inverterSocHistory = new Map();
+
+function invAsNumber(v) {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+  if (typeof v === 'string') {
+    const n = parseFloat(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+// Least-squares slope (% per minute) of SOC across the sample window.
+function invSocSlopePerMin(samples) {
+  if (samples.length < 3) return null;
+  const t0 = samples[0].t;
+  const n = samples.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const s of samples) {
+    const x = (s.t - t0) / 60000;
+    const y = s.soc;
+    sx += x; sy += y; sxx += x * x; sxy += x * y;
+  }
+  const denom = n * sxx - sx * sx;
+  if (denom === 0) return null;
+  return (n * sxy - sx * sy) / denom;
+}
+
+// Find a configured shutdown / cut-off SOC (%) from any reported metric, so the
+// "until depleted" figure honours the inverter's real low-battery limit.
+function invFindShutdownSoc(stats) {
+  const pools = [stats.totals, stats.other];
+  for (const d of [...stats.inverters, ...stats.batteries]) pools.push(d.metrics);
+  for (const pool of pools) {
+    for (const [key, m] of Object.entries(pool)) {
+      const hay = `${key} ${m.name}`.toLowerCase();
+      const isShutdown = hay.includes('shutdown') || hay.includes('cutoff') || hay.includes('cut off') || hay.includes('cut-off');
+      const isSocLike = m.unit === '%' || hay.includes('capacity') || hay.includes('soc') || hay.includes('charge');
+      if (isShutdown && isSocLike) {
+        const n = invAsNumber(m.value);
+        if (n !== null && n >= 0 && n <= 100) return n;
+      }
+    }
+  }
+  return INV_BATTERY_FLOOR_DEFAULT;
+}
+
+function invEstimateRuntime(samples, powerW, floorSoc) {
+  const soc = samples.length ? samples[samples.length - 1].soc : null;
+  if (soc === null) return { state: 'unknown', minutes: null, floorSoc, soc };
+
+  const span = samples.length ? samples[samples.length - 1].t - samples[0].t : 0;
+  const slope = span >= INV_RUNTIME_MIN_SPAN_MS ? invSocSlopePerMin(samples) : null;
+  const hasPower = powerW !== null && Math.abs(powerW) > 5;
+
+  let charging = null;
+  if (slope !== null && Math.abs(slope) >= INV_RUNTIME_MIN_SLOPE) {
+    charging = slope > 0;
+  } else if (hasPower) {
+    // Solar Assistant: positive power = charging, negative = discharging.
+    charging = powerW > 0;
+  }
+
+  if (charging === null) {
+    if (slope !== null || (powerW !== null && Math.abs(powerW) <= 5)) {
+      return { state: soc >= 99.5 ? 'full' : 'idle', minutes: null, floorSoc, soc };
+    }
+    return { state: 'calculating', minutes: null, floorSoc, soc };
+  }
+
+  if (charging && soc >= 99.5) return { state: 'full', minutes: null, floorSoc, soc };
+
+  if (slope === null || Math.abs(slope) < INV_RUNTIME_MIN_SLOPE) {
+    return { state: charging ? 'charging' : 'discharging', minutes: null, floorSoc, soc };
+  }
+
+  const remaining = charging ? 100 - soc : soc - floorSoc;
+  const minutes = remaining <= 0 ? 0 : remaining / Math.abs(slope);
+  return { state: charging ? 'charging' : 'discharging', minutes, floorSoc, soc };
+}
+
+// Record the latest SOC sample for `key`, prune the window, and attach the
+// computed runtime estimate to the normalized stats (overview.batteryRuntime).
+function attachBatteryRuntime(stats, key) {
+  const soc = invAsNumber(stats.overview.batterySoc);
+  let entry = inverterSocHistory.get(key);
+  if (!entry) {
+    entry = { samples: [], updatedAt: 0 };
+    inverterSocHistory.set(key, entry);
+  }
+  const now = stats.timestamp || Date.now();
+  entry.updatedAt = now;
+  if (soc !== null) {
+    const hist = entry.samples;
+    if (!hist.length || now - hist[hist.length - 1].t > INV_SAMPLE_MIN_GAP_MS) {
+      hist.push({ t: now, soc });
+    }
+    const cutoff = now - INV_RUNTIME_WINDOW_MS;
+    while (hist.length && hist[0].t < cutoff) hist.shift();
+  }
+
+  const power = invAsNumber(stats.overview.batteryPower);
+  const floorSoc = invFindShutdownSoc(stats);
+  stats.overview.batteryRuntime = invEstimateRuntime(entry.samples, power, floorSoc);
+  return stats;
+}
+
+// Normalise a user-supplied inverter URL to the metrics endpoint, dropping any
+// userinfo so credentials never leak into the request path / logs.
+function buildInverterTarget(parsed) {
+  const base = `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`;
+  const target = /\/api\/v1\/metrics$/.test(base) ? base : `${base}/api/v1/metrics`;
+  return { base, target };
+}
+
+// Core fetch + normalise + runtime-record. Returns { ok, status, error, stats }
+// rather than throwing, so both the HTTP endpoint and the background poller can
+// share it.
+async function loadInverterStats(rawUrl, username, password) {
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    return { ok: false, status: 400, error: 'Invalid URL' };
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return { ok: false, status: 400, error: 'Only http/https URLs are supported' };
+  }
+
+  const { base, target } = buildInverterTarget(parsed);
+  const reqHeaders = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
+  const user = (username || decodeURIComponent(parsed.username) || '').trim();
+  const pass = password ?? decodeURIComponent(parsed.password);
+  if (user) {
+    reqHeaders.Authorization = 'Basic ' + Buffer.from(`${user}:${pass || ''}`).toString('base64');
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const response = await fetch(target, { headers: reqHeaders, signal: controller.signal });
+    clearTimeout(timeout);
+    if (response.status === 401) {
+      return { ok: false, status: 502, error: 'Authentication required or invalid credentials (HTTP 401)' };
+    }
+    if (response.status === 404) {
+      return { ok: false, status: 502, error: 'Metrics endpoint not found (is this a Solar Assistant device?)' };
+    }
+    if (!response.ok) {
+      return { ok: false, status: 502, error: `Inverter responded with ${response.status}` };
+    }
+    const data = await response.json();
+    const stats = attachBatteryRuntime(normalizeInverter(data), base);
+    return { ok: true, status: 200, stats };
+  } catch (error) {
+    clearTimeout(timeout);
+    const message = error.name === 'AbortError' ? 'Request timed out' : 'Unable to reach the inverter';
+    return { ok: false, status: 502, error: message };
+  }
+}
+
+// Background poller: keep each configured inverter's SOC history warm so the
+// runtime estimate is instant for any client (and survives reloads). Runs
+// server-side, independent of any browser, mirroring the notifications monitor.
+const inverterPollTimers = new Map();
+
+function pollConfiguredInverters() {
+  const inverters = (configCache.config && Array.isArray(configCache.config.inverters))
+    ? configCache.config.inverters
+    : [];
+  const active = new Set();
+  for (const inv of inverters) {
+    if (!inv || typeof inv.url !== 'string' || !inv.url) continue;
+    active.add(inv.id);
+    if (inverterPollTimers.has(inv.id)) continue;
+    const tick = () => { loadInverterStats(inv.url, inv.username, inv.password).catch(() => {}); };
+    tick();
+    inverterPollTimers.set(inv.id, setInterval(tick, INV_POLL_INTERVAL_MS));
+  }
+  // Stop polling inverters that were removed from config.
+  for (const [id, timer] of inverterPollTimers) {
+    if (!active.has(id)) {
+      clearInterval(timer);
+      inverterPollTimers.delete(id);
+    }
+  }
+  // Drop stale histories so removed/renamed devices don't leak memory.
+  const now = Date.now();
+  for (const [key, entry] of inverterSocHistory) {
+    if (now - entry.updatedAt > INV_HISTORY_STALE_MS) inverterSocHistory.delete(key);
+  }
+}
+
+// Re-evaluate the inverter list periodically (config can change at runtime).
+setInterval(pollConfiguredInverters, INV_POLL_INTERVAL_MS);
+
 // GET /api/inverter/metrics?url=<base> - Proxy + normalize Solar Assistant metrics.
 // Admin only: open outbound proxy (SSRF) that forwards Basic-auth credentials.
 app.get('/api/inverter/metrics', requireAuth, async (req, res) => {
@@ -933,51 +1152,16 @@ app.get('/api/inverter/metrics', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'url parameter required' });
   }
 
-  let parsed;
-  try {
-    parsed = new URL(raw);
-  } catch {
-    return res.status(400).json({ error: 'Invalid URL' });
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-    return res.status(400).json({ error: 'Only http/https URLs are supported' });
-  }
+  // Basic auth credentials: prefer dedicated headers, fall back to URL userinfo
+  // (resolved inside loadInverterStats).
+  const username = req.get('x-inverter-username') || undefined;
+  const password = req.get('x-inverter-password') ?? undefined;
 
-  // Basic auth credentials: prefer dedicated headers, fall back to URL userinfo.
-  const username = (req.get('x-inverter-username') || decodeURIComponent(parsed.username) || '').trim();
-  const password = req.get('x-inverter-password') ?? decodeURIComponent(parsed.password);
-  const reqHeaders = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
-  if (username) {
-    reqHeaders.Authorization = 'Basic ' + Buffer.from(`${username}:${password || ''}`).toString('base64');
+  const result = await loadInverterStats(raw, username, password);
+  if (!result.ok) {
+    return res.status(result.status).json({ error: result.error });
   }
-
-  // Rebuild the base from host only (drops any userinfo) so credentials never
-  // leak into the request path / logs. If the user already pointed at the
-  // metrics endpoint, use it as-is; otherwise append the default path.
-  const base = `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '')}`;
-  const target = /\/api\/v1\/metrics$/.test(base) ? base : `${base}/api/v1/metrics`;
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 8000);
-  try {
-    const response = await fetch(target, { headers: reqHeaders, signal: controller.signal });
-    clearTimeout(timeout);
-    if (response.status === 401) {
-      return res.status(502).json({ error: 'Authentication required or invalid credentials (HTTP 401)' });
-    }
-    if (response.status === 404) {
-      return res.status(502).json({ error: 'Metrics endpoint not found (is this a Solar Assistant device?)' });
-    }
-    if (!response.ok) {
-      return res.status(502).json({ error: `Inverter responded with ${response.status}` });
-    }
-    const data = await response.json();
-    return res.json(normalizeInverter(data));
-  } catch (error) {
-    clearTimeout(timeout);
-    const message = error.name === 'AbortError' ? 'Request timed out' : 'Unable to reach the inverter';
-    return res.status(502).json({ error: message });
-  }
+  return res.json(result.stats);
 });
 
 // ---------------------------------------------------------------------------
