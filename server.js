@@ -933,8 +933,12 @@ function normalizeInverter(list) {
 // warm up for ~60s and lost its history on reload. We now keep that history on
 // the server, keyed by the inverter's base URL, so the estimate is shared
 // across clients and is warm immediately (a background poller keeps it fed even
-// with no browser open). Direction is derived primarily from the SOC trend;
-// battery power sign is only a fast fallback.
+// with no browser open). Direction is derived primarily from the instantaneous
+// battery power sign (which flips immediately when charging starts/stops); the
+// SOC trend is only a fallback when power isn't reported. The SOC slope still
+// provides the *rate* used to estimate the remaining time, but only when its
+// sign agrees with the power-derived direction — otherwise the trailing window
+// is still catching up after a direction change and we quote no time yet.
 //
 // Solar Assistant convention: positive battery power = charging, negative =
 // discharging (battery current sign matches).
@@ -1002,13 +1006,17 @@ function invEstimateRuntime(samples, powerW, floorSoc) {
   const span = samples.length ? samples[samples.length - 1].t - samples[0].t : 0;
   const slope = span >= INV_RUNTIME_MIN_SPAN_MS ? invSocSlopePerMin(samples) : null;
   const hasPower = powerW !== null && Math.abs(powerW) > 5;
+  const hasSlope = slope !== null && Math.abs(slope) >= INV_RUNTIME_MIN_SLOPE;
 
+  // Direction: trust the instantaneous battery power sign first (it flips the
+  // moment charging starts/stops), and fall back to the SOC trend only when no
+  // power reading is available. Solar Assistant: positive power = charging,
+  // negative = discharging.
   let charging = null;
-  if (slope !== null && Math.abs(slope) >= INV_RUNTIME_MIN_SLOPE) {
-    charging = slope > 0;
-  } else if (hasPower) {
-    // Solar Assistant: positive power = charging, negative = discharging.
+  if (hasPower) {
     charging = powerW > 0;
+  } else if (hasSlope) {
+    charging = slope > 0;
   }
 
   if (charging === null) {
@@ -1020,7 +1028,12 @@ function invEstimateRuntime(samples, powerW, floorSoc) {
 
   if (charging && soc >= 99.5) return { state: 'full', minutes: null, floorSoc, soc };
 
-  if (slope === null || Math.abs(slope) < INV_RUNTIME_MIN_SLOPE) {
+  // Only quote a time when the SOC slope is meaningful AND its sign agrees with
+  // the direction. After a charge/discharge flip the trailing window still holds
+  // old samples of the opposite sign, which would otherwise yield a wildly wrong
+  // estimate — show the direction without a time until the window catches up.
+  const slopeAgrees = hasSlope && (slope > 0) === charging;
+  if (!slopeAgrees) {
     return { state: charging ? 'charging' : 'discharging', minutes: null, floorSoc, soc };
   }
 
