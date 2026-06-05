@@ -4,6 +4,8 @@ import {
   Sun,
   Zap,
   Battery,
+  BatteryCharging,
+  BatteryFull,
   Gauge,
   Plug,
   AlertTriangle,
@@ -14,6 +16,7 @@ import {
   ArrowLeft,
   Lock,
   CircuitBoard,
+  ChevronDown,
 } from 'lucide-react';
 import { configApi } from '../api/configApi';
 import { useDashboard } from '../context/DashboardContext';
@@ -57,6 +60,171 @@ function barColor(percent: number | null): string {
   return 'var(--color-success)';
 }
 
+// --- Battery runtime estimation -------------------------------------------
+// The headline figure is "time until the battery is full / depleted". It is
+// derived purely from the observed state-of-charge trend (a rolling history of
+// samples), so it works for any inverter without needing a configured battery
+// capacity. Charge/discharge direction is confirmed instantly via battery
+// power sign, while the rate stabilises over the first minute of polling.
+
+const BATTERY_FLOOR_DEFAULT = 5; // % SOC treated as "depleted" when the inverter exposes no shutdown setting
+const RUNTIME_WINDOW_MS = 15 * 60 * 1000; // keep up to 15 min of SOC history
+const RUNTIME_MIN_SPAN_MS = 60 * 1000; // need >= 60s of data before quoting a time
+const RUNTIME_MIN_SLOPE = 0.02; // %/min below which the battery is treated as idle
+
+interface SocSample {
+  t: number;
+  soc: number;
+}
+
+// Least-squares slope (% per minute) of SOC across the sample window.
+function socSlopePerMin(samples: SocSample[]): number | null {
+  if (samples.length < 3) return null;
+  const t0 = samples[0].t;
+  const n = samples.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const s of samples) {
+    const x = (s.t - t0) / 60000;
+    const y = s.soc;
+    sx += x; sy += y; sxx += x * x; sxy += x * y;
+  }
+  const denom = n * sxx - sx * sx;
+  if (denom === 0) return null;
+  return (n * sxy - sx * sy) / denom;
+}
+
+type RuntimeState = 'charging' | 'discharging' | 'idle' | 'full' | 'calculating' | 'unknown';
+
+interface BatteryRuntime {
+  state: RuntimeState;
+  minutes: number | null;
+  floorSoc: number;
+  soc: number | null;
+}
+
+// Solar Assistant convention: negative battery power = charging.
+function estimateRuntime(samples: SocSample[], powerW: number | null, floorSoc: number): BatteryRuntime {
+  const soc = samples.length ? samples[samples.length - 1].soc : null;
+  if (soc === null) return { state: 'unknown', minutes: null, floorSoc, soc };
+
+  const span = samples.length ? samples[samples.length - 1].t - samples[0].t : 0;
+  const slope = span >= RUNTIME_MIN_SPAN_MS ? socSlopePerMin(samples) : null;
+  const hasPower = powerW !== null && Math.abs(powerW) > 5;
+
+  let charging: boolean | null = null;
+  if (slope !== null && Math.abs(slope) >= RUNTIME_MIN_SLOPE) {
+    charging = slope > 0;
+  } else if (hasPower) {
+    charging = powerW! < 0;
+  }
+
+  if (charging === null) {
+    // No meaningful trend or power: idle once we actually have a reading, else
+    // still warming up the history.
+    if (slope !== null || (powerW !== null && Math.abs(powerW) <= 5)) {
+      return { state: soc >= 99.5 ? 'full' : 'idle', minutes: null, floorSoc, soc };
+    }
+    return { state: 'calculating', minutes: null, floorSoc, soc };
+  }
+
+  if (charging && soc >= 99.5) return { state: 'full', minutes: null, floorSoc, soc };
+
+  if (slope === null || Math.abs(slope) < RUNTIME_MIN_SLOPE) {
+    // Direction known, but no stable rate yet.
+    return { state: charging ? 'charging' : 'discharging', minutes: null, floorSoc, soc };
+  }
+
+  const remaining = charging ? 100 - soc : soc - floorSoc;
+  const minutes = remaining <= 0 ? 0 : remaining / Math.abs(slope);
+  return { state: charging ? 'charging' : 'discharging', minutes, floorSoc, soc };
+}
+
+function formatDuration(mins: number): string {
+  if (!Number.isFinite(mins)) return '—';
+  const total = Math.max(0, Math.round(mins));
+  if (total < 1) return '<1m';
+  const d = Math.floor(total / 1440);
+  const h = Math.floor((total % 1440) / 60);
+  const m = total % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+// Find a configured shutdown / cut-off SOC (%) from any reported metric, so the
+// "until depleted" figure honours the inverter's real low-battery limit.
+function findShutdownSoc(stats: InverterStats): number {
+  const pools: Record<string, InverterMetric>[] = [stats.totals, stats.other];
+  for (const d of [...stats.inverters, ...stats.batteries]) pools.push(d.metrics);
+  for (const pool of pools) {
+    for (const [key, m] of Object.entries(pool)) {
+      const hay = `${key} ${m.name}`.toLowerCase();
+      const isShutdown = hay.includes('shutdown') || hay.includes('cutoff') || hay.includes('cut off') || hay.includes('cut-off');
+      const isSocLike = m.unit === '%' || hay.includes('capacity') || hay.includes('soc') || hay.includes('charge');
+      if (isShutdown && isSocLike) {
+        const n = asNumber(m.value);
+        if (n !== null && n >= 0 && n <= 100) return n;
+      }
+    }
+  }
+  return BATTERY_FLOOR_DEFAULT;
+}
+
+function BatteryRuntimeBanner({ runtime }: { runtime: BatteryRuntime }) {
+  const { state, minutes, floorSoc, soc } = runtime;
+  const nowSuffix = soc !== null ? ` · ${Math.round(soc)}% now` : '';
+
+  let accent = 'var(--color-text-primary)';
+  let Icon: React.ComponentType<{ className?: string }> = Battery;
+  let headline: string;
+  let detail: string | null;
+
+  if (state === 'full') {
+    accent = 'var(--color-success)';
+    Icon = BatteryFull;
+    headline = 'Battery full';
+    detail = 'Fully charged';
+  } else if (state === 'charging') {
+    accent = 'var(--color-success)';
+    Icon = BatteryCharging;
+    headline = minutes !== null ? `Full in ~${formatDuration(minutes)}` : 'Charging';
+    detail = minutes !== null ? `Charging${nowSuffix}` : `Estimating charge rate…${nowSuffix}`;
+  } else if (state === 'discharging') {
+    const target = floorSoc <= 0 ? 'empty' : `${Math.round(floorSoc)}%`;
+    if (minutes !== null && minutes <= 30) accent = 'var(--color-error)';
+    else if (minutes !== null && minutes <= 120) accent = 'var(--color-warning)';
+    headline = minutes !== null ? `~${formatDuration(minutes)} until ${target}` : 'Discharging';
+    detail = minutes !== null ? `To shutdown (${target})${nowSuffix}` : `Estimating drain rate…${nowSuffix}`;
+  } else if (state === 'idle') {
+    accent = 'var(--color-text-secondary)';
+    headline = 'Battery idle';
+    detail = `Holding steady${nowSuffix}`;
+  } else {
+    accent = 'var(--color-text-secondary)';
+    headline = 'Estimating runtime…';
+    detail = soc !== null ? `${Math.round(soc)}% now` : null;
+  }
+
+  return (
+    <div
+      className="mb-3 flex items-center gap-3 p-3 rounded-xl border"
+      style={{ borderColor: accent, backgroundColor: 'var(--color-background)' }}
+    >
+      <div
+        className="flex items-center justify-center w-10 h-10 rounded-lg shrink-0 bg-[var(--color-surface)]"
+        style={{ color: accent }}
+      >
+        <Icon className="w-5 h-5" />
+      </div>
+      <div className="min-w-0">
+        <p className="text-base font-semibold leading-tight" style={{ color: accent }}>{headline}</p>
+        {detail && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 break-words">{detail}</p>}
+      </div>
+    </div>
+  );
+}
+
+
 interface TileProps {
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   label: string;
@@ -87,39 +255,57 @@ function displayMetrics(device: InverterDevice): [string, InverterMetric][] {
 }
 
 function DeviceCard({ device, icon: Icon }: { device: InverterDevice; icon: React.ComponentType<{ className?: string }> }) {
+  const [open, setOpen] = useState(true);
   const metrics = displayMetrics(device);
   // Surface a SOC bar for batteries when available.
   const soc = device.metrics['state_of_charge'];
   const socNum = soc && typeof soc.value === 'number' ? soc.value : null;
+  const contentId = `device-card-${device.id}`;
 
   return (
-    <div className="bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] p-4">
-      <div className="flex items-center gap-2 mb-3 text-[var(--color-text-primary)]">
-        <Icon className="w-4 h-4 text-[var(--color-text-secondary)]" />
-        <span className="text-sm font-semibold">{device.label}</span>
-      </div>
-      {socNum !== null && (
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-xs text-[var(--color-text-secondary)]">State of charge</span>
-            <span className="text-xs font-semibold text-[var(--color-text-primary)] tabular-nums">{socNum.toFixed(1)}%</span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-[var(--color-surface)] overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${Math.min(100, Math.max(0, socNum))}%`, backgroundColor: barColor(socNum) }}
-            />
+    <div className="bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={contentId}
+        className="w-full flex items-center gap-2 p-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface)]/50 transition-colors"
+      >
+        <Icon className="w-4 h-4 shrink-0 text-[var(--color-text-secondary)]" />
+        <span className="text-sm font-semibold flex-1 min-w-0 truncate">{device.label}</span>
+        {socNum !== null && (
+          <span className="text-xs font-semibold tabular-nums text-[var(--color-text-secondary)]">{socNum.toFixed(1)}%</span>
+        )}
+        <ChevronDown
+          className={`w-4 h-4 shrink-0 text-[var(--color-text-secondary)] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {open && (
+        <div id={contentId} className="px-4 pb-4">
+          {socNum !== null && (
+            <div className="mb-3">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs text-[var(--color-text-secondary)]">State of charge</span>
+                <span className="text-xs font-semibold text-[var(--color-text-primary)] tabular-nums">{socNum.toFixed(1)}%</span>
+              </div>
+              <div className="h-2 w-full rounded-full bg-[var(--color-surface)] overflow-hidden">
+                <div
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${Math.min(100, Math.max(0, socNum))}%`, backgroundColor: barColor(socNum) }}
+                />
+              </div>
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
+            {metrics.map(([key, m]) => (
+              <div key={key} className="flex items-baseline justify-between gap-3 min-w-0">
+                <span className="text-xs text-[var(--color-text-secondary)] min-w-0 break-words">{m.name}</span>
+                <span className="text-xs font-medium text-[var(--color-text-primary)] tabular-nums text-right break-words">{formatMetric(m)}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1.5">
-        {metrics.map(([key, m]) => (
-          <div key={key} className="flex items-center justify-between gap-2 min-w-0">
-            <span className="text-xs text-[var(--color-text-secondary)] truncate" title={m.name}>{m.name}</span>
-            <span className="text-xs font-medium text-[var(--color-text-primary)] tabular-nums whitespace-nowrap">{formatMetric(m)}</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -130,11 +316,23 @@ function InverterStatsView({ url, username, password }: { url: string; username?
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const mountedRef = useRef(true);
+  const socHistoryRef = useRef<SocSample[]>([]);
 
   const fetchStats = useCallback(async () => {
     try {
       const data = await configApi.getInverterStats(url, { username, password });
       if (!mountedRef.current) return;
+      // Record the SOC sample for the runtime estimate before re-rendering.
+      const soc = asNumber(data.overview.batterySoc);
+      if (soc !== null) {
+        const hist = socHistoryRef.current;
+        const tNow = data.timestamp || Date.now();
+        if (!hist.length || tNow - hist[hist.length - 1].t > 250) {
+          hist.push({ t: tNow, soc });
+        }
+        const cutoff = tNow - RUNTIME_WINDOW_MS;
+        while (hist.length && hist[0].t < cutoff) hist.shift();
+      }
       setStats(data);
       setError(null);
     } catch (e) {
@@ -147,6 +345,7 @@ function InverterStatsView({ url, username, password }: { url: string; username?
 
   useEffect(() => {
     mountedRef.current = true;
+    socHistoryRef.current = [];
     fetchStats();
     const id = setInterval(fetchStats, POLL_INTERVAL_MS);
     return () => {
@@ -193,6 +392,9 @@ function InverterStatsView({ url, username, password }: { url: string; username?
     ? undefined
     : (gridPower < 0 ? `Exporting ${formatValue(Math.abs(gridPower), 'W')}` : gridPower > 0 ? 'Importing' : 'Idle');
 
+  const floorSoc = findShutdownSoc(stats);
+  const runtime = estimateRuntime(socHistoryRef.current, batteryPower, floorSoc);
+
   return (
     <>
       {error && (
@@ -201,6 +403,9 @@ function InverterStatsView({ url, username, password }: { url: string; username?
           <span className="text-xs">{error} (showing last known values)</span>
         </div>
       )}
+
+      {/* Headline: estimated time until the battery is full or depleted. */}
+      {runtime.soc !== null && <BatteryRuntimeBanner runtime={runtime} />}
 
       {o.inverterMode && (
         <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)]">
