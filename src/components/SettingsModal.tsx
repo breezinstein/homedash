@@ -18,10 +18,12 @@ import {
   ArrowDown,
   Code2,
   Bell,
+  Gauge,
 } from 'lucide-react';
 import { CategoryModal } from './CategoryModal';
 import { BackupManager } from './BackupManager';
 import { NotificationsSettings } from './notifications/NotificationsSettings';
+import { MonitoringSettings } from './MonitoringSettings';
 import { themePresets } from '../themes';
 import type { ThemePreset } from '../themes';
 import type { Colors } from '../types';
@@ -34,7 +36,7 @@ interface SettingsModalProps {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { config, setConfig, reorderCategories, addCategory, updateCategory, deleteCategory } = useDashboard();
   const confirm = useConfirm();
-  const [activeTab, setActiveTab] = useState<'categories' | 'appearance' | 'backups' | 'notifications'>('categories');
+  const [activeTab, setActiveTab] = useState<'categories' | 'appearance' | 'backups' | 'notifications' | 'monitoring'>('categories');
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showBackupManager, setShowBackupManager] = useState(false);
@@ -136,6 +138,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     { id: 'categories' as const, label: 'Categories', icon: Layout },
     { id: 'appearance' as const, label: 'Appearance', icon: Palette },
     { id: 'notifications' as const, label: 'Notifications', icon: Bell },
+    { id: 'monitoring' as const, label: 'Monitoring', icon: Gauge },
     { id: 'backups' as const, label: 'Backups', icon: Database },
   ];
 
@@ -536,6 +539,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
             {/* Notifications Tab */}
             {activeTab === 'notifications' && <NotificationsSettings />}
+
+            {/* Monitoring Tab */}
+            {activeTab === 'monitoring' && <MonitoringSettings />}
 
             {/* Backups Tab */}
             {activeTab === 'backups' && (
