@@ -324,6 +324,7 @@ export interface MonitorOverview {
   usenet: UsenetSnapshot | null;
   alerts: { firing: AlertInstance[]; recentlyResolved: AlertInstance[] };
   pollIntervalMs: number;
+  tabRotationSeconds: number;
 }
 
 // Copyparty file-sharing types

@@ -639,6 +639,7 @@ export class MonitorManager {
       usenet: usenetResult,
       alerts: { firing: [], recentlyResolved: [] },
       pollIntervalMs: interval,
+      tabRotationSeconds: mon.ui?.tabRotationSeconds ?? 15,
     };
 
     // Alert evaluation
@@ -706,6 +707,7 @@ function emptyOverview() {
     usenet: null,
     alerts: { firing: [], recentlyResolved: [] },
     pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
+    tabRotationSeconds: 15,
   };
 }
 

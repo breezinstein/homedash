@@ -22,8 +22,10 @@ export function MonitorApp() {
   const { overview, isLoading, error, authRequired } = useMonitorOverview();
   const [showLoginModal, setShowLoginModal] = useState(authRequired);
 
+  const tabRotation = overview?.tabRotationSeconds ?? 15;
+
   const { activeTab, switchTab, remainingSeconds } = useTabRotation({
-    rotationSeconds: overview ? 15 : 0, // placeholder until config-driven
+    rotationSeconds: tabRotation,
   });
 
   const alertCount = (overview?.alerts?.firing?.length ?? 0);
@@ -67,7 +69,7 @@ export function MonitorApp() {
         activeTab={activeTab}
         onSwitch={switchTab}
         remainingSeconds={remainingSeconds}
-        rotationSeconds={15}
+        rotationSeconds={tabRotation}
         mediaBadge={mediaBadge}
       />
 
