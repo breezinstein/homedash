@@ -18,6 +18,7 @@ import {
   Sun,
   LogIn,
   LogOut,
+  Monitor,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -206,6 +207,19 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               >
                 <Activity className="w-5 h-5" />
               </button>
+            )}
+
+            {/* Monitor — admin only; opens the /monitor full-screen dashboard */}
+            {authenticated && (
+              <a
+                href="/monitor"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+                title="HomeLab Monitor (new tab)"
+              >
+                <Monitor className="w-5 h-5" />
+              </a>
             )}
 
             {/* Inverter Monitor — admin only */}

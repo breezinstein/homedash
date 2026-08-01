@@ -117,6 +117,17 @@ const defaultConfig: DashboardConfig = {
   servers: [],
   inverters: [],
   notifications: defaultNotifications,
+  monitoring: {
+    enabled: false,
+    pollIntervalSeconds: 10,
+    glancesHosts: [],
+    solar: { enabled: false },
+    docker: { enabled: true },
+    media: [],
+    usenet: [],
+    ui: { tabRotationSeconds: 15 },
+    alerts: [],
+  },
   colors: {
     primary: "#6366f1",
     secondary: "#475569",

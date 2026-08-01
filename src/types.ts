@@ -51,6 +51,7 @@ export interface DashboardConfig {
   servers?: RemoteServer[];
   inverters?: InverterServer[];
   notifications?: NotificationsConfig;
+  monitoring?: MonitoringConfig;
 }
 
 // How long of a history window to request from ntfy on first connect.
@@ -146,6 +147,183 @@ export interface Backup {
   name: string;
   date: string;
   data: DashboardConfig;
+}
+
+// ---------------------------------------------------------------------------
+// Monitoring types — used by the /monitor page and monitor.js backend.
+// ---------------------------------------------------------------------------
+
+export type SourceStatus = 'ok' | 'degraded' | 'down';
+export type Severity = 'info' | 'warning' | 'critical';
+
+export interface MonitoredHost {
+  id: string;
+  name: string;
+  url: string;
+  username?: string;
+  password?: string;
+  dockerSocket?: string;
+  dockerUrl?: string;
+}
+
+export interface MonitoredMedia {
+  id: string;
+  name: string;
+  type: 'emby' | 'jellyfin';
+  url: string;
+  apiKey: string;
+}
+
+export interface MonitoredUsenet {
+  id: string;
+  name: string;
+  type: 'sabnzbd' | 'nzbget';
+  url: string;
+  apiKey?: string;
+  username?: string;
+  password?: string;
+}
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  enabled: boolean;
+  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'reachability';
+  host?: string;
+  metric: string;
+  operator: '>' | '>=' | '<' | '<=' | '==' | '!=';
+  threshold: number;
+  severity: Severity;
+  forSeconds: number;
+  notify: boolean;
+}
+
+export interface MonitoringConfig {
+  enabled: boolean;
+  pollIntervalSeconds: number;
+  glancesHosts: MonitoredHost[];
+  solar: { enabled: boolean };
+  docker: { enabled: boolean };
+  media: MonitoredMedia[];
+  usenet: MonitoredUsenet[];
+  ui: { tabRotationSeconds: number };
+  alerts: AlertRule[];
+}
+
+export interface ContainerHealth {
+  name: string;
+  image: string;
+  state: 'running' | 'exited' | 'restarting' | 'paused' | 'dead' | 'other';
+  health: 'healthy' | 'unhealthy' | 'starting' | 'none';
+  uptime?: string | null;
+}
+
+export interface HostSnapshot {
+  host: { id: string; name: string };
+  status: SourceStatus;
+  error?: string;
+  cpu: { percent: number | null; cores: number | null; load: { '1m': number|null; '5m': number|null; '15m': number|null } };
+  memory: { total: number|null; used: number|null; percent: number|null };
+  disk: { total: number|null; used: number|null; percent: number|null };
+  network: { rxBps: number|null; txBps: number|null };
+  uptime: { seconds: number|null; formatted: string|null };
+  system?: { hostname?: string; platform?: string; distro?: string; glancesVersion?: string };
+  containers: ContainerHealth[];
+}
+
+export interface SolarSnapshot {
+  status: SourceStatus;
+  error?: string;
+  pvPowerW: number | null;
+  loadPowerW: number | null;
+  gridPowerW: number | null;
+  batterySocPercent: number | null;
+  batteryPowerW: number | null;
+  batteryRuntimeMins: number | null;
+}
+
+export interface DockerSummary {
+  status: SourceStatus;
+  total: number;
+  running: number;
+  healthy: number;
+  unhealthy: number;
+  restarting: number;
+  problems: ContainerHealth[];
+}
+
+export interface MediaStream {
+  server: string;
+  serverType: 'emby' | 'jellyfin';
+  user: string;
+  client: string;
+  title: string;
+  subtitle?: string;
+  progressPercent: number | null;
+  positionLabel: string;
+  playMethod: 'DirectPlay' | 'DirectStream' | 'Transcode';
+  transcodeDetail?: string;
+  paused: boolean;
+}
+
+export interface MediaSnapshot {
+  status: SourceStatus;
+  error?: string;
+  activeStreams: number;
+  transcoding: number;
+  streams: MediaStream[];
+}
+
+export interface UsenetSlot {
+  instance: string;
+  name: string;
+  percent: number;
+  sizeMb: number | null;
+  remainingMb: number | null;
+  status: string;
+}
+
+export interface UsenetInstance {
+  name: string;
+  type: 'sabnzbd' | 'nzbget';
+  status: SourceStatus;
+  error?: string;
+  paused: boolean;
+  speedBps: number | null;
+  etaSeconds: number | null;
+  queuedTotal: number;
+  slots: UsenetSlot[];
+}
+
+export interface UsenetSnapshot {
+  status: SourceStatus;
+  instances: UsenetInstance[];
+}
+
+export interface AlertInstance {
+  id: string;
+  ruleId: string;
+  name: string;
+  severity: Severity;
+  state: 'firing' | 'resolved';
+  message: string;
+  value: number | string | null;
+  since: number;
+  resolvedAt?: number;
+  acked: boolean;
+  notifiedAt?: number;
+}
+
+export interface MonitorOverview {
+  timestamp: number;
+  globalStatus: 'ok' | 'degraded' | 'critical';
+  hosts: HostSnapshot[];
+  solar: SolarSnapshot | null;
+  docker: DockerSummary;
+  media: MediaSnapshot | null;
+  usenet: UsenetSnapshot | null;
+  alerts: { firing: AlertInstance[]; recentlyResolved: AlertInstance[] };
+  pollIntervalMs: number;
 }
 
 // Copyparty file-sharing types

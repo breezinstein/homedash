@@ -8,6 +8,7 @@ import { dirname, join, basename, extname, resolve, sep } from 'path';
 import crypto from 'crypto';
 import os from 'os';
 import { NotificationManager } from './notifications.js';
+import { MonitorManager } from './monitor.js';
 import {
   authEnabled,
   optionalAuth,
@@ -40,6 +41,13 @@ const NOTIFICATIONS_PATH = join(__dirname, 'data', 'notifications.json');
 
 // Single server-side ntfy subscription shared by all dashboard clients.
 const notificationManager = new NotificationManager(NOTIFICATIONS_PATH);
+
+// Monitor module — aggregates Glances, solar, docker, media, usenet stats
+// into one cache and evaluates alert rules on a background cadence.
+const monitorManager = new MonitorManager(
+  () => configCache.config,
+  notificationManager,
+);
 
 // In-memory config cache. The config file is read once at startup, then
 // served from memory; PUT updates both the file and the cache atomically.
@@ -169,6 +177,17 @@ const defaultConfig = {
   },
   categoryOrder: [],
   clips: [],
+  monitoring: {
+    enabled: false,
+    pollIntervalSeconds: 10,
+    glancesHosts: [],
+    solar: { enabled: false },
+    docker: { enabled: true },
+    media: [],
+    usenet: [],
+    ui: { tabRotationSeconds: 15 },
+    alerts: [],
+  },
   colors: {
     primary: "#6366f1",
     secondary: "#475569",
@@ -212,6 +231,7 @@ refreshConfigCache();
   await notificationManager.load();
   if (configCache.config === null) await refreshConfigCache();
   notificationManager.reconfigure(configCache.config?.notifications);
+  monitorManager.start();
 })();
 
 // GET /api/config - Read config (served from in-memory cache when fresh).
@@ -261,6 +281,8 @@ app.put('/api/config', requireAuth, async (req, res) => {
     // Re-apply notifications config (no-op unless a connection-relevant field
     // actually changed, so routine saves don't drop the upstream stream).
     notificationManager.reconfigure(config.notifications);
+    // Reconfigure monitor poller (pick up new hosts, renamed sources, etc.).
+    monitorManager.reconfigure();
     res.json({ success: true, lastModified });
   } catch (error) {
     res.status(500).json({ error: 'Failed to write config' });
@@ -1490,6 +1512,35 @@ app.post('/api/notifications/dismiss', requireAuth, (req, res) => {
   if (!id) return res.status(400).json({ error: 'id required' });
   notificationManager.dismiss(id);
   res.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
+// Monitor — aggregated home-lab overview
+// ---------------------------------------------------------------------------
+
+// GET /api/monitor/overview - Latest snapshot from the background poller.
+// Admin only: contains hostnames, IPs, container lists, media details.
+app.get('/api/monitor/overview', requireAuth, (req, res) => {
+  res.json(monitorManager.getOverview());
+});
+
+// GET /api/monitor/alerts - Active + recently resolved alert instances.
+app.get('/api/monitor/alerts', requireAuth, (req, res) => {
+  res.json(monitorManager.getAlerts());
+});
+
+// POST /api/monitor/alerts/:id/ack - Acknowledge a firing alert.
+app.post('/api/monitor/alerts/:id/ack', requireAuth, (req, res) => {
+  monitorManager.ackAlert(req.params.id);
+  res.json({ success: true });
+});
+
+// GET /api/monitor/healthz - Liveness check (anonymous-safe).
+app.get('/api/monitor/healthz', (req, res) => {
+  res.json({
+    running: true,
+    snapshotAge: monitorManager.getSnapshotAge(),
+  });
 });
 
 // Serve static files in production
