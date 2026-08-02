@@ -247,7 +247,9 @@ async function fetchGlancesHost(host) {
 }
 
 async function fetchSolar(config) {
-  if (!config?.solar?.enabled) return null;
+  // config is the full DashboardConfig; solar settings are under monitoring.solar
+  const solarCfg = config?.monitoring?.solar;
+  if (!solarCfg?.enabled) return null;
   const inv = (config.inverters && config.inverters.length > 0) ? config.inverters[0] : null;
   if (!inv || !inv.url) return null;
 

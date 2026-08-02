@@ -17,7 +17,7 @@ import {
   OpnsenseCard,
 } from './components';
 
-const HOSTS_PER_PAGE = 3;
+const HOSTS_PER_PAGE = 4;
 
 export function MonitorApp() {
   const { overview, isLoading, error, authRequired } = useMonitorOverview();
@@ -27,20 +27,21 @@ export function MonitorApp() {
   const tabRotation = overview?.tabRotationSeconds ?? 15;
   const hosts = overview?.hosts ?? [];
   const totalPages = Math.max(1, Math.ceil(hosts.length / HOSTS_PER_PAGE));
+  const needsPagination = hosts.length > HOSTS_PER_PAGE;
 
   // Rotate host pages on the same cadence as tab rotation
   const { activeTab, switchTab, remainingSeconds } = useTabRotation({
     rotationSeconds: hosts.length > HOSTS_PER_PAGE ? Math.max(6, tabRotation / 2) : 0,
   });
 
-  // Auto-rotate host pages on the infra tab
+  // Auto-rotate host pages on the infra tab (only when pagination is needed)
   useEffect(() => {
-    if (activeTab !== 'infra' || hosts.length <= HOSTS_PER_PAGE) return;
+    if (activeTab !== 'infra' || !needsPagination) return;
     const id = setInterval(() => {
       setHostPage(p => (p + 1) % totalPages);
     }, Math.max(6000, tabRotation * 500));
     return () => clearInterval(id);
-  }, [activeTab, totalPages, tabRotation, hosts.length]);
+  }, [activeTab, totalPages, tabRotation, needsPagination]);
 
   const visibleHosts = hosts.slice(hostPage * HOSTS_PER_PAGE, (hostPage + 1) * HOSTS_PER_PAGE);
 
@@ -100,8 +101,8 @@ export function MonitorApp() {
           <DockerCard docker={overview?.docker ?? emptyDocker} />
         </div>
 
-        {/* Pagination dots */}
-        {hosts.length > HOSTS_PER_PAGE && (
+        {/* Pagination dots — only when needed */}
+        {needsPagination && (
           <div className="flex items-center justify-center gap-1 flex-shrink-0" style={{ gridColumn: '1 / span 2', gridRow: overview?.solar ? 4 : 3 }}>
             {Array.from({ length: totalPages }).map((_, i) => (
               <button key={i} onClick={() => setHostPage(i)}
