@@ -87,7 +87,7 @@ export function MonitoringSettings() {
 
   return (
     <div className="space-y-6">
-      <SectionCard title="Home Lab Monitor" description="Background poller that feeds the /monitor full-screen page." icon={Activity}>
+      <SectionCard title="Home Lab Monitor" description="Background poller that feeds the /monitor full-screen page." icon={Activity} defaultOpen>
         <ToggleRow label="Enable monitoring" description="Turn on the background poller. Data is only visible to authenticated users."
           checked={mon.enabled} onChange={(v) => update({ enabled: v })} />
       </SectionCard>
@@ -98,7 +98,7 @@ export function MonitoringSettings() {
 
       {mon.enabled && (
         <>
-          <SectionCard title="Intervals" icon={Clock}>
+          <SectionCard title="Intervals" icon={Clock} defaultOpen>
             <SliderRow label="Poll interval" value={mon.pollIntervalSeconds} min={5} max={60} step={5} unit="s"
               onChange={(v) => update({ pollIntervalSeconds: v })} />
             <SliderRow label="Tab rotation" value={mon.ui?.tabRotationSeconds ?? 15} min={0} max={60} step={5} unit="s"
@@ -338,17 +338,20 @@ function EntityList({
 // Small reusable pieces
 // ---------------------------------------------------------------------------
 
-function SectionCard({ title, description, icon: Icon, children }: {
-  title: string; description?: string; icon: React.ComponentType<{ className?: string }>; children: React.ReactNode;
+function SectionCard({ title, description, icon: Icon, children, defaultOpen = false }: {
+  title: string; description?: string; icon: React.ComponentType<{ className?: string }>; children: React.ReactNode; defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
-      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-background)]">
-        <Icon className="w-4 h-4 text-[var(--color-primary)]" />
+      <button onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2.5 border-b border-[var(--color-border)] bg-[var(--color-background)] hover:bg-[var(--color-surface)] transition-colors cursor-pointer text-left">
+        <Icon className="w-4 h-4 text-[var(--color-primary)] flex-shrink-0" />
         <span className="text-[13px] font-semibold text-[var(--color-text-primary)]">{title}</span>
         {description && <span className="text-[11px] text-[var(--color-text-secondary)] ml-2 hidden sm:inline">{description}</span>}
-      </div>
-      <div className="p-3">{children}</div>
+        <span className="ml-auto text-[var(--color-text-secondary)] text-[10px]">{open ? '▲' : '▼'}</span>
+      </button>
+      {open && <div className="p-3">{children}</div>}
     </div>
   );
 }

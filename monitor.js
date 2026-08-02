@@ -521,61 +521,90 @@ async function fetchArr(arrConfigs) {
 // ---------------------------------------------------------------------------
 // OPNSense firewall/router fetcher.
 // OPNSense REST API uses HTTP Basic with apiKey:apiSecret as credentials.
+// Endpoints vary by plugin; we try the most common ones and degrade gracefully.
 // ---------------------------------------------------------------------------
 
 async function fetchOpnsense(opnConfigs) {
   if (!Array.isArray(opnConfigs) || opnConfigs.length === 0) return null;
-  // We fetch the first configured OPNSense instance only (most homelabs have one).
   const o = opnConfigs[0];
   if (!o || !o.url || !o.apiKey || !o.apiSecret) return null;
 
-  try {
-    const headers = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
-    headers.Authorization = 'Basic ' + Buffer.from(`${o.apiKey}:${o.apiSecret}`).toString('base64');
+  const headers = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
+  headers.Authorization = 'Basic ' + Buffer.from(`${o.apiKey}:${o.apiSecret}`).toString('base64');
 
-    const [sysRes, ifaceRes, fwRes] = await Promise.all([
-      fetch(`${o.url}/api/core/system/status`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
-      fetch(`${o.url}/api/diagnostics/interface/getInterfaceStatistics`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
-      fetch(`${o.url}/api/firewall/filter/getStatistics`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
-    ].map(p => p.catch(() => null)));
-
-    const sys = sysRes?.ok ? await sysRes.json().catch(() => ({})) : {};
-    const ifaces = ifaceRes?.ok ? await ifaceRes.json().catch(() => ({})) : {};
-    const fw = fwRes?.ok ? await fwRes.json().catch(() => ({})) : {};
-
-    // OPNSense returns stats in different shapes depending on version.
-    // We normalise gently — null fields are fine.
-    const ifList = Array.isArray(ifaces.statistics) ? ifaces.statistics
-      : Array.isArray(ifaces) ? ifaces
-      : [];
-
-    const wanIfaces = ifList.filter(i => {
-      const desc = (i.description || i.descr || '').toLowerCase();
-      const name = (i.interface || i.if || '').toLowerCase();
-      return desc.includes('wan') || name.startsWith('wan') || name.startsWith('igb') || name.startsWith('vtnet');
-    }).map(i => ({
-      name: i.interface || i.if || '—',
-      description: i.description || i.descr || '',
-      status: i.status || (i.linkstate || '').toLowerCase() || 'unknown',
-      inBps: typeof i.inbytes === 'number' ? i.inbytes : null,
-      outBps: typeof i.outbytes === 'number' ? i.outbytes : null,
-    }));
-
-    return {
-      status: 'ok',
-      hostname: sys.hostname || sys.system?.hostname || null,
-      version: sys.version || sys.product_version || null,
-      uptime: sys.uptime || null,
-      cpuPercent: typeof sys.cpu === 'number' ? round1(sys.cpu) : null,
-      memPercent: typeof sys.memory === 'number' ? round1(sys.memory) : null,
-      diskPercent: typeof sys.disk === 'number' ? round1(sys.disk) : null,
-      wanInterfaces: wanIfaces,
-      firewallStates: typeof fw.current === 'number' ? fw.current : null,
-      dhcpLeases: typeof sys.dhcp_leases === 'number' ? sys.dhcp_leases : null,
-    };
-  } catch (err) {
-    return { status: 'down', error: err.message, hostname: null, version: null, uptime: null, cpuPercent: null, memPercent: null, diskPercent: null, wanInterfaces: [], firewallStates: null, dhcpLeases: null };
+  // Try to fetch multiple endpoints; each failure degrades to null for that section.
+  async function fetchOpn(path) {
+    try {
+      const res = await fetch(`${o.url}${path}`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      if (!res.ok) return null;
+      return await res.json().catch(() => null);
+    } catch { return null; }
   }
+
+  const [sys, iface, fw] = await Promise.all([
+    fetchOpn('/api/core/system/status'),
+    fetchOpn('/api/diagnostics/interface/getInterfaceStatistics'),
+    fetchOpn('/api/diagnostics/firewall/get_firewall_statistics'),
+  ]);
+
+  // Normalise system data
+  const hostname = sys?.hostname || sys?.system?.hostname || null;
+  const version = sys?.version || sys?.product_version || sys?.system?.version || null;
+  const uptime = sys?.uptime || sys?.system?.uptime || null;
+  const cpuPct = typeof sys?.cpu === 'number' ? round1(sys.cpu) : null;
+  const memPct = typeof sys?.memory === 'number' ? round1(sys.memory)
+    : typeof sys?.mem === 'number' ? round1(sys.mem) : null;
+  const diskPct = typeof sys?.disk === 'number' ? round1(sys.disk) : null;
+
+  // Interface stats — OPNSense returns statistics as an object keyed by iface name
+  const ifList = Array.isArray(iface?.statistics) ? iface.statistics
+    : (iface && typeof iface === 'object' ? Object.values(iface).filter(v => typeof v === 'object' && v !== null) : []);
+  const wanIfaces = ifList.filter(i => {
+    const desc = ((i.description || i.descr || '') + (i.interface || i.if || '')).toLowerCase();
+    return desc.includes('wan') || desc.includes('igb') || desc.includes('vtnet');
+  }).slice(0, 4).map(i => ({
+    name: i.interface || i.if || i.device || '—',
+    description: i.description || i.descr || '',
+    status: i.status || i.linkstate || 'unknown',
+    inBps: typeof i.inbytes === 'number' ? i.inbytes : (typeof i.bytes_recv_rate_per_sec === 'number' ? i.bytes_recv_rate_per_sec : null),
+    outBps: typeof i.outbytes === 'number' ? i.outbytes : (typeof i.bytes_sent_rate_per_sec === 'number' ? i.bytes_sent_rate_per_sec : null),
+  }));
+
+  // If no WAN interfaces identified by name, show the first few non-loopback interfaces
+  if (wanIfaces.length === 0 && ifList.length > 0) {
+    for (const i of ifList) {
+      const name = (i.interface || i.if || i.device || '').toLowerCase();
+      if (name === 'lo' || name === 'lo0' || name.startsWith('lo')) continue;
+      wanIfaces.push({
+        name: i.interface || i.if || i.device || '—',
+        description: i.description || i.descr || '',
+        status: i.status || i.linkstate || 'unknown',
+        inBps: typeof i.inbytes === 'number' ? i.inbytes : null,
+        outBps: typeof i.outbytes === 'number' ? i.outbytes : null,
+      });
+      if (wanIfaces.length >= 4) break;
+    }
+  }
+
+  // Firewall states
+  const fwStates = typeof fw?.current === 'number' ? fw.current
+    : typeof fw?.states === 'number' ? fw.states : null;
+
+  // Determine status: any data at all means ok
+  const hasAnyData = hostname || version || uptime || cpuPct !== null || memPct !== null || wanIfaces.length > 0;
+  if (!hasAnyData && !sys && !iface && !fw) {
+    return { status: 'down', error: 'No data from OPNSense API — check URL, API key, and API secret',
+      hostname: null, version: null, uptime: null, cpuPercent: null, memPercent: null, diskPercent: null,
+      wanInterfaces: [], firewallStates: null, dhcpLeases: null };
+  }
+
+  return {
+    status: 'ok',
+    hostname, version, uptime, cpuPercent: cpuPct, memPercent: memPct, diskPercent: diskPct,
+    wanInterfaces: wanIfaces,
+    firewallStates: fwStates,
+    dhcpLeases: typeof sys?.dhcp_leases === 'number' ? sys.dhcp_leases : null,
+  };
 }
 
 // ---------------------------------------------------------------------------

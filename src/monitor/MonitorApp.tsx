@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { LoginModal } from '../components/LoginModal';
 import { useMonitorOverview } from './useMonitorOverview';
 import { useTabRotation } from './useTabRotation';
@@ -33,8 +33,8 @@ export function MonitorApp() {
     rotationSeconds: hosts.length > HOSTS_PER_PAGE ? Math.max(6, tabRotation / 2) : 0,
   });
 
-  // Override tab rotation to also paginate hosts when on infra tab
-  useMemo(() => {
+  // Auto-rotate host pages on the infra tab
+  useEffect(() => {
     if (activeTab !== 'infra' || hosts.length <= HOSTS_PER_PAGE) return;
     const id = setInterval(() => {
       setHostPage(p => (p + 1) % totalPages);
@@ -75,33 +75,43 @@ export function MonitorApp() {
         rotationSeconds={tabRotation} mediaBadge={mediaBadge} />
 
       {/* Infrastructure tab */}
-      <main className="flex-1 grid gap-[14px] p-[14px_20px_18px] min-h-0"
-        style={{ display: activeTab === 'infra' ? 'grid' : 'none', gridTemplateColumns: '1.25fr 1fr 0.95fr', gridTemplateRows: '1fr 1fr 1fr' }}>
-        {/* Host cards — column 1, paginated */}
-        <div style={{ gridColumn: 1, gridRow: '1 / span 3' }} className="flex flex-col gap-[10px] min-h-0 overflow-hidden">
-          {visibleHosts.map((h) => (
-            <div key={h.host.id} className="flex-1 min-h-0">
+      <main className="flex-1 grid gap-[10px] p-[10px_16px_14px] min-h-0"
+        style={{ display: activeTab === 'infra' ? 'grid' : 'none', gridTemplateColumns: '1fr 1fr 0.85fr', gridTemplateRows: 'auto 1fr 1fr' }}>
+        {/* Solar — spans columns 1-2 at the top */}
+        {overview?.solar && (
+          <div style={{ gridColumn: '1 / span 2', gridRow: 1 }}>
+            <SolarCard solar={overview.solar} />
+          </div>
+        )}
+
+        {/* Hosts — 2 per row in columns 1-2 */}
+        {visibleHosts.map((h, i) => {
+          const col = (i % 2) + 1;
+          const row = Math.floor(i / 2) + (overview?.solar ? 2 : 1);
+          return (
+            <div key={h.host.id} style={{ gridColumn: col, gridRow: row }} className="min-h-0 overflow-hidden">
               <HostCard host={h} />
             </div>
-          ))}
-          {hosts.length > HOSTS_PER_PAGE && (
-            <div className="flex items-center justify-center gap-1 py-1 flex-shrink-0">
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button key={i} onClick={() => setHostPage(i)}
-                  className={`w-2 h-2 rounded-full transition-colors ${i === hostPage ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'}`} />
-              ))}
-            </div>
-          )}
+          );
+        })}
+
+        {/* Docker — always column 2, row 3 (last host row) */}
+        <div style={{ gridColumn: 2, gridRow: overview?.solar ? 3 : 2 }} className="min-h-0">
+          <DockerCard docker={overview?.docker ?? emptyDocker} />
         </div>
 
-        {/* Middle column: Solar + Docker */}
-        <div className="flex flex-col gap-[14px] min-h-0" style={{ gridColumn: 2, gridRow: '1 / span 3' }}>
-          {overview?.solar && <div className="flex-shrink-0"><SolarCard solar={overview.solar} /></div>}
-          <div className="flex-1 min-h-0"><DockerCard docker={overview?.docker ?? emptyDocker} /></div>
-        </div>
+        {/* Pagination dots */}
+        {hosts.length > HOSTS_PER_PAGE && (
+          <div className="flex items-center justify-center gap-1 flex-shrink-0" style={{ gridColumn: '1 / span 2', gridRow: overview?.solar ? 4 : 3 }}>
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <button key={i} onClick={() => setHostPage(i)}
+                className={`w-2 h-2 rounded-full transition-colors ${i === hostPage ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'}`} />
+            ))}
+          </div>
+        )}
 
-        {/* Alerts rail — column 3 */}
-        <div style={{ gridColumn: 3, gridRow: '1 / span 3' }} className="min-h-0">
+        {/* Alerts rail — column 3, spans all rows */}
+        <div style={{ gridColumn: 3, gridRow: '1 / span 4' }} className="min-h-0">
           <AlertsRail firing={overview?.alerts?.firing ?? []} recentlyResolved={overview?.alerts?.recentlyResolved ?? []}
             onAck={(id) => { ackAlert(id).catch(() => {}); }} />
         </div>
