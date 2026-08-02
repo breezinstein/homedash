@@ -185,6 +185,8 @@ const defaultConfig = {
     docker: { enabled: true },
     media: [],
     usenet: [],
+    arr: [],
+    opnsense: [],
     ui: { tabRotationSeconds: 15 },
     alerts: [],
   },

@@ -7,4 +7,5 @@ export { AlertsRail } from './AlertsRail';
 export { TabBar } from './TabBar';
 export { StreamsCard } from './StreamsCard';
 export { UsenetCard } from './UsenetCard';
-export { SourceDot } from './SourceDot';
+export { ArrCard } from './ArrCard';
+export { OpnsenseCard } from './OpnsenseCard';

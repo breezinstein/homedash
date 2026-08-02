@@ -179,9 +179,27 @@ export interface MonitoredUsenet {
   name: string;
   type: 'sabnzbd' | 'nzbget';
   url: string;
+  // SABnzbd can use API key OR username/password (HTTP Basic).
+  // NZBGet always uses username/password (HTTP Basic).
   apiKey?: string;
   username?: string;
   password?: string;
+}
+
+export interface MonitoredArr {
+  id: string;
+  name: string;
+  type: 'sonarr' | 'radarr';
+  url: string;
+  apiKey: string;
+}
+
+export interface MonitoredOpnsense {
+  id: string;
+  name: string;
+  url: string;
+  apiKey: string;
+  apiSecret: string;
 }
 
 export interface AlertRule {
@@ -206,6 +224,8 @@ export interface MonitoringConfig {
   docker: { enabled: boolean };
   media: MonitoredMedia[];
   usenet: MonitoredUsenet[];
+  arr: MonitoredArr[];
+  opnsense: MonitoredOpnsense[];
   ui: { tabRotationSeconds: number };
   alerts: AlertRule[];
 }
@@ -300,6 +320,59 @@ export interface UsenetSnapshot {
   instances: UsenetInstance[];
 }
 
+// Sonarr/Radarr queue item
+export interface ArrQueueItem {
+  instance: string;
+  instanceType: 'sonarr' | 'radarr';
+  title: string;
+  seriesName?: string;         // Sonarr only
+  quality: string;
+  sizeMb: number | null;
+  progressPercent: number | null;
+  timeLeft: string | null;
+  status: string;
+}
+
+export interface ArrInstance {
+  name: string;
+  type: 'sonarr' | 'radarr';
+  status: SourceStatus;
+  error?: string;
+  queueCount: number;
+  wantedCount: number;          // missing episodes/movies
+  healthOk: boolean;
+  healthWarnings: string[];
+}
+
+export interface ArrSnapshot {
+  status: SourceStatus;
+  instances: ArrInstance[];
+  queue: ArrQueueItem[];        // merged queue across all instances
+}
+
+// OPNSense firewall/router
+export interface OpnsenseInterfaceStats {
+  name: string;
+  description: string;
+  status: string;               // up / down / no carrier
+  inBps: number | null;
+  outBps: number | null;
+}
+
+export interface OpnsenseSnapshot {
+  status: SourceStatus;
+  error?: string;
+  hostname: string | null;
+  version: string | null;
+  uptime: string | null;
+  cpuPercent: number | null;
+  memPercent: number | null;
+  diskPercent: number | null;
+  wanInterfaces: OpnsenseInterfaceStats[];
+  firewallStates: number | null;
+  dhcpLeases: number | null;
+}
+
 export interface AlertInstance {
   id: string;
   ruleId: string;
@@ -322,6 +395,8 @@ export interface MonitorOverview {
   docker: DockerSummary;
   media: MediaSnapshot | null;
   usenet: UsenetSnapshot | null;
+  arr: ArrSnapshot | null;
+  opnsense: OpnsenseSnapshot | null;
   alerts: { firing: AlertInstance[]; recentlyResolved: AlertInstance[] };
   pollIntervalMs: number;
   tabRotationSeconds: number;

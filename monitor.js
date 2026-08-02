@@ -357,8 +357,16 @@ async function fetchUsenet(usenetConfigs) {
   for (const u of usenetConfigs) {
     try {
       if (u.type === 'sabnzbd') {
-        const url = `${u.url}/api?mode=queue&output=json&apikey=${encodeURIComponent(u.apiKey || '')}`;
-        const r = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        // SABnzbd auth: prefer HTTP Basic (username+password), fall back to
+        // API key as query param. Both can be present; Basic takes priority.
+        const headers = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
+        let url = `${u.url}/api?mode=queue&output=json`;
+        if (u.username) {
+          headers.Authorization = 'Basic ' + Buffer.from(`${u.username}:${u.password || ''}`).toString('base64');
+        } else if (u.apiKey) {
+          url += `&apikey=${encodeURIComponent(u.apiKey)}`;
+        }
+        const r = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (!r.ok) { instances.push(instanceError(u, `HTTP ${r.status}`)); continue; }
         const data = await r.json();
         const q = data.queue || {};
@@ -430,6 +438,123 @@ function parseDuration(s) {
   if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
   if (parts.length === 2) return parts[0] * 3600 + parts[1] * 60;
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Sonarr / Radarr fetcher — both share the same v3 API shape.
+// ---------------------------------------------------------------------------
+
+async function fetchArr(arrConfigs) {
+  if (!Array.isArray(arrConfigs) || arrConfigs.length === 0) return null;
+  const instances = [];
+  const allQueue = [];
+
+  for (const a of arrConfigs) {
+    try {
+      const headers = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0', 'X-Api-Key': a.apiKey };
+      const [qRes, sysRes, healthRes] = await Promise.all([
+        fetch(`${a.url}/api/v3/queue`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+        fetch(`${a.url}/api/v3/system/status`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+        fetch(`${a.url}/api/v3/health`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+      ].map(p => p.catch(() => null)));
+
+      const queue = qRes?.ok ? await qRes.json().catch(() => ({})) : {};
+      const health = healthRes?.ok ? await healthRes.json().catch(() => []) : [];
+
+      const queueRecords = Array.isArray(queue.records) ? queue.records : (Array.isArray(queue) ? queue : []);
+      const warnings = Array.isArray(health) ? health.filter(h => h.type === 'warning' || h.type === 'error') : [];
+      const wanted = typeof queue.totalRecords === 'number' ? queue.totalRecords : queueRecords.length;
+
+      for (const r of queueRecords.slice(0, 6)) {
+        allQueue.push({
+          instance: a.name,
+          instanceType: a.type,
+          title: r.title || '—',
+          seriesName: r.series?.title || undefined,
+          quality: r.quality?.quality?.name || (typeof r.quality === 'string' ? r.quality : '—'),
+          sizeMb: typeof r.size === 'number' ? round1(r.size / 1048576) : null,
+          progressPercent: typeof r.size === 'number' && typeof r.sizeleft === 'number' && r.size > 0
+            ? Math.round((1 - (r.sizeleft || 0) / r.size) * 100) : null,
+          timeLeft: r.timeleft || null,
+          status: r.status || r.trackedDownloadStatus || 'queued',
+        });
+      }
+
+      instances.push({
+        name: a.name, type: a.type, status: 'ok',
+        queueCount: wanted,
+        wantedCount: 0, // filled from missing endpoint in v2; ok to default
+        healthOk: warnings.length === 0,
+        healthWarnings: warnings.map(w => w.message || w.source || 'unknown'),
+      });
+    } catch (err) {
+      instances.push({ name: a.name, type: a.type, status: 'down', error: err.message, queueCount: 0, wantedCount: 0, healthOk: false, healthWarnings: [err.message] });
+    }
+  }
+
+  allQueue.sort((a, b) => (b.progressPercent ?? 0) - (a.progressPercent ?? 0));
+  const worst = instances.reduce((s, i) => s === 'down' ? 'down' : i.status === 'down' ? 'down' : i.status === 'degraded' ? 'degraded' : s, 'ok');
+  return { status: worst, instances, queue: allQueue };
+}
+
+// ---------------------------------------------------------------------------
+// OPNSense firewall/router fetcher.
+// OPNSense REST API uses HTTP Basic with apiKey:apiSecret as credentials.
+// ---------------------------------------------------------------------------
+
+async function fetchOpnsense(opnConfigs) {
+  if (!Array.isArray(opnConfigs) || opnConfigs.length === 0) return null;
+  // We fetch the first configured OPNSense instance only (most homelabs have one).
+  const o = opnConfigs[0];
+  if (!o || !o.url || !o.apiKey || !o.apiSecret) return null;
+
+  try {
+    const headers = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
+    headers.Authorization = 'Basic ' + Buffer.from(`${o.apiKey}:${o.apiSecret}`).toString('base64');
+
+    const [sysRes, ifaceRes, fwRes] = await Promise.all([
+      fetch(`${o.url}/api/core/system/status`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+      fetch(`${o.url}/api/diagnostics/interface/getInterfaceStatistics`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+      fetch(`${o.url}/api/firewall/filter/getStatistics`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+    ].map(p => p.catch(() => null)));
+
+    const sys = sysRes?.ok ? await sysRes.json().catch(() => ({})) : {};
+    const ifaces = ifaceRes?.ok ? await ifaceRes.json().catch(() => ({})) : {};
+    const fw = fwRes?.ok ? await fwRes.json().catch(() => ({})) : {};
+
+    // OPNSense returns stats in different shapes depending on version.
+    // We normalise gently — null fields are fine.
+    const ifList = Array.isArray(ifaces.statistics) ? ifaces.statistics
+      : Array.isArray(ifaces) ? ifaces
+      : [];
+
+    const wanIfaces = ifList.filter(i => {
+      const desc = (i.description || i.descr || '').toLowerCase();
+      const name = (i.interface || i.if || '').toLowerCase();
+      return desc.includes('wan') || name.startsWith('wan') || name.startsWith('igb') || name.startsWith('vtnet');
+    }).map(i => ({
+      name: i.interface || i.if || '—',
+      description: i.description || i.descr || '',
+      status: i.status || (i.linkstate || '').toLowerCase() || 'unknown',
+      inBps: typeof i.inbytes === 'number' ? i.inbytes : null,
+      outBps: typeof i.outbytes === 'number' ? i.outbytes : null,
+    }));
+
+    return {
+      status: 'ok',
+      hostname: sys.hostname || sys.system?.hostname || null,
+      version: sys.version || sys.product_version || null,
+      uptime: sys.uptime || null,
+      cpuPercent: typeof sys.cpu === 'number' ? round1(sys.cpu) : null,
+      memPercent: typeof sys.memory === 'number' ? round1(sys.memory) : null,
+      diskPercent: typeof sys.disk === 'number' ? round1(sys.disk) : null,
+      wanInterfaces: wanIfaces,
+      firewallStates: typeof fw.current === 'number' ? fw.current : null,
+      dhcpLeases: typeof sys.dhcp_leases === 'number' ? sys.dhcp_leases : null,
+    };
+  } catch (err) {
+    return { status: 'down', error: err.message, hostname: null, version: null, uptime: null, cpuPercent: null, memPercent: null, diskPercent: null, wanInterfaces: [], firewallStates: null, dhcpLeases: null };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -612,11 +737,13 @@ export class MonitorManager {
 
     // Fan out
     const hostCfgs = Array.isArray(mon.glancesHosts) ? mon.glancesHosts : [];
-    const [hostResults, solarResult, mediaResult, usenetResult] = await Promise.all([
+    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, opnsenseResult] = await Promise.all([
       Promise.all(hostCfgs.map(h => fetchGlancesHost(h))),
       fetchSolar(cfg),
       fetchMedia(mon.media),
       fetchUsenet(mon.usenet),
+      fetchArr(mon.arr),
+      fetchOpnsense(mon.opnsense),
     ]);
 
     const docker = aggregateDocker(hostResults);
@@ -637,6 +764,8 @@ export class MonitorManager {
       docker,
       media: mediaResult,
       usenet: usenetResult,
+      arr: arrResult,
+      opnsense: opnsenseResult,
       alerts: { firing: [], recentlyResolved: [] },
       pollIntervalMs: interval,
       tabRotationSeconds: mon.ui?.tabRotationSeconds ?? 15,
@@ -705,6 +834,8 @@ function emptyOverview() {
     docker: { status: 'ok', total: 0, running: 0, healthy: 0, unhealthy: 0, restarting: 0, problems: [] },
     media: null,
     usenet: null,
+    arr: null,
+    opnsense: null,
     alerts: { firing: [], recentlyResolved: [] },
     pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
     tabRotationSeconds: 15,

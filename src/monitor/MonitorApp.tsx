@@ -13,6 +13,8 @@ import {
   TabBar,
   StreamsCard,
   UsenetCard,
+  ArrCard,
+  OpnsenseCard,
 } from './components';
 
 // Theme CSS variables come from :root, same as the main dashboard.
@@ -125,15 +127,17 @@ export function MonitorApp() {
           )}
         </div>
 
-        {/* Usenet cards */}
+        {/* Usenet / Arr / OPNSense cards */}
         <div className="flex flex-col gap-[14px] min-h-0" style={{ gridRow: '1 / span 2' }}>
           {overview?.usenet ? (
             <UsenetCard usenet={overview.usenet} />
-          ) : (
+          ) : overview?.arr || overview?.opnsense ? null : (
             <div className="flex items-center justify-center h-full text-[var(--color-text-secondary)] text-[13px]">
               No usenet downloaders configured
             </div>
           )}
+          {overview?.arr && <ArrCard arr={overview.arr} />}
+          {overview?.opnsense && <OpnsenseCard opnsense={overview.opnsense} />}
         </div>
       </main>
     </div>
