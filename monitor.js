@@ -75,16 +75,29 @@ function formatDuration(mins) {
   return `${m}m`;
 }
 
-// Docker status string parser: "Up 2 hours (healthy)" → health="healthy", state="running".
+// Docker status string parser. Glances returns simple status strings (not
+// the full Docker CLI "Up 2 hours (healthy)" format), so we handle both.
 function parseContainerHealth(statusStr) {
   if (!statusStr || typeof statusStr !== 'string') return { state: 'other', health: 'none' };
-  const s = statusStr.toLowerCase();
+  const s = statusStr.toLowerCase().trim();
+  // Simple single-word statuses (Glances default format)
+  if (s === 'running') return { state: 'running', health: 'none' };
+  if (s === 'healthy') return { state: 'running', health: 'healthy' };
+  if (s === 'unhealthy') return { state: 'running', health: 'unhealthy' };
+  if (s === 'restarting') return { state: 'restarting', health: 'none' };
+  if (s === 'paused') return { state: 'paused', health: 'none' };
+  if (s === 'exited' || s === 'dead') return { state: s, health: 'none' };
+  if (s === 'removing') return { state: 'other', health: 'none' };
+  // Docker CLI format: "Up 2 hours (healthy)" etc.
   if (s.includes('restarting')) return { state: 'restarting', health: 'none' };
   if (s.includes('paused')) return { state: 'paused', health: 'none' };
   if (s.includes('exited') || s.includes('dead')) return { state: s.includes('dead') ? 'dead' : 'exited', health: 'none' };
-  if (s.includes('up ')) return { state: 'running', health: s.includes('(healthy)') ? 'healthy' : s.includes('(unhealthy)') ? 'unhealthy' : s.includes('(health: starting)') ? 'starting' : 'none' };
-  if (s.includes('(healthy)')) return { state: 'running', health: 'healthy' };
-  if (s.includes('(unhealthy)')) return { state: 'running', health: 'unhealthy' };
+  if (s.startsWith('up ') || s.includes('(healthy)') || s.includes('(unhealthy)') || s.includes('(health: starting)')) {
+    return {
+      state: 'running',
+      health: s.includes('(healthy)') ? 'healthy' : s.includes('(unhealthy)') ? 'unhealthy' : s.includes('(health: starting)') ? 'starting' : 'none',
+    };
+  }
   return { state: 'other', health: 'none' };
 }
 
@@ -155,11 +168,19 @@ async function fetchGlancesHost(host) {
     const rawContainers = Array.isArray(all.containers) ? all.containers
       : (Array.isArray(all.containers?.containers) ? all.containers.containers : []);
 
-    // Network — sum all interfaces if available.
+    // Network — sum all interfaces if available. Glances v4 uses
+    // bytes_recv_rate_per_sec / bytes_sent_rate_per_sec (bytes/s).
+    // Older versions or Glances v3 may use rx / tx.
     let rxBps = null, txBps = null;
     if (Array.isArray(all.network)) {
-      rxBps = all.network.reduce((s, iface) => s + (typeof iface.rx === 'number' ? iface.rx : 0), 0);
-      txBps = all.network.reduce((s, iface) => s + (typeof iface.tx === 'number' ? iface.tx : 0), 0);
+      rxBps = all.network.reduce((s, iface) => s + (
+        typeof iface.bytes_recv_rate_per_sec === 'number' ? iface.bytes_recv_rate_per_sec
+        : typeof iface.rx === 'number' ? iface.rx
+        : 0), 0);
+      txBps = all.network.reduce((s, iface) => s + (
+        typeof iface.bytes_sent_rate_per_sec === 'number' ? iface.bytes_sent_rate_per_sec
+        : typeof iface.tx === 'number' ? iface.tx
+        : 0), 0);
       rxBps = rxBps > 0 ? rxBps : null;
       txBps = txBps > 0 ? txBps : null;
     } else if (all.network && typeof all.network.rx === 'number') {

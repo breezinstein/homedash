@@ -55,16 +55,13 @@ export function HostCard({ host }: HostCardProps) {
   const loadLabel = load['1m'] != null ? `${load['1m'].toFixed(1)} · ${load['5m']?.toFixed(1) ?? '—'} · ${load['15m']?.toFixed(1) ?? '—'}` : '—';
 
   return (
-    <section className={`flex flex-col rounded-2xl border p-[14px_16px] bg-[var(--color-surface)] min-h-0 overflow-hidden ${down ? 'opacity-75 border-[color-mix(in_srgb,var(--color-error)_50%,transparent)]' : 'border-[var(--color-border)]'}`}>
-      <div className="flex items-center gap-[9px] mb-[11px]">
-        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)]">{h.name}</h2>
-        <span className="text-[11px] text-[var(--color-text-secondary)]">
+    <section className={`flex flex-col rounded-2xl border p-[10px_14px] bg-[var(--color-surface)] min-h-0 h-full overflow-hidden ${down ? 'opacity-75 border-[color-mix(in_srgb,var(--color-error)_50%,transparent)]' : 'border-[var(--color-border)]'}`}>
+      <div className="flex items-center gap-[6px] mb-[6px]">
+        <h2 className="text-[13px] font-semibold text-[var(--color-text-primary)]">{h.name}</h2>
+        <span className="text-[10px] text-[var(--color-text-secondary)] truncate">
           {host.system?.distro || host.system?.platform || ''}
-          {host.system?.glancesVersion ? ` · Glances ${host.system.glancesVersion}` : ''}
         </span>
-        <div className="ml-auto">
-          <SourceDot status={host.status} />
-        </div>
+        <div className="ml-auto"><SourceDot status={host.status} /></div>
       </div>
 
       <StatBar label="CPU" icon="🖥" pct={host.cpu?.percent ?? null} />
@@ -75,7 +72,7 @@ export function HostCard({ host }: HostCardProps) {
         <div className="text-[var(--color-error)] text-[12px] mt-[6px]">⚠ {host.error}</div>
       )}
 
-      <div className="mt-auto pt-[9px] border-t border-[var(--color-border)] flex gap-4 text-[11px] text-[var(--color-text-secondary)]">
+      <div className="mt-auto pt-[6px] border-t border-[var(--color-border)] flex gap-3 text-[10px] text-[var(--color-text-secondary)]">
         <span>Load <b className="tabular-nums text-[var(--color-text-primary)] font-semibold">{loadLabel}</b></span>
         <span>Up <b className="tabular-nums text-[var(--color-text-primary)] font-semibold">{host.uptime?.formatted || '—'}</b></span>
         <span className="ml-auto tabular-nums">
