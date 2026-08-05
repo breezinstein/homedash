@@ -461,8 +461,9 @@ export interface OpnsenseInterfaceStats {
   description: string;
   status: string;               // up / down / no carrier
   active: boolean;              // this WAN is the current default gateway
-  inBps: number | null;
-  outBps: number | null;
+  inBps: number | null;         // live receive rate, bytes/sec
+  outBps: number | null;        // live transmit rate, bytes/sec
+  speedBps: number | null;      // negotiated link speed, bits/sec (OPNsense "line rate")
 }
 
 /** NetFlow / Insight top talker entry from OPNsense. */
@@ -487,6 +488,7 @@ export interface OpnsenseSnapshot {
   netflowTalkers: NetFlowTalker[];
   firewallStates: number | null;
   dhcpLeases: number | null;
+  totalLinkCapacityBps: number | null; // sum of negotiated link speeds, bits/sec
 }
 
 /** Top talker entry from ntopng. */

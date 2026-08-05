@@ -996,11 +996,30 @@ async function fetchOpnsense(opnConfigs) {
       if (Number.isFinite(rxBytes) && Number.isFinite(txBytes)) {
         opnsenseInterfaceSamples.set(counterKey, { timestamp: now, rxBytes, txBytes });
       }
-      return { name: iface?.device || key, description: ifDescr, status: ifStatus, active: isActive, inBps, outBps };
+      // OPNsense reports the negotiated link speed as "line rate" (bit/s), e.g.
+      // "1000000000 bit/s". Parse the leading number and honour any unit suffix.
+      const lineRateStr = String(iface?.['line rate'] || '').trim();
+      const lineRateMatch = /^([\d.]+)/.exec(lineRateStr);
+      let speedBps = null;
+      if (lineRateMatch) {
+        const num = Number(lineRateMatch[1]);
+        if (Number.isFinite(num) && num > 0) {
+          const lower = lineRateStr.toLowerCase();
+          if (lower.includes('gbit') || lower.includes('gbps')) speedBps = num * 1e9;
+          else if (lower.includes('mbit') || lower.includes('mbps')) speedBps = num * 1e6;
+          else if (lower.includes('kbit') || lower.includes('kbps')) speedBps = num * 1e3;
+          else speedBps = num; // already bit/s
+        }
+      }
+      return { name: iface?.device || key, description: ifDescr, status: ifStatus, active: isActive, inBps, outBps, speedBps };
     });
 
   const wanIfaces = buildIfaces(wanDeviceSeen);
   const lanIfaces = buildIfaces(lanDeviceSeen);
+  // Aggregate negotiated link capacity across every interface (bit/s). Used by
+  // the frontend to express throughput as a % of real link saturation.
+  const totalLinkCapacityBps = [...wanIfaces, ...lanIfaces]
+    .reduce((s, i) => s + (i.speedBps ?? 0), 0) || null;
 
   // Parse Insight NetFlow top talkers
   const netflowTalkers = [];
@@ -1025,7 +1044,7 @@ async function fetchOpnsense(opnConfigs) {
   if (!hostname && !resources && !activity && !traffic && !pfStates) {
     return { status: 'down', error: 'No data from OPNSense API — check URL, API key, and API secret',
       hostname: null, version: null, uptime: null, cpuPercent: null, memPercent: null, diskPercent: null,
-      wanInterfaces: [], lanInterfaces: [], netflowTalkers: [], firewallStates: null, dhcpLeases: null };
+      wanInterfaces: [], lanInterfaces: [], netflowTalkers: [], firewallStates: null, dhcpLeases: null, totalLinkCapacityBps: null };
   }
 
   return {
@@ -1036,6 +1055,7 @@ async function fetchOpnsense(opnConfigs) {
     netflowTalkers,
     firewallStates: Number.isFinite(Number(pfStates?.current)) ? Number(pfStates.current) : null,
     dhcpLeases: dhcpLeaseCount,
+    totalLinkCapacityBps,
   };
 }
 

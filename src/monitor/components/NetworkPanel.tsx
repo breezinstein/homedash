@@ -6,12 +6,13 @@ interface NetworkPanelProps {
   ntopng?: NtopngSnapshot | null;
 }
 
-function formatBps(bps: number | null): string {
-  if (bps == null || !Number.isFinite(bps)) return '—';
-  if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)} Gbps`;
-  if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} Mbps`;
-  if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} Kbps`;
-  return `${Math.round(bps)} bps`;
+function formatBps(bytesPerSec: number | null): string {
+  if (bytesPerSec == null || !Number.isFinite(bytesPerSec)) return '—';
+  const bits = bytesPerSec * 8; // bytes/sec → bits/sec
+  if (bits >= 1e9) return `${(bits / 1e9).toFixed(1)} Gbps`;
+  if (bits >= 1e6) return `${(bits / 1e6).toFixed(1)} Mbps`;
+  if (bits >= 1e3) return `${(bits / 1e3).toFixed(1)} Kbps`;
+  return `${Math.round(bits)} bps`;
 }
 
 function formatBytes(bytes: number): string {
@@ -49,7 +50,11 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
   const totalIn = allIfaces.reduce((s, i) => s + (i.inBps ?? 0), 0);
   const totalOut = allIfaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
   const totalBps = totalIn + totalOut;
-  const throughputPct = totalBps > 0 ? Math.min(100, (totalBps / 1e9) * 100) : 0;
+  // Honest saturation: real bit rate vs. the sum of negotiated link speeds.
+  // Falls back to a 1 Gbps reference only if OPNsense reports no line rates.
+  const capacity = opnsense?.totalLinkCapacityBps;
+  const denominator = capacity && capacity > 0 ? capacity : 1e9;
+  const throughputPct = totalBps > 0 ? Math.min(100, ((totalBps * 8) / denominator) * 100) : 0;
 
   // ntopng top talkers take precedence; OPNsense NetFlow is the fallback.
   const ntopngTalkers = ntopng?.topTalkers ?? [];
@@ -84,7 +89,7 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
           <div className="net-section-title">Total Throughput</div>
           <div style={{ textAlign: 'center', padding: '8px 0' }}>
             <div className="gauge-box" style={{ margin: '0 auto' }}>
-              <RingGauge percent={throughputPct} size={64} color="#e67e22" warnAt={50} criticalAt={80} />
+              <RingGauge percent={throughputPct} size={64} warnAt={50} criticalAt={80} />
               <div className="gauge-val" style={{ fontSize: 14 }}>{Math.round(throughputPct)}%</div>
             </div>
             <div className="net-throughput-label">

@@ -6,12 +6,13 @@ interface OpnsenseCardProps {
   opnsense: OpnsenseSnapshot;
 }
 
-function formatBps(bps: number | null): string {
-  if (bps == null || !Number.isFinite(bps)) return '—';
-  if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)} GB/s`;
-  if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} MB/s`;
-  if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} KB/s`;
-  return `${Math.round(bps)} B/s`;
+function formatBps(bytesPerSec: number | null): string {
+  if (bytesPerSec == null || !Number.isFinite(bytesPerSec)) return '—';
+  const bits = bytesPerSec * 8; // bytes/sec → bits/sec
+  if (bits >= 1e9) return `${(bits / 1e9).toFixed(1)} Gbps`;
+  if (bits >= 1e6) return `${(bits / 1e6).toFixed(1)} Mbps`;
+  if (bits >= 1e3) return `${(bits / 1e3).toFixed(1)} Kbps`;
+  return `${Math.round(bits)} bps`;
 }
 
 export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
@@ -24,8 +25,11 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
   const totalOut = allIfaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
   const totalBps = totalIn + totalOut;
 
-  // Throughput gauge: arbitrary scale — 1 Gbps ≈ 100 %, capped
-  const throughputPct = totalBps > 0 ? Math.min(100, (totalBps / 1e9) * 100) : 0;
+  // Honest saturation: real bit rate vs. the sum of negotiated link speeds.
+  // Falls back to a 1 Gbps reference only if OPNsense reports no line rates.
+  const capacity = opnsense.totalLinkCapacityBps;
+  const denominator = capacity && capacity > 0 ? capacity : 1e9;
+  const throughputPct = totalBps > 0 ? Math.min(100, ((totalBps * 8) / denominator) * 100) : 0;
 
   const activeWan = opnsense.wanInterfaces.find((i) => i.active);
   const standbyWans = opnsense.wanInterfaces.filter((i) => !i.active);
@@ -54,7 +58,7 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
           {/* Gauge + throughput headline */}
           <div className="summary-gauge">
             <div className="gauge-box" style={{ margin: '0 auto' }}>
-              <RingGauge percent={throughputPct} size={70} color="#e67e22" />
+              <RingGauge percent={throughputPct} size={70} warnAt={50} criticalAt={80} />
               <div className="gauge-val">{Math.round(throughputPct)}%</div>
             </div>
             <div className="summary-hero-value">{formatBps(totalBps)}</div>
