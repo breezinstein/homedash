@@ -1,8 +1,9 @@
-import type { OpnsenseSnapshot } from '../../types';
+import type { OpnsenseSnapshot, NtopngSnapshot, NtopngTalker } from '../../types';
 import { RingGauge } from './RingGauge';
 
 interface NetworkPanelProps {
-  opnsense: OpnsenseSnapshot;
+  opnsense?: OpnsenseSnapshot | null;
+  ntopng?: NtopngSnapshot | null;
 }
 
 function formatBps(bps: number | null): string {
@@ -26,18 +27,40 @@ function formatBytes(bytes: number): string {
  * Network overview panel: 3-column top row (throughput gauge, WAN, LAN)
  * followed by a full-width Top Talkers table.
  */
-export function NetworkPanel({ opnsense }: NetworkPanelProps) {
-  const totalIn = opnsense.wanInterfaces
-    .filter((i) => i.status === 'up')
-    .reduce((s, i) => s + (i.inBps ?? 0), 0);
-  const totalOut = opnsense.wanInterfaces
-    .filter((i) => i.status === 'up')
-    .reduce((s, i) => s + (i.outBps ?? 0), 0);
+export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
+  // Total throughput aggregates every interface (WAN + LAN), not just the WAN.
+  const allIfaces = [
+    ...(opnsense?.wanInterfaces ?? []),
+    ...(opnsense?.lanInterfaces ?? []),
+  ];
+  const totalIn = allIfaces.reduce((s, i) => s + (i.inBps ?? 0), 0);
+  const totalOut = allIfaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
   const totalBps = totalIn + totalOut;
   const throughputPct = totalBps > 0 ? Math.min(100, (totalBps / 1e9) * 100) : 0;
 
-  // NetFlow top talkers from Insight
-  const talkers = opnsense.netflowTalkers ?? [];
+  // ntopng top talkers take precedence; OPNsense NetFlow is the fallback.
+  const ntopngTalkers = ntopng?.topTalkers ?? [];
+  const netflowTalkers = opnsense?.netflowTalkers ?? [];
+
+  if (!opnsense) {
+    return (
+      <div className="net-v2">
+        <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
+          <div className="net-section-title">
+            Top Talkers · ntopng
+            {ntopng?.ifname && <span className="net-talker-source">{ntopng.ifname}</span>}
+          </div>
+          {ntopngTalkers.length > 0 ? (
+            <NtopTalkersTable talkers={ntopngTalkers} />
+          ) : (
+            <div className="text-[#a0a0a0] text-[12px] py-3 px-1">
+              Configure ntopng in Monitor Settings for per-host top talkers.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="net-v2">
@@ -75,12 +98,23 @@ export function NetworkPanel({ opnsense }: NetworkPanelProps) {
         </div>
       </div>
 
-      {/* ── Row 2: NetFlow Top Talkers ── */}
-      {talkers.length > 0 && (
+      {/* ── Row 2: Top Talkers (ntopng preferred, OPNsense NetFlow fallback) ── */}
+      {ntopngTalkers.length > 0 && (
+        <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
+          <div className="net-section-title">
+            Top Talkers · ntopng
+            {ntopng?.ifname && <span className="net-talker-source">{ntopng.ifname}</span>}
+            {ntopng?.source === 'community' && <span className="net-talker-source">Community</span>}
+          </div>
+          <NtopTalkersTable talkers={ntopngTalkers} />
+        </div>
+      )}
+
+      {ntopngTalkers.length === 0 && netflowTalkers.length > 0 && (
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
           <div className="net-section-title">Top Talkers · NetFlow (Insight)</div>
           <div className="net-talkers-table">
-            {talkers.map((t) => (
+            {netflowTalkers.map((t) => (
               <div className="net-talker-row" key={t.address}>
                 <span className="net-talker-name" title={t.address}>
                   {t.hostname || t.address}
@@ -102,15 +136,71 @@ export function NetworkPanel({ opnsense }: NetworkPanelProps) {
         </div>
       )}
 
-      {/* Fallback: interface-based talkers when NetFlow unavailable */}
-      {talkers.length === 0 && (
+      {/* Fallback: interface-based talkers when neither source is available */}
+      {ntopngTalkers.length === 0 && netflowTalkers.length === 0 && (
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
           <div className="net-section-title">Top Talkers</div>
           <div className="text-[#a0a0a0] text-[12px] py-3 px-1">
-            Enable the os-insight (NetFlow) plugin on OPNsense for per-IP top talkers.
+            Configure ntopng in Monitor Settings for per-host top talkers, or enable the os-insight
+            (NetFlow) plugin on OPNsense.
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Top talker table for ntopng — three columns per row: TX, RX, DATA. */
+function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
+  const maxTx = Math.max(1, ...talkers.map((t) => t.txBps ?? 0));
+  const maxRx = Math.max(1, ...talkers.map((t) => t.rxBps ?? 0));
+  const maxBytes = Math.max(1, ...talkers.map((t) => t.bytes));
+  return (
+    <div className="net-talkers-table">
+      <div className="net-talker-row net-talker-head">
+        <span className="net-talker-name">Host</span>
+        <div className="net-talker-trio">
+          <span className="net-talker-col-head">TX</span>
+          <span className="net-talker-col-head">RX</span>
+          <span className="net-talker-col-head">DATA</span>
+        </div>
+      </div>
+      {talkers.map((t) => (
+        <div className="net-talker-row" key={t.address}>
+          <span className="net-talker-name" title={t.address}>
+            {t.name || t.address}
+          </span>
+          <div className="net-talker-trio">
+            <div className="net-talker-col">
+              <span className="net-talker-col-label">{formatBps(t.txBps)}</span>
+              <div className="net-talker-bar-bg">
+                <div
+                  className="net-talker-bar-fill"
+                  style={{ width: `${Math.min(100, ((t.txBps ?? 0) / maxTx) * 100)}%`, backgroundColor: '#6c5ce7' }}
+                />
+              </div>
+            </div>
+            <div className="net-talker-col">
+              <span className="net-talker-col-label">{formatBps(t.rxBps)}</span>
+              <div className="net-talker-bar-bg">
+                <div
+                  className="net-talker-bar-fill"
+                  style={{ width: `${Math.min(100, ((t.rxBps ?? 0) / maxRx) * 100)}%`, backgroundColor: '#2ecc71' }}
+                />
+              </div>
+            </div>
+            <div className="net-talker-col">
+              <span className="net-talker-col-label">{formatBytes(t.bytes)}</span>
+              <div className="net-talker-bar-bg">
+                <div
+                  className="net-talker-bar-fill"
+                  style={{ width: `${Math.min(100, (t.bytes / maxBytes) * 100)}%`, backgroundColor: '#e67e22' }}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

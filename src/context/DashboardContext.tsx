@@ -128,6 +128,7 @@ const defaultConfig: DashboardConfig = {
     arr: [],
     seerr: [],
     opnsense: [],
+    ntopng: [],
     ui: { tabRotationSeconds: 15 },
     alerts: [],
   },

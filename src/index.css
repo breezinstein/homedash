@@ -105,6 +105,30 @@ select {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  position: relative;
+}
+
+/* Kiosk autorotate progress — a thin bar hugging the bottom screen edge. */
+.monitor-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  z-index: 60;
+  pointer-events: none;
+}
+
+.monitor-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #6c5ce7, #a855f7);
+  transition: width 1s linear;
+}
+
+.monitor-progress-paused .monitor-progress-fill {
+  background: rgba(255, 255, 255, 0.22);
+  opacity: 0.5;
 }
 
 /* ── Monitor header ── */
@@ -977,6 +1001,43 @@ select {
   text-overflow: ellipsis;
 }
 
+/* Three-column talker layout: TX | RX | DATA per row. */
+.net-talker-trio {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.net-talker-col {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.net-talker-col-label {
+  font-size: 10px;
+  color: #a0a0a0;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.net-talker-col-head {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #6b6b73;
+  text-transform: uppercase;
+}
+
+.net-talker-head {
+  opacity: 0.85;
+}
+
 .net-talker-bars {
   flex: 1;
   display: flex;
@@ -999,12 +1060,37 @@ select {
   text-align: right;
 }
 
+.net-talker-sub {
+  color: #6c5ce7;
+  margin-left: 2px;
+}
+
+.net-talker-source {
+  font-size: 10px;
+  font-weight: 500;
+  color: #6c5ce7;
+  margin-left: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
 .net-talker-bar-bg {
   flex: 1;
   height: 4px;
   background: #2e2e32;
   border-radius: 2px;
   overflow: hidden;
+}
+
+/* The trio columns are flex-columns: without this, `flex: 1` (which sets the
+   row layout's width) collapses the bar height to 0 in the main axis, making
+   the progress bars invisible. Pin a fixed, more visible height here. */
+.net-talker-col .net-talker-bar-bg {
+  flex: none;
+  height: 6px;
+  width: 100%;
+  border-radius: 3px;
+  background: #34343a;
 }
 
 .net-talker-bar-fill {

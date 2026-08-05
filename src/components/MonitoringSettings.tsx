@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
-import { Plus, Trash2, Edit2, Activity, Server, Sun, HardDrive, Tv, Download, Clock, Shield, Film, Clapperboard, Bell } from 'lucide-react';
+import { Plus, Trash2, Edit2, Activity, Server, Sun, HardDrive, Tv, Download, Clock, Shield, Film, Clapperboard, Bell, Radar } from 'lucide-react';
 import type {
   MonitoredMedia,
   MonitoredUsenet,
   MonitoredArr,
   MonitoredSeerr,
   MonitoredOpnsense,
+  MonitoredNtopng,
   MonitoringConfig,
   RemoteServer,
   AlertRule,
@@ -55,6 +56,8 @@ export function MonitoringSettings() {
   const [seerrForm, setSeerrForm] = useState<Partial<MonitoredSeerr>>({});
   const [editOpnId, setEditOpnId] = useState<string | null>(null);
   const [opnForm, setOpnForm] = useState<Partial<MonitoredOpnsense>>({});
+  const [editNtopId, setEditNtopId] = useState<string | null>(null);
+  const [ntopForm, setNtopForm] = useState<Partial<MonitoredNtopng>>({});
 
   // --- CRUD helpers ---
   function startEdit(item: any, setEditId: (v: string | null) => void, setForm: (v: any) => void) {
@@ -90,6 +93,7 @@ export function MonitoringSettings() {
   const arrList = mon.arr ?? [];
   const seerrList = mon.seerr ?? [];
   const opnList = mon.opnsense ?? [];
+  const ntopList = mon.ntopng ?? [];
 
   return (
     <div className="space-y-6">
@@ -255,6 +259,39 @@ export function MonitoringSettings() {
                 { key: 'url', label: 'URL', placeholder: 'http://192.168.1.1', helper: 'Base URL of the OPNsense web UI.' },
                 { key: 'apiKey', label: 'API key', placeholder: '', helper: 'OPNsense API key (pair with the secret below).' },
                 { key: 'apiSecret', label: 'API secret', placeholder: '', pw: true, helper: 'OPNsense API secret; used as the Basic-auth password.' },
+              ]}
+              extraFields={(f, set) => (
+                <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                  <input type="checkbox" checked={f.insecureTls === true} onChange={e => set({ ...f, insecureTls: e.target.checked })} />
+                  Trust a self-signed TLS certificate
+                </label>
+              )}
+            />
+          </SectionCard>
+
+          {/* ntopng */}
+          <SectionCard title="ntopng" description="Network traffic analyser: per-host Top Talkers on the Network tab." icon={Radar}>
+            <EntityList
+              items={ntopList} editingId={editNtopId} form={ntopForm} setForm={setNtopForm}
+              onStartEdit={(item) => startEdit(item, setEditNtopId, setNtopForm)}
+              onCancel={() => cancelEdit(setEditNtopId, setNtopForm)}
+              onSave={() => saveEdit(editNtopId, ntopForm, ntopList, 'ntopng',
+                (l) => update({ ntopng: l as MonitoredNtopng[] }), setEditNtopId, setNtopForm,
+                (f) => ({
+                  id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2),
+                  name: f.name?.trim() || '', url: f.url?.trim() || '',
+                  username: f.username?.trim() || '', password: f.password || '',
+                  ifid: f.ifid != null && f.ifid !== '' ? Number(f.ifid) : undefined,
+                  insecureTls: f.insecureTls === true,
+                }))}
+              onRemove={(id) => update({ ntopng: ntopList.filter((x) => x.id !== id) })}
+              typeField="" typeOptions={[]}
+              fields={[
+                { key: 'name', label: 'Label', placeholder: 'ntopng-main', helper: 'Display name shown on the dashboard.' },
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.40:3000', helper: 'Base URL of the ntopng web UI (default port 3000).' },
+                { key: 'username', label: 'Username', placeholder: 'admin', helper: 'ntopng login user (Basic auth).' },
+                { key: 'password', label: 'Password / API token', placeholder: '', pw: true, helper: 'ntopng password, or an API token created via Users → API Token.' },
+                { key: 'ifid', label: 'Interface ID', placeholder: '0', helper: 'Optional. Which monitored interface to use; defaults to the first one.' },
               ]}
               extraFields={(f, set) => (
                 <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
@@ -455,5 +492,5 @@ const DEFAULT_ALERT_RULES: AlertRule[] = [
 
 const defaultMonitoring: MonitoringConfig = {
   enabled: false, pollIntervalSeconds: 10, glancesHosts: [], solar: { enabled: false }, docker: { enabled: true },
-  media: [], usenet: [], arr: [], seerr: [], opnsense: [], ui: { tabRotationSeconds: 15 }, alerts: DEFAULT_ALERT_RULES,
+  media: [], usenet: [], arr: [], seerr: [], opnsense: [], ntopng: [], ui: { tabRotationSeconds: 15 }, alerts: DEFAULT_ALERT_RULES,
 };

@@ -19,6 +19,7 @@ import { NetworkPanel } from './components/NetworkPanel';
 import { PowerPanel } from './components/PowerPanel';
 import { StreamsPanel } from './components/StreamsPanel';
 import { SeerrCard } from './components/SeerrCard';
+import { MonitorProgress } from './components/MonitorProgress';
 
 const MAX_VISIBLE_HOSTS = 9;
 
@@ -26,7 +27,7 @@ export function MonitorApp() {
   const { overview, isLoading, error, authRequired } = useMonitorOverview();
 
   const tabRotationSeconds = overview?.tabRotationSeconds ?? 15;
-  const { activeTab, switchTab, remainingSeconds } = useTabRotation({
+  const { activeTab, switchTab, remainingSeconds, isPaused } = useTabRotation({
     rotationSeconds: tabRotationSeconds,
   });
 
@@ -161,8 +162,8 @@ export function MonitorApp() {
           {/* Network tab */}
           {activeTab === 'network' && (
             <div className="network-panel">
-              {overview?.opnsense ? (
-                <NetworkPanel opnsense={overview.opnsense} />
+              {overview?.opnsense || overview?.ntopng ? (
+                <NetworkPanel opnsense={overview.opnsense} ntopng={overview.ntopng} />
               ) : (
                 <div className="empty-grid-msg">
                   No network appliances configured
@@ -191,6 +192,13 @@ export function MonitorApp() {
           recentlyResolved={overview?.alerts?.recentlyResolved ?? []}
         />
       </div>
+
+      {/* Autorotate progress along the bottom screen edge */}
+      <MonitorProgress
+        rotationSeconds={tabRotationSeconds}
+        remainingSeconds={remainingSeconds}
+        paused={isPaused}
+      />
     </div>
   );
 }

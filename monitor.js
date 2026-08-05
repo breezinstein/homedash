@@ -33,6 +33,12 @@ const NETWORK_PREV_PATH = join(MONITOR_CONFIG_DIR, 'monitor-net-prev.json');
 // used to estimate how long the battery will last under the average load.
 const solarLoadHistory = new Map();
 const opnsenseInterfaceSamples = new Map();
+// ntopng credential scheme that authenticated successfully, keyed by
+// `url|username` so we don't re-probe every poll. Values: 'token' | 'basic'.
+const ntopngAuthSchemes = new Map();
+// Per-host cumulative byte counters (keyed by `url|ifid|address`) used to
+// derive per-direction live TX/RX rates between polls.
+const ntopngTalkerSamples = new Map();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -1034,6 +1040,212 @@ async function fetchOpnsense(opnConfigs) {
 }
 
 // ---------------------------------------------------------------------------
+// ntopng — network traffic analyser. Used for per-host Top Talkers.
+//
+// REST v2 supports two credential styles:
+//   - API tokens (created via Users → API Token) authenticate with the
+//     `Authorization: Token <token>` header.
+//   - Login passwords authenticate with HTTP Basic auth.
+// We probe both (in that order) and cache whichever authenticates. The
+// dedicated top-talkers endpoint lives under /lua/pro/ (Pro license); on
+// Community builds we fall back to the active-hosts endpoint sorted by
+// traffic volume, which yields the same "busiest local hosts" list.
+// ---------------------------------------------------------------------------
+
+export async function fetchNtopng(ntopConfigs) {
+  if (!Array.isArray(ntopConfigs) || ntopConfigs.length === 0) return null;
+  const n = ntopConfigs[0];
+  if (!n || !n.url) return null;
+
+  const base = String(n.url).replace(/\/+$/, '');
+  const insecureTls = n.insecureTls === true;
+  const username = (n.username || '').trim();
+  const password = n.password || '';
+
+  const baseHeaders = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
+  const schemes = [];
+  if (username) {
+    schemes.push({ label: 'token', headers: { ...baseHeaders, Authorization: `Token ${password}` } });
+    schemes.push({ label: 'basic', headers: { ...baseHeaders, Authorization: 'Basic ' + Buffer.from(`${username}:${password}`).toString('base64') } });
+  } else {
+    schemes.push({ label: 'none', headers: baseHeaders });
+  }
+  // Prefer the scheme that worked last time so we don't re-probe every poll.
+  const cacheKey = `${base}|${username}`;
+  const cachedScheme = ntopngAuthSchemes.get(cacheKey);
+  if (cachedScheme) {
+    const idx = schemes.findIndex(s => s.label === cachedScheme);
+    if (idx > 0) schemes.unshift(schemes.splice(idx, 1)[0]);
+  }
+
+  // GET with the given headers → { ok, status, data }. `redirect: 'manual'`
+  // lets us spot the 302 → login.lua redirect ntopng issues when the
+  // credentials are rejected.
+  async function doGet(path, hdrs) {
+    const url = `${base}${path}`;
+    try {
+      if (!insecureTls) {
+        const res = await fetch(url, { headers: hdrs, redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        if (res.status < 200 || res.status >= 300) return { ok: false, status: res.status };
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('json')) return { ok: false, status: res.status };
+        return { ok: true, status: res.status, data: await res.json() };
+      }
+      return await new Promise(resolve => {
+        const u = new URL(url);
+        const req = https.request({
+          hostname: u.hostname,
+          port: u.port || 443,
+          path: u.pathname + u.search,
+          method: 'GET',
+          headers: hdrs,
+          rejectUnauthorized: false,
+          timeout: FETCH_TIMEOUT_MS,
+        }, res => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', c => { body += c; });
+          res.on('end', () => {
+            const status = res.statusCode || 0;
+            if (status < 200 || status >= 300) return resolve({ ok: false, status });
+            const ct = res.headers['content-type'] || '';
+            if (!ct.includes('json')) return resolve({ ok: false, status });
+            try { resolve({ ok: true, status, data: JSON.parse(body) }); }
+            catch { resolve({ ok: false, status }); }
+          });
+        });
+        req.on('timeout', () => req.destroy());
+        req.on('error', () => resolve({ ok: false, status: 0 }));
+      });
+    } catch { return { ok: false, status: 0 }; }
+  }
+
+  const unwrap = d => (d && typeof d === 'object' && 'rsp' in d ? d.rsp : d);
+  const IFACES_PATH = '/lua/rest/v2/get/ntopng/interfaces.lua';
+
+  // Pick the first scheme that authenticates.
+  let chosen = null;
+  for (const s of schemes) {
+    const probe = await doGet(IFACES_PATH, s.headers);
+    if (probe.ok) { chosen = s; break; }
+  }
+  if (!chosen) {
+    const probe = await doGet(IFACES_PATH, schemes[0].headers);
+    const authIssue = probe.status === 302 || probe.status === 401 || probe.status === 403;
+    return {
+      status: 'down',
+      error: authIssue
+        ? 'ntopng authentication failed — check the username and API token'
+        : 'No data from ntopng API — check URL and credentials',
+      ifid: n.ifid != null ? Number(n.ifid) : null,
+      ifname: null, source: null, topTalkers: [],
+    };
+  }
+  ntopngAuthSchemes.set(cacheKey, chosen.label);
+  const hdrs = chosen.headers;
+
+  // Resolve the monitored interface → ifid / ifname.
+  const ifaceRes = await doGet(IFACES_PATH, hdrs);
+  const ifaceList = Array.isArray(unwrap(ifaceRes.data)) ? unwrap(ifaceRes.data) : [];
+  let ifid = n.ifid != null ? Number(n.ifid) : (ifaceList[0]?.ifid ?? 0);
+  if (ifaceList.length > 0 && !ifaceList.some(i => Number(i.ifid) === ifid)) ifid = ifaceList[0].ifid;
+  const iface = ifaceList.find(i => Number(i.ifid) === ifid);
+  const ifname = iface?.name || iface?.ifname || null;
+
+  // 1) Pro: dedicated top local talkers endpoint.
+  let talkers = [];
+  let source = null;
+  const proRes = await doGet(`/lua/pro/rest/v2/get/interface/top/local/talkers.lua?ifid=${ifid}`, hdrs);
+  if (proRes.ok) {
+    const proTalkers = unwrap(proRes.data);
+    if (Array.isArray(proTalkers) && proTalkers.length > 0) {
+      talkers = proTalkers.map(e => {
+        const address = String(e.address ?? e.ip ?? e.key ?? '').trim();
+        if (!address) return null;
+        const bytes = Number(e.value ?? e.bytes ?? e.total ?? 0) || 0;
+        return {
+          address,
+          name: (typeof e.name === 'string' && e.name) ? e.name
+            : (typeof e.label === 'string' && e.label && e.label !== address) ? e.label : null,
+          txBps: null,
+          rxBps: null,
+          throughputBps: null,
+          bytes,
+          bytesSent: 0,
+          bytesRcvd: 0,
+        };
+      }).filter(Boolean);
+      source = 'pro';
+    }
+  }
+
+  // 2) Community fallback: active hosts sorted by live throughput.
+  if (talkers.length === 0) {
+    const actRes = await doGet(
+      `/lua/rest/v2/get/host/active.lua?ifid=${ifid}&mode=local&sortColumn=thpt&sortOrder=desc&perPage=10`, hdrs);
+    if (actRes.ok) {
+      const active = unwrap(actRes.data);
+      const data = Array.isArray(active) ? active : active?.data;
+      if (Array.isArray(data)) {
+        const now = Date.now();
+        talkers = data.map(e => {
+          const address = String(e.ip ?? '').trim();
+          if (!address) return null;
+          const name = typeof e.name === 'string' && e.name && e.name !== '0' ? e.name : null;
+          const bytesSent = Number.isFinite(Number(e.bytes?.sent)) ? Number(e.bytes.sent) : 0;
+          const bytesRcvd = Number.isFinite(Number(e.bytes?.recvd)) ? Number(e.bytes.recvd) : 0;
+          const bytes = Number.isFinite(Number(e.bytes?.total)) ? Number(e.bytes.total) : (bytesSent + bytesRcvd);
+          // Derive per-direction live rates from cumulative byte deltas.
+          const sampleKey = `${base}|${ifid}|${address}`;
+          const prev = ntopngTalkerSamples.get(sampleKey);
+          let txBps = null;
+          let rxBps = null;
+          if (prev) {
+            const dt = (now - prev.ts) / 1000;
+            if (dt > 0) {
+              txBps = Math.max(0, (bytesSent - prev.sent) / dt);
+              rxBps = Math.max(0, (bytesRcvd - prev.recvd) / dt);
+            }
+          }
+          ntopngTalkerSamples.set(sampleKey, { ts: now, sent: bytesSent, recvd: bytesRcvd });
+          // Order by live throughput; before the first delta sample (or if the
+          // endpoint gives no counters) fall back to ntopng's own thpt/bps.
+          const combined = (txBps != null || rxBps != null)
+            ? (txBps ?? 0) + (rxBps ?? 0)
+            : (Number.isFinite(Number(e.thpt?.bps)) ? Number(e.thpt.bps) : null);
+          return {
+            address, name, txBps, rxBps, throughputBps: combined, bytes, bytesSent, bytesRcvd,
+          };
+        }).filter(Boolean);
+        source = 'community';
+      }
+    }
+  }
+
+  // Prune the sample cache so hosts that leave the top list don't accumulate.
+  const pruneCutoff = Date.now() - 10 * 60_000;
+  for (const [k, v] of ntopngTalkerSamples) {
+    if (v.ts < pruneCutoff) ntopngTalkerSamples.delete(k);
+  }
+  if (ntopngTalkerSamples.size > 1000) {
+    const entries = [...ntopngTalkerSamples.entries()].sort((a, b) => b[1].ts - a[1].ts);
+    ntopngTalkerSamples.clear();
+    for (const [k, v] of entries.slice(0, 500)) ntopngTalkerSamples.set(k, v);
+  }
+
+  // Rank by live throughput (busiest now first). If the source reports no
+  // per-host rates (e.g. the Pro endpoint only gives cumulative bytes), fall
+  // back to ranking by total traffic volume.
+  const hasAnyThroughput = talkers.some(t => t.throughputBps != null && t.throughputBps > 0);
+  if (hasAnyThroughput) {
+    talkers.sort((a, b) => (b.throughputBps ?? 0) - (a.throughputBps ?? 0));
+  } else {
+    talkers.sort((a, b) => b.bytes - a.bytes);
+  }
+  return { status: 'ok', error: undefined, ifid, ifname, source, topTalkers: talkers.slice(0, 10) };
+}
+
+// ---------------------------------------------------------------------------
 // Docker aggregation (from Glances container lists)
 // ---------------------------------------------------------------------------
 
@@ -1249,7 +1461,7 @@ export class MonitorManager {
 
     // Fan out
     const hostCfgs = Array.isArray(mon.glancesHosts) ? mon.glancesHosts : [];
-    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult] = await Promise.all([
+    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult] = await Promise.all([
       Promise.all(hostCfgs.map(h => fetchGlancesHost(h))),
       fetchSolar(cfg),
       fetchMedia(mon.media),
@@ -1257,6 +1469,7 @@ export class MonitorManager {
       fetchArr(mon.arr),
       fetchSeerr(mon.seerr),
       fetchOpnsense(mon.opnsense),
+      fetchNtopng(mon.ntopng),
     ]);
 
     const docker = mon.docker?.enabled === false
@@ -1270,7 +1483,7 @@ export class MonitorManager {
     if (hostDowns > 0) globalStatus = 'degraded';
     if (hostDowns === hostResults.length && hostResults.length > 0) globalStatus = 'critical';
     if ((docker.unhealthy || 0) > 0 || (docker.restarting || 0) > 0) globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
-    if ([solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult].some(source => source?.status === 'down')) {
+    if ([solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult].some(source => source?.status === 'down')) {
       globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
     }
 
@@ -1285,6 +1498,7 @@ export class MonitorManager {
       arr: arrResult,
       seerr: seerrResult,
       opnsense: opnsenseResult,
+      ntopng: ntopngResult,
       alerts: { firing: [], recentlyResolved: [] },
       pollIntervalMs: interval,
       tabRotationSeconds: mon.ui?.tabRotationSeconds ?? 15,

@@ -9,6 +9,7 @@ import {
   fetchSeerr,
   estimateBatteryRuntime,
   resolveMetric,
+  fetchNtopng,
 } from './monitor.js';
 
 function snapshot(hosts = []) {
@@ -224,4 +225,151 @@ test('resolveMetric supports solar battery power and seerr sources', () => {
   // Unknown sources / metrics resolve to null.
   assert.equal(resolveMetric({ source: 'seerr', metric: 'nope' }, snapshot), null);
   assert.equal(resolveMetric({ source: 'usenet', metric: 'nope' }, snapshot), null);
+});
+
+test('fetchNtopng normalizes Pro top local talkers', async () => {
+  const server = createServer((req, res) => {
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ ifid: 0, ifname: 'eth0', name: 'LAN' }] }));
+    } else if (req.url.startsWith('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [
+        { address: '192.168.1.10', name: 'laptop', value: 5000000 },
+        { ip: '192.168.1.20', value: 3000000 },
+      ] }));
+    } else {
+      res.statusCode = 404; res.end();
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{ id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}`, username: 'admin', password: 'admin' }]);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.ifname, 'LAN');
+    assert.equal(out.source, 'pro');
+    assert.equal(out.topTalkers.length, 2);
+    assert.equal(out.topTalkers[0].address, '192.168.1.10');
+    assert.equal(out.topTalkers[0].name, 'laptop');
+    assert.equal(out.topTalkers[0].bytes, 5000000);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng falls back to community active hosts', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ ifid: 1, ifname: 'br0' }] }));
+    } else if (req.url.startsWith('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      res.statusCode = 403; res.end(); // not granted on Community
+    } else if (req.url.startsWith('/lua/rest/v2/get/host/active.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: { data: [
+        { ip: '10.0.0.5', name: 'nas', bytes: { total: 9000000, sent: 3000000, recvd: 6000000 }, thpt: { bps: 1200000 } },
+        { ip: '10.0.0.9', name: '0', bytes: { total: 2000000, sent: 500000, recvd: 1500000 }, thpt: { bps: 300000 } },
+      ] } }));
+    } else { res.statusCode = 404; res.end(); }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{ id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}` }]);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.ifid, 1);
+    assert.equal(out.source, 'community');
+    assert.equal(out.topTalkers.length, 2);
+    assert.equal(out.topTalkers[0].bytes, 9000000);
+    assert.equal(out.topTalkers[0].throughputBps, 1200000);
+    assert.equal(out.topTalkers[0].bytesSent, 3000000);
+    assert.equal(out.topTalkers[0].bytesRcvd, 6000000);
+    // First poll has no prior sample, so per-direction rates are not yet known.
+    assert.equal(out.topTalkers[0].txBps, null);
+    assert.equal(out.topTalkers[0].rxBps, null);
+    // name "0" (numeric) is treated as unnamed
+    assert.equal(out.topTalkers[1].name, null);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng authenticates with Token header when Basic is rejected', async () => {
+  // Simulates an ntopng instance that only accepts `Authorization: Token`.
+  // Basic auth gets a 302 → login.lua redirect, exactly like the live device.
+  const server = createServer((req, res) => {
+    const isToken = req.headers.authorization === 'Token secret';
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      if (!isToken) { res.statusCode = 302; res.setHeader('Location', '/lua/login.lua'); res.end(); return; }
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ ifid: 0, ifname: 'eth0', name: 'LAN' }] }));
+    } else if (req.url.startsWith('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      if (!isToken) { res.statusCode = 302; res.setHeader('Location', '/lua/login.lua'); res.end(); return; }
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ address: '10.0.0.8', value: 1234 }] }));
+    } else {
+      res.statusCode = 404; res.end();
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{
+      id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}`,
+      username: 'admin', password: 'secret', // password is an API token here
+    }]);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.source, 'pro');
+    assert.equal(out.topTalkers[0].address, '10.0.0.8');
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng reports an auth failure when every scheme is rejected', async () => {
+  const server = createServer((req, res) => {
+    res.statusCode = 302;
+    res.setHeader('Location', '/lua/login.lua');
+    res.end();
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{
+      id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}`,
+      username: 'admin', password: 'wrong',
+    }]);
+    assert.equal(out.status, 'down');
+    assert.match(out.error, /authentication failed/i);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng ranks top talkers by live throughput, not bytes', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ ifid: 0, ifname: 'eth0' }] }));
+    } else if (req.url.startsWith('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      res.statusCode = 403; res.end();
+    } else if (req.url.startsWith('/lua/rest/v2/get/host/active.lua')) {
+      // Two hosts: B has far more cumulative bytes but a lower live rate.
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: { data: [
+        { ip: '10.0.0.2', name: 'big-downloader', bytes: { total: 8000000 }, thpt: { bps: 200000 } },
+        { ip: '10.0.0.1', name: 'hot-now', bytes: { total: 1000000 }, thpt: { bps: 5000000 } },
+      ] } }));
+    } else { res.statusCode = 404; res.end(); }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{ id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}` }]);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.topTalkers[0].address, '10.0.0.1', 'higher live throughput ranks first');
+    assert.equal(out.topTalkers[0].throughputBps, 5000000);
+    assert.equal(out.topTalkers[1].address, '10.0.0.2');
+  } finally {
+    await new Promise(r => server.close(r));
+  }
 });

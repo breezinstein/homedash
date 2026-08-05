@@ -211,6 +211,19 @@ export interface MonitoredOpnsense {
   insecureTls?: boolean;
 }
 
+// ntopng — network traffic analyser. Basic-auth (username/password) or an API
+// token as the password. `ifid` is optional; when omitted the first actively
+// monitored interface is used.
+export interface MonitoredNtopng {
+  id: string;
+  name: string;
+  url: string;
+  username?: string;
+  password?: string;
+  ifid?: number;
+  insecureTls?: boolean;
+}
+
 export interface AlertRule {
   id: string;
   name: string;
@@ -236,6 +249,7 @@ export interface MonitoringConfig {
   arr: MonitoredArr[];
   seerr: MonitoredSeerr[];
   opnsense: MonitoredOpnsense[];
+  ntopng: MonitoredNtopng[];
   ui: { tabRotationSeconds: number };
   alerts: AlertRule[];
 }
@@ -475,6 +489,27 @@ export interface OpnsenseSnapshot {
   dhcpLeases: number | null;
 }
 
+/** Top talker entry from ntopng. */
+export interface NtopngTalker {
+  address: string;
+  name: string | null;
+  txBps: number | null;         // live upload rate (host sent)
+  rxBps: number | null;         // live download rate (host received)
+  throughputBps: number | null; // combined live rate (tx + rx); null if unknown
+  bytes: number;                // total cumulative traffic
+  bytesSent: number;            // cumulative bytes sent
+  bytesRcvd: number;            // cumulative bytes received
+}
+
+export interface NtopngSnapshot {
+  status: SourceStatus;
+  error?: string;
+  ifid: number | null;
+  ifname: string | null;
+  source: 'pro' | 'community' | null; // which ntopng endpoint produced the data
+  topTalkers: NtopngTalker[];
+}
+
 export interface AlertInstance {
   id: string;
   ruleId: string;
@@ -500,6 +535,7 @@ export interface MonitorOverview {
   arr: ArrSnapshot | null;
   seerr: SeerrSnapshot | null;
   opnsense: OpnsenseSnapshot | null;
+  ntopng: NtopngSnapshot | null;
   alerts: { firing: AlertInstance[]; recentlyResolved: AlertInstance[] };
   pollIntervalMs: number;
   tabRotationSeconds: number;

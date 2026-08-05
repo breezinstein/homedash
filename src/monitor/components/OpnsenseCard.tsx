@@ -15,13 +15,13 @@ function formatBps(bps: number | null): string {
 }
 
 export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
-  // Total throughput across all active WAN interfaces
-  const totalIn = opnsense.wanInterfaces
-    .filter((i) => i.status === 'up')
-    .reduce((s, i) => s + (i.inBps ?? 0), 0);
-  const totalOut = opnsense.wanInterfaces
-    .filter((i) => i.status === 'up')
-    .reduce((s, i) => s + (i.outBps ?? 0), 0);
+  // Total throughput aggregates every interface (WAN + LAN), not just the WAN.
+  const allIfaces = [
+    ...(opnsense.wanInterfaces ?? []),
+    ...(opnsense.lanInterfaces ?? []),
+  ];
+  const totalIn = allIfaces.reduce((s, i) => s + (i.inBps ?? 0), 0);
+  const totalOut = allIfaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
   const totalBps = totalIn + totalOut;
 
   // Throughput gauge: arbitrary scale — 1 Gbps ≈ 100 %, capped
