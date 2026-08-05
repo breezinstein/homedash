@@ -194,6 +194,14 @@ export interface MonitoredArr {
   apiKey: string;
 }
 
+export interface MonitoredSeerr {
+  id: string;
+  name: string;
+  type: 'seerr' | 'overseerr' | 'jellyseerr';
+  url: string;
+  apiKey: string;
+}
+
 export interface MonitoredOpnsense {
   id: string;
   name: string;
@@ -226,6 +234,7 @@ export interface MonitoringConfig {
   media: MonitoredMedia[];
   usenet: MonitoredUsenet[];
   arr: MonitoredArr[];
+  seerr: MonitoredSeerr[];
   opnsense: MonitoredOpnsense[];
   ui: { tabRotationSeconds: number };
   alerts: AlertRule[];
@@ -402,6 +411,36 @@ export interface ArrSnapshot {
   queue: ArrQueueItem[];        // merged queue across all instances
 }
 
+// Seerr / Overseerr / Jellyseerr — open media issues and unattended requests.
+export interface SeerrIssue {
+  id: number;
+  issueType: number;            // 1 video, 2 audio, 3 subtitles, 4 other
+  status: 'open' | 'resolved';
+  mediaTitle: string;
+  mediaType: 'movie' | 'tv';
+  createdBy: string;
+  createdAt: string | null;
+}
+
+export interface SeerrRequest {
+  id: number;
+  status: 'pending' | 'failed'; // pending approval, or failed processing
+  mediaTitle: string;
+  mediaType: 'movie' | 'tv';
+  is4k: boolean;
+  requestedBy: string;
+  createdAt: string | null;
+}
+
+export interface SeerrSnapshot {
+  status: SourceStatus;
+  error?: string;
+  version?: string;
+  issues: SeerrIssue[];
+  pending: SeerrRequest[];
+  failed: SeerrRequest[];
+}
+
 // OPNSense firewall/router
 export interface OpnsenseInterfaceStats {
   name: string;
@@ -459,6 +498,7 @@ export interface MonitorOverview {
   media: MediaSnapshot | null;
   usenet: UsenetSnapshot | null;
   arr: ArrSnapshot | null;
+  seerr: SeerrSnapshot | null;
   opnsense: OpnsenseSnapshot | null;
   alerts: { firing: AlertInstance[]; recentlyResolved: AlertInstance[] };
   pollIntervalMs: number;

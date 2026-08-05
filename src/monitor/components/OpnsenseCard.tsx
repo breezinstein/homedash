@@ -76,11 +76,11 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
             {activeWan && (
               <div className="summary-row">
                 <span className="summary-row-key">
-                  <span className="summary-row-icon">⬆️</span>
+                  <span className="summary-row-icon">📶</span>
                   {activeWan.description || activeWan.name}
                 </span>
-                <span className="summary-row-value" style={{ color: '#2ecc71' }}>
-                  {formatBps((activeWan.inBps ?? 0) + (activeWan.outBps ?? 0))}
+                <span className="summary-row-value" style={{ color: '#2ecc71', fontSize: 11 }}>
+                  ↓ {formatBps(activeWan.inBps ?? 0)} · ↑ {formatBps(activeWan.outBps ?? 0)}
                 </span>
               </div>
             )}

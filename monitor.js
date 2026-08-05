@@ -664,6 +664,150 @@ async function fetchArr(arrConfigs) {
 }
 
 // ---------------------------------------------------------------------------
+// Seerr / Overseerr / Jellyseerr fetcher — surfaces open media issues and
+// unattended (pending / failed) requests. All share the Overseerr API shape.
+// Auth: X-Api-Key header.
+// ---------------------------------------------------------------------------
+
+async function seerrFetchJson(base, path, apiKey) {
+  const res = await fetch(`${base}${path}`, {
+    headers: { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0', 'X-Api-Key': apiKey || '' },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  }).catch(() => null);
+  if (!res || !res.ok) return null;
+  return res.json().catch(() => null);
+}
+
+function seerrMediaTitle(media) {
+  if (!media || typeof media !== 'object') return 'Unknown';
+  return media.title || media.name || 'Unknown';
+}
+
+function seerrUserName(user) {
+  if (!user || typeof user !== 'object') return '—';
+  return user.displayName || user.username || user.email || '—';
+}
+
+// Seerr/Overseerr list endpoints return tmdbId but NOT the media title, so we
+// resolve real titles from the movie/tv detail endpoints and cache them
+// in-memory (keyed by mediaType:tmdbId) to avoid re-fetching full details on
+// every poll. A failed lookup caches null so we don't hammer a bad id.
+const seerrTitleCache = new Map();
+const SEERR_TITLE_TTL_MS = 15 * 60_000;
+
+async function seerrEnrichTitles(base, apiKey, items) {
+  const wanted = new Map();
+  for (const it of items) {
+    if (it.tmdbId == null) continue;
+    const type = it.mediaType === 'tv' ? 'tv' : 'movie';
+    const key = `${type}:${it.tmdbId}`;
+    if (!wanted.has(key)) wanted.set(key, { type, tmdbId: it.tmdbId });
+  }
+  await Promise.all([...wanted.values()].map(async ({ type, tmdbId }) => {
+    const key = `${type}:${tmdbId}`;
+    const cached = seerrTitleCache.get(key);
+    if (cached && Date.now() - cached.ts < SEERR_TITLE_TTL_MS) return;
+    const data = await seerrFetchJson(base, `/api/v1/${type}/${tmdbId}`, apiKey);
+    const title = data ? (type === 'tv' ? data.name : data.title) : null;
+    seerrTitleCache.set(key, { title, ts: Date.now() });
+  }));
+}
+
+function seerrApplyTitle(item) {
+  if (item.tmdbId == null) return;
+  const type = item.mediaType === 'tv' ? 'tv' : 'movie';
+  const cached = seerrTitleCache.get(`${type}:${item.tmdbId}`);
+  if (cached?.title) item.mediaTitle = cached.title;
+}
+
+export async function fetchSeerr(seerrConfigs) {
+  if (!Array.isArray(seerrConfigs) || seerrConfigs.length === 0) return null;
+  const issues = [];
+  const pending = [];
+  const failed = [];
+  let version;
+  let okCount = 0;
+  let failCount = 0;
+  let lastError;
+
+  for (const s of seerrConfigs) {
+    try {
+      const base = String(s.url || '').replace(/\/+$/, '');
+      const apiKey = s.apiKey || '';
+      const [statusRes, issueRes, pendingRes, failedRes] = await Promise.all([
+        seerrFetchJson(base, '/api/v1/status', apiKey),
+        seerrFetchJson(base, '/api/v1/issue?take=10&filter=open', apiKey),
+        seerrFetchJson(base, '/api/v1/request?take=6&filter=pending', apiKey),
+        seerrFetchJson(base, '/api/v1/request?take=6&filter=failed', apiKey),
+      ]);
+
+      if (!statusRes) throw new Error(`unreachable (${s.name || s.url || 'seerr'})`);
+
+      okCount += 1;
+      version = version || statusRes.version || null;
+
+      const myIssues = (Array.isArray(issueRes?.results) ? issueRes.results : []).map((iss) => ({
+        id: iss.id,
+        issueType: iss.issueType ?? 4,
+        status: iss.resolved ? 'resolved' : 'open',
+        mediaTitle: seerrMediaTitle(iss.media),
+        mediaType: iss.media?.mediaType === 'tv' ? 'tv' : 'movie',
+        tmdbId: iss.media?.tmdbId ?? null,
+        createdBy: seerrUserName(iss.createdBy),
+        createdAt: iss.createdAt || null,
+      }));
+      const myPending = (Array.isArray(pendingRes?.results) ? pendingRes.results : []).map((req) => ({
+        id: req.id,
+        status: 'pending',
+        mediaTitle: seerrMediaTitle(req.media),
+        mediaType: req.media?.mediaType === 'tv' ? 'tv' : 'movie',
+        tmdbId: req.media?.tmdbId ?? null,
+        is4k: req.is4k === true,
+        requestedBy: seerrUserName(req.requestedBy),
+        createdAt: req.createdAt || null,
+      }));
+      const myFailed = (Array.isArray(failedRes?.results) ? failedRes.results : []).map((req) => ({
+        id: req.id,
+        status: 'failed',
+        mediaTitle: seerrMediaTitle(req.media),
+        mediaType: req.media?.mediaType === 'tv' ? 'tv' : 'movie',
+        tmdbId: req.media?.tmdbId ?? null,
+        is4k: req.is4k === true,
+        requestedBy: seerrUserName(req.requestedBy),
+        createdAt: req.createdAt || null,
+      }));
+
+      // Resolve real media titles (list payloads only carry tmdbId).
+      await seerrEnrichTitles(base, apiKey, [...myIssues, ...myPending, ...myFailed]);
+      for (const it of [...myIssues, ...myPending, ...myFailed]) seerrApplyTitle(it);
+
+      issues.push(...myIssues);
+      pending.push(...myPending);
+      failed.push(...myFailed);
+    } catch (err) {
+      failCount += 1;
+      lastError = err.message;
+    }
+  }
+
+  // Status: down if nothing responded; degraded if some instances failed or
+  // there is anything that needs attention (open issues, failed requests).
+  let status = 'ok';
+  if (okCount === 0) status = 'down';
+  else if (failCount > 0) status = 'degraded';
+  else if (issues.length > 0 || failed.length > 0) status = 'degraded';
+
+  return {
+    status,
+    error: status === 'down' ? lastError : undefined,
+    version,
+    issues: issues.slice(0, 8),
+    pending: pending.slice(0, 6),
+    failed: failed.slice(0, 6),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // OPNSense firewall/router fetcher.
 // OPNSense REST API uses HTTP Basic with apiKey:apiSecret as credentials.
 // Endpoints vary by plugin; we try the most common ones and degrade gracefully.
@@ -1072,12 +1216,13 @@ export class MonitorManager {
 
     // Fan out
     const hostCfgs = Array.isArray(mon.glancesHosts) ? mon.glancesHosts : [];
-    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, opnsenseResult] = await Promise.all([
+    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult] = await Promise.all([
       Promise.all(hostCfgs.map(h => fetchGlancesHost(h))),
       fetchSolar(cfg),
       fetchMedia(mon.media),
       fetchUsenet(mon.usenet),
       fetchArr(mon.arr),
+      fetchSeerr(mon.seerr),
       fetchOpnsense(mon.opnsense),
     ]);
 
@@ -1092,7 +1237,7 @@ export class MonitorManager {
     if (hostDowns > 0) globalStatus = 'degraded';
     if (hostDowns === hostResults.length && hostResults.length > 0) globalStatus = 'critical';
     if ((docker.unhealthy || 0) > 0 || (docker.restarting || 0) > 0) globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
-    if ([solarResult, mediaResult, usenetResult, arrResult, opnsenseResult].some(source => source?.status === 'down')) {
+    if ([solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult].some(source => source?.status === 'down')) {
       globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
     }
 
@@ -1105,6 +1250,7 @@ export class MonitorManager {
       media: mediaResult,
       usenet: usenetResult,
       arr: arrResult,
+      seerr: seerrResult,
       opnsense: opnsenseResult,
       alerts: { firing: [], recentlyResolved: [] },
       pollIntervalMs: interval,
@@ -1215,6 +1361,7 @@ function emptyOverview() {
     media: null,
     usenet: null,
     arr: null,
+    seerr: null,
     opnsense: null,
     alerts: { firing: [], recentlyResolved: [] },
     pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,

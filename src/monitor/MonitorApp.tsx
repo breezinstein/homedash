@@ -19,6 +19,7 @@ import { HomeStatusCard } from './components/HomeStatusCard';
 import { NetworkPanel } from './components/NetworkPanel';
 import { PowerPanel } from './components/PowerPanel';
 import { StreamsPanel } from './components/StreamsPanel';
+import { SeerrCard } from './components/SeerrCard';
 
 const MAX_VISIBLE_HOSTS = 9;
 
@@ -148,7 +149,11 @@ export function MonitorApp() {
 
                 {/* Bottom-right: Seerr */}
                 <div className="media-v2-card">
-                  <MediaPlaceholder title="Seerr" subtitle="Overseerr / Jellyseerr" icon="🔍" />
+                  {overview?.seerr ? (
+                    <SeerrCard seerr={overview.seerr} />
+                  ) : (
+                    <MediaPlaceholder title="Seerr" subtitle="Overseerr / Jellyseerr" icon="🔍" />
+                  )}
                 </div>
               </div>
             </div>

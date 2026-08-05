@@ -186,6 +186,7 @@ const defaultConfig = {
     media: [],
     usenet: [],
     arr: [],
+    seerr: [],
     opnsense: [],
     ui: { tabRotationSeconds: 15 },
     alerts: [

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
-import { Plus, Trash2, Edit2, Activity, Server, Sun, HardDrive, Tv, Download, Clock, Shield, Film } from 'lucide-react';
+import { Plus, Trash2, Edit2, Activity, Server, Sun, HardDrive, Tv, Download, Clock, Shield, Film, Clapperboard } from 'lucide-react';
 import type {
   MonitoredMedia,
   MonitoredUsenet,
   MonitoredArr,
+  MonitoredSeerr,
   MonitoredOpnsense,
   MonitoringConfig,
   RemoteServer,
@@ -48,6 +49,8 @@ export function MonitoringSettings() {
   const [usenetForm, setUsenetForm] = useState<Partial<MonitoredUsenet>>({});
   const [editArrId, setEditArrId] = useState<string | null>(null);
   const [arrForm, setArrForm] = useState<Partial<MonitoredArr>>({});
+  const [editSeerrId, setEditSeerrId] = useState<string | null>(null);
+  const [seerrForm, setSeerrForm] = useState<Partial<MonitoredSeerr>>({});
   const [editOpnId, setEditOpnId] = useState<string | null>(null);
   const [opnForm, setOpnForm] = useState<Partial<MonitoredOpnsense>>({});
 
@@ -83,6 +86,7 @@ export function MonitoringSettings() {
   const mediaList = mon.media ?? [];
   const usenetList = mon.usenet ?? [];
   const arrList = mon.arr ?? [];
+  const seerrList = mon.seerr ?? [];
   const opnList = mon.opnsense ?? [];
 
   return (
@@ -146,9 +150,9 @@ export function MonitoringSettings() {
               onRemove={(id) => update({ media: mediaList.filter((m) => m.id !== id) })}
               typeField="type" typeOptions={[{ value: 'jellyfin', label: 'Jellyfin' }, { value: 'emby', label: 'Emby' }]}
               fields={[
-                { key: 'name', label: 'Label', placeholder: 'jellyfin-main' },
-                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.20:8096' },
-                { key: 'apiKey', label: 'API key', placeholder: '', pw: true },
+                { key: 'name', label: 'Label', placeholder: 'jellyfin-main', helper: 'Display name shown on the dashboard.' },
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.20:8096', helper: 'Base URL of the Emby / Jellyfin server.' },
+                { key: 'apiKey', label: 'API key', placeholder: '', pw: true, helper: 'API key from Dashboard → Advanced in Jellyfin, or a user token in Emby.' },
               ]}
             />
           </SectionCard>
@@ -170,8 +174,8 @@ export function MonitoringSettings() {
               onRemove={(id) => update({ usenet: usenetList.filter((u) => u.id !== id) })}
               typeField="type" typeOptions={[{ value: 'sabnzbd', label: 'SABnzbd' }, { value: 'nzbget', label: 'NZBGet' }]}
               fields={[
-                { key: 'name', label: 'Label', placeholder: 'sab-main' },
-                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.21:8080' },
+                { key: 'name', label: 'Label', placeholder: 'sab-main', helper: 'Display name shown on the dashboard.' },
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.21:8080', helper: 'Base URL of the SABnzbd / NZBGet instance.' },
               ]}
               extraFields={(f, set) => {
                 const t = (f.type || (editUsenetId ? usenetList.find(u => u.id === editUsenetId)?.type : 'sabnzbd')) || 'sabnzbd';
@@ -207,9 +211,28 @@ export function MonitoringSettings() {
               onRemove={(id) => update({ arr: arrList.filter((a) => a.id !== id) })}
               typeField="type" typeOptions={[{ value: 'sonarr', label: 'Sonarr' }, { value: 'radarr', label: 'Radarr' }]}
               fields={[
-                { key: 'name', label: 'Label', placeholder: 'sonarr-main' },
-                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.22:8989' },
-                { key: 'apiKey', label: 'API key', placeholder: '', pw: true },
+                { key: 'name', label: 'Label', placeholder: 'sonarr-main', helper: 'Display name shown on the dashboard.' },
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.22:8989', helper: 'Base URL of the Sonarr / Radarr instance.' },
+                { key: 'apiKey', label: 'API key', placeholder: '', pw: true, helper: 'Found in Sonarr/Radarr under Settings → General.' },
+              ]}
+            />
+          </SectionCard>
+
+          {/* Seerr / Overseerr */}
+          <SectionCard title="Seerr / Overseerr" description="Open media issues and unattended (pending / failed) requests." icon={Clapperboard}>
+            <EntityList
+              items={seerrList} editingId={editSeerrId} form={seerrForm} setForm={setSeerrForm}
+              onStartEdit={(item) => startEdit(item, setEditSeerrId, setSeerrForm)}
+              onCancel={() => cancelEdit(setEditSeerrId, setSeerrForm)}
+              onSave={() => saveEdit(editSeerrId, seerrForm, seerrList, 'seerr',
+                (l) => update({ seerr: l as MonitoredSeerr[] }), setEditSeerrId, setSeerrForm,
+                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', type: f.type || 'overseerr', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '' }))}
+              onRemove={(id) => update({ seerr: seerrList.filter((s) => s.id !== id) })}
+              typeField="type" typeOptions={[{ value: 'overseerr', label: 'Overseerr' }, { value: 'seerr', label: 'Seerr' }, { value: 'jellyseerr', label: 'Jellyseerr' }]}
+              fields={[
+                { key: 'name', label: 'Label', placeholder: 'overseerr-main', helper: 'Display name shown on the dashboard.' },
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.30:5055', helper: 'Base URL of the Overseerr / Seerr / Jellyseerr instance.' },
+                { key: 'apiKey', label: 'API key', placeholder: '', pw: true, helper: 'Found in the app under Settings → General → API Key.' },
               ]}
             />
           </SectionCard>
@@ -226,10 +249,10 @@ export function MonitoringSettings() {
               onRemove={(id) => update({ opnsense: opnList.filter((o) => o.id !== id) })}
               typeField="" typeOptions={[]}
               fields={[
-                { key: 'name', label: 'Label', placeholder: 'opnsense-main' },
-                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.1' },
-                { key: 'apiKey', label: 'API key', placeholder: '' },
-                { key: 'apiSecret', label: 'API secret', placeholder: '', pw: true },
+                { key: 'name', label: 'Label', placeholder: 'opnsense-main', helper: 'Display name shown on the dashboard.' },
+                { key: 'url', label: 'URL', placeholder: 'http://192.168.1.1', helper: 'Base URL of the OPNsense web UI.' },
+                { key: 'apiKey', label: 'API key', placeholder: '', helper: 'OPNsense API key (pair with the secret below).' },
+                { key: 'apiSecret', label: 'API secret', placeholder: '', pw: true, helper: 'OPNsense API secret; used as the Basic-auth password.' },
               ]}
               extraFields={(f, set) => (
                 <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
@@ -249,8 +272,21 @@ export function MonitoringSettings() {
 // EntityList — generic Add / Edit / Remove list for any monitored source
 // ---------------------------------------------------------------------------
 
-interface FieldDef { key: string; label: string; placeholder: string; pw?: boolean; }
+interface FieldDef { key: string; label: string; placeholder: string; pw?: boolean; helper?: string; }
 interface TypeOpt { value: string; label: string; }
+
+/** Labelled input with an optional helper hint, used by EntityList forms. */
+function FieldInput({ field, value, onChange }: { field: FieldDef; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-[11px] font-medium text-[var(--color-text-secondary)]">{field.label}</label>
+      <input type={field.pw ? 'password' : 'text'} value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder={field.placeholder}
+        className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)]/50" />
+      {field.helper && <p className="text-[10px] text-[var(--color-text-secondary)]/70">{field.helper}</p>}
+    </div>
+  );
+}
 
 function EntityList({
   items, editingId, form, setForm, onStartEdit, onCancel, onSave, onRemove,
@@ -281,10 +317,8 @@ function EntityList({
               </select>
             )}
             {fields.map(f => (
-              <input key={f.key} type={f.pw ? 'password' : 'text'} value={(form as any)[f.key] ?? item[f.key] ?? ''}
-                onChange={e => setForm({ ...form, [f.key]: e.target.value } as any)}
-                placeholder={f.placeholder}
-                className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)]/50" />
+              <FieldInput key={f.key} field={f} value={(form as any)[f.key] ?? item[f.key] ?? ''}
+                onChange={(v) => setForm({ ...form, [f.key]: v } as any)} />
             ))}
             {extraFields?.(form, setForm)}
             <div className="flex gap-2">
@@ -319,15 +353,9 @@ function EntityList({
               {typeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           )}
-          <div className="flex gap-2">
-            <input type="text" value={(form as any).name || ''} onChange={e => setForm({ ...form, name: e.target.value } as any)}
-              placeholder={fields[0]?.placeholder || 'Label'} className="flex-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)]/50" />
-          </div>
-          {fields.slice(1).map(f => (
-            <input key={f.key} type={f.pw ? 'password' : 'text'} value={(form as any)[f.key] || ''}
-              onChange={e => setForm({ ...form, [f.key]: e.target.value } as any)}
-              placeholder={f.placeholder}
-              className="bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-2 py-1.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)]/50" />
+          {fields.map(f => (
+            <FieldInput key={f.key} field={f} value={(form as any)[f.key] || ''}
+              onChange={(v) => setForm({ ...form, [f.key]: v } as any)} />
           ))}
           {extraFields?.(form, setForm)}
           <button onClick={() => { setForm({} as any); onSave(); }}
@@ -404,5 +432,5 @@ function SliderRow({ label, value, min, max, step, unit, note, onChange }: {
 
 const defaultMonitoring: MonitoringConfig = {
   enabled: false, pollIntervalSeconds: 10, glancesHosts: [], solar: { enabled: false }, docker: { enabled: true },
-  media: [], usenet: [], arr: [], opnsense: [], ui: { tabRotationSeconds: 15 }, alerts: [],
+  media: [], usenet: [], arr: [], seerr: [], opnsense: [], ui: { tabRotationSeconds: 15 }, alerts: [],
 };
