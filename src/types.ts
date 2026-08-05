@@ -542,8 +542,10 @@ export interface HomeAssistantPump {
   present: boolean;   // a pump entity was found in Home Assistant
   running: boolean;
   name: string;
-  state: string;      // raw HA state, e.g. 'on' | 'off' | 'unavailable'
+  state: string;      // raw HA state, e.g. 'on' | 'off' | 'active' | 'idle'
   since: number | null; // epoch ms of the last state change (when running)
+  timerRemaining: number | null; // seconds left on timer.pressure_pump_timer (when active)
+  timerDuration: number | null;  // total timer duration in seconds
   label: string;      // display label, e.g. 'PRESSURE PUMP'
 }
 

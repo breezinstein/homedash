@@ -30,11 +30,18 @@ function formatElapsed(ms: number): string {
   return `${days}d ${hours % 24}h`;
 }
 
-/** Hero duration line: running time if on, otherwise stopped/not configured. */
+/** Hero duration line: timer remaining when running, otherwise stopped/paused. */
 function pumpDuration(pump: HomeAssistantPump): string {
-  if (!pump.running) return pump.present ? 'Stopped' : 'Not configured';
-  if (pump.since) return `Running ${formatElapsed(Date.now() - pump.since)}`;
-  return 'Running indefinitely';
+  if (pump.running && pump.timerRemaining != null) {
+    return `${formatElapsed(pump.timerRemaining * 1000)} remaining`;
+  }
+  if (pump.running) {
+    if (pump.since) return `Running ${formatElapsed(Date.now() - pump.since)}`;
+    return 'Running indefinitely';
+  }
+  if (!pump.present) return 'Not configured';
+  if (pump.state === 'paused') return 'Paused';
+  return 'Stopped';
 }
 
 export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {

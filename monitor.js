@@ -1340,7 +1340,6 @@ function buildHomeAssistantSnapshot(config, states) {
   if (lightsOn > 0) addMetric('lights', 'Lights on', lightsOn);
   const switchesOn = entities.filter(e => e.entity_id.startsWith('switch.') && e.state === 'on').length;
   if (switchesOn > 0) addMetric('switches', 'Switches on', switchesOn);
-  if (onCount > 0) addMetric('on', 'Entities on', onCount);
   if (unavailableEntities.length > 0) addMetric('unavailable', 'Unavailable devices', unavailableEntities.length);
 
   // Open doors / windows — always reported (0 is meaningful on a status card).
@@ -1348,22 +1347,48 @@ function buildHomeAssistantSnapshot(config, states) {
     ['door', 'opening', 'garage_door'].includes(deviceClass(e)) && e.state === 'on').length;
   addMetric('doors', 'Doors open', openDoors);
 
-  // Pressure pump — drives the Home Status card hero. Prefer a switch (on/off),
-  // else a binary_sensor, whose id/name mentions "pump".
-  const pumpEntity = entities.find(e =>
+  // Pressure pump — drives the Home Status card hero. The pump timer
+  // (timer.pressure_pump_timer) is the source of truth for running state and
+  // remaining time; fall back to a switch/binary_sensor on/off otherwise.
+  // HA timers report duration/remaining as "HH:MM:SS" strings (and expose a
+  // finishes_at timestamp), so parse both.
+  const parseHms = v => {
+    if (v == null) return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    const s = String(v).trim();
+    if (/^\d+(\.\d+)?$/.test(s)) return Number(s);
+    const m = /^(?:(\d+):)?(\d{1,2}):(\d{1,2})(?:\.\d+)?$/.exec(s);
+    if (m) return (m[1] ? Number(m[1]) * 3600 : 0) + Number(m[2]) * 60 + Number(m[3]);
+    return null;
+  };
+  const pumpTimer = entities.find(e =>
+    /^timer\./.test(e.entity_id) && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`));
+  const switchPump = entities.find(e =>
     e.entity_id.startsWith('switch.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`))
     || entities.find(e =>
       e.entity_id.startsWith('binary_sensor.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`));
+  const pumpEntity = pumpTimer || switchPump;
+  // Prefer the live finishes_at time; fall back to the remaining attribute.
+  const finishesMs = pumpTimer?.attributes?.finishes_at ? Date.parse(pumpTimer.attributes.finishes_at) : NaN;
+  const remainingFromFinish = Number.isFinite(finishesMs) ? Math.max(0, (finishesMs - Date.now()) / 1000) : null;
+  const timerRemaining = pumpTimer
+    ? (remainingFromFinish ?? parseHms(pumpTimer.attributes?.remaining))
+    : null;
+  const timerDuration = pumpTimer ? parseHms(pumpTimer.attributes?.duration) : null;
+  const pumpName = (switchPump ? friendlyName(switchPump) : pumpTimer ? friendlyName(pumpTimer) : null)
+    || 'Pressure Pump';
   const pump = pumpEntity
     ? {
         present: true,
-        running: pumpEntity.state === 'on',
-        name: friendlyName(pumpEntity),
+        running: pumpTimer ? pumpTimer.state === 'active' : pumpEntity.state === 'on',
+        name: pumpName,
         state: pumpEntity.state,
         since: typeof pumpEntity.last_changed === 'string' ? Date.parse(pumpEntity.last_changed) : null,
-        label: (friendlyName(pumpEntity) || 'Pressure Pump').toUpperCase(),
+        timerRemaining,
+        timerDuration,
+        label: pumpName.replace(/\s*timer$/i, '').toUpperCase(),
       }
-    : { present: false, running: false, name: 'Pressure Pump', state: 'off', since: null, label: 'PRESSURE PUMP' };
+    : { present: false, running: false, name: 'Pressure Pump', state: 'off', since: null, timerRemaining: null, timerDuration: null, label: 'PRESSURE PUMP' };
 
   return {
     status: 'ok',
@@ -1446,7 +1471,7 @@ export async function fetchHomeAssistant(haConfigs) {
       version: null, locationName: null, entityCount: 0, onCount: 0,
       unavailable: { count: 0, devices: [] },
       metrics: [],
-      pump: { present: false, running: false, name: 'Pressure Pump', state: 'off', since: null, label: 'PRESSURE PUMP' },
+      pump: { present: false, running: false, name: 'Pressure Pump', state: 'off', since: null, timerRemaining: null, timerDuration: null, label: 'PRESSURE PUMP' },
     };
   }
 

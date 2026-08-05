@@ -15,7 +15,6 @@ function metricIcon(key: string): string {
     case 'doors': return '🚪';
     case 'lights': return '💡';
     case 'switches': return '🔘';
-    case 'on': return '✅';
     case 'unavailable': return '⚠️';
     default: return '📈';
   }
@@ -52,7 +51,6 @@ export function HomePanel({ homeAssistant: ha }: HomePanelProps) {
         </div>
         <div className="ha-summary-strip">
           <span className="ha-summary-item">🧩 {ha.entityCount} entities</span>
-          <span className="ha-summary-item">✅ {ha.onCount} on</span>
           <span
             className="ha-summary-item"
             style={unavailable.count > 0 ? { color: '#e74c3c' } : { color: '#2ecc71' }}

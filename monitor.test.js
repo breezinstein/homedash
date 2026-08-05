@@ -367,6 +367,9 @@ test('fetchHomeAssistant surfaces glanceable metrics and unavailable devices', a
         { entity_id: 'sensor.inverter_power', state: '500', attributes: { friendly_name: 'Inverter Power', device_class: 'power', unit_of_measurement: 'W' } },
         // Pressure pump → drives the Home Status card hero.
         { entity_id: 'switch.pressure_pump', state: 'on', attributes: { friendly_name: 'Pressure Pump' }, last_changed: '2026-08-05T10:00:00.000Z' },
+        // Pump timer is the source of truth for running + remaining time.
+        // HA reports duration/remaining as "HH:MM:SS" strings.
+        { entity_id: 'timer.pressure_pump_timer', state: 'active', attributes: { friendly_name: 'Pressure Pump Timer', duration: '0:15:00', remaining: '0:09:00' } },
       ]));
     } else { res.statusCode = 404; res.end(); }
   });
@@ -377,9 +380,9 @@ test('fetchHomeAssistant surfaces glanceable metrics and unavailable devices', a
     assert.equal(out.status, 'ok');
     assert.equal(out.version, '2024.1.0');
     assert.equal(out.locationName, 'Home');
-    // 8 entities minus the excluded Glances one.
-    assert.equal(out.entityCount, 7);
-    assert.equal(out.onCount, 3); // light + open door + pump
+    // 9 entities minus the excluded Glances one.
+    assert.equal(out.entityCount, 8);
+    assert.equal(out.onCount, 3); // light + open door + switch pump
     assert.equal(out.unavailable.count, 1); // Glances exclusion also applies here
     assert.equal(out.unavailable.devices[0].name, 'Bad MQTT');
     // Power picks the non-inverter sensor.
@@ -388,13 +391,15 @@ test('fetchHomeAssistant surfaces glanceable metrics and unavailable devices', a
     assert.equal(out.metrics.find(m => m.key === 'lights').value, 1);
     assert.equal(out.metrics.find(m => m.key === 'doors').value, 1);
     assert.equal(out.metrics.find(m => m.key === 'temperature').value, 21.5);
-    // Energy metric is intentionally not reported.
+    // Energy and "entities on" metrics are intentionally not reported.
     assert.equal(out.metrics.find(m => m.key === 'energy'), undefined);
-    // Pressure pump hero data.
+    assert.equal(out.metrics.find(m => m.key === 'on'), undefined);
+    // Pressure pump hero data driven by the timer.
     assert.equal(out.pump.present, true);
     assert.equal(out.pump.running, true);
     assert.equal(out.pump.label, 'PRESSURE PUMP');
-    assert.ok(out.pump.since > 0);
+    assert.equal(out.pump.timerRemaining, 540);
+    assert.equal(out.pump.timerDuration, 900);
   } finally {
     await new Promise(r => server.close(r));
   }
