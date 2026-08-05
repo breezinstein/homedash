@@ -1,5 +1,6 @@
 import type { ArrSnapshot, ArrQueueItem, ArrInstance } from '../../types';
 import { SourceDot } from './SourceDot';
+import { formatMegabytes, parseEtaLabel } from '../format';
 
 interface ArrCardProps { arr: ArrSnapshot; }
 
@@ -17,19 +18,6 @@ function instanceLabel(inst: { name?: string; type: string }): string {
   const name = (inst.name || '').trim();
   if (name) return name;
   return ARR_TYPE_LABEL[inst.type] || inst.type;
-}
-
-/** Parse Sonarr/Radarr "HH:MM:SS" timeleft into a short human label. */
-function formatEta(timeLeft: string | null): string | null {
-  if (!timeLeft) return null;
-  const m = /^(?:(\d+):)?(\d{1,2}):(\d{2})$/.exec(timeLeft.trim());
-  if (!m) return timeLeft; // already a custom string
-  const h = m[1] ? Number(m[1]) : 0;
-  const min = Number(m[2]);
-  const s = Number(m[3]);
-  if (h > 0) return `${h}h ${min}m`;
-  if (min > 0) return `${min}m ${s}s`;
-  return s > 0 ? `${s}s` : null;
 }
 
 /** Friendly label for the queue record status. */
@@ -51,12 +39,6 @@ function statusLabel(q: ArrQueueItem): string {
   };
   if (map[s]) return map[s];
   return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Queued';
-}
-
-function formatSize(mb: number | null): string {
-  if (mb == null || !Number.isFinite(mb)) return '';
-  if (mb >= 1024) return `${(mb / 1024).toFixed(1)} GB`;
-  return `${Math.round(mb)} MB`;
 }
 
 export function ArrCard({ arr }: ArrCardProps) {
@@ -141,12 +123,12 @@ function QueueRow({ item: q }: { item: ArrQueueItem }) {
   const color = ARR_TYPE_COLOR[q.instanceType] ?? '#6c5ce7';
   const pct = q.progressPercent != null ? Math.min(100, Math.max(0, Math.round(q.progressPercent))) : null;
   const done = pct === 100;
-  const eta = formatEta(q.timeLeft);
+  const eta = parseEtaLabel(q.timeLeft);
   const rightLabel = eta ? `${eta} left` : statusLabel(q);
 
   const meta: string[] = [];
   if (q.quality && q.quality !== '—') meta.push(q.quality);
-  const size = formatSize(q.sizeMb);
+  const size = formatMegabytes(q.sizeMb);
   if (size) meta.push(size);
   if (q.seriesName && q.seriesName !== q.title) meta.push(q.seriesName);
 

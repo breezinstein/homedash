@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Plus, Trash2, Edit2, Bell } from 'lucide-react';
 import type { AlertRule, Severity, RemoteServer } from '../types';
+import { newId } from '../lib/id';
 
 interface AlertRulesEditorProps {
   rules: AlertRule[];
@@ -81,10 +82,6 @@ const SEVERITIES: { value: Severity; label: string; color: string }[] = [
   { value: 'warning', label: 'Warning', color: '#e67e22' },
   { value: 'info', label: 'Info', color: '#6c5ce7' },
 ];
-
-function newId(): string {
-  return crypto.randomUUID?.() ?? Math.random().toString(36).slice(2);
-}
 
 function emptyRule(): AlertRule {
   return {

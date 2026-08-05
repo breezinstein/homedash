@@ -1,17 +1,12 @@
 import type { SourceStatus } from '../../types';
+import { STATUS_COLORS } from '../constants';
 
 interface SourceDotProps {
   status: SourceStatus;
 }
 
-const palette: Record<SourceStatus, { color: string; label: string }> = {
-  ok: { color: '#2ecc71', label: 'ok' },
-  degraded: { color: '#e67e22', label: 'degraded' },
-  down: { color: '#e74c3c', label: 'down' },
-};
-
 export function SourceDot({ status }: SourceDotProps) {
-  const { color } = palette[status];
+  const color = STATUS_COLORS[status];
   return (
     <span
       style={{

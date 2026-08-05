@@ -1,18 +1,10 @@
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
-import type { AlertInstance, Severity } from '../../types';
+import type { AlertInstance } from '../../types';
+import { SEVERITY_COLORS } from '../constants';
+import { stripHtml } from '../format';
 
 interface AlertBannerProps {
   alerts: AlertInstance[];
-}
-
-const SEV_COLORS: Record<Severity, string> = {
-  critical: '#e74c3c',
-  warning: '#e67e22',
-  info: '#6c5ce7',
-};
-
-function stripHtml(s: string): string {
-  return s.replace(/<[^>]+>/g, '').trim();
 }
 
 /**
@@ -39,7 +31,7 @@ export function AlertBanner({ alerts }: AlertBannerProps) {
 
   const criticals = firing.filter((a) => a.severity === 'critical').length;
   const warnings = firing.filter((a) => a.severity === 'warning').length;
-  const color = criticals > 0 ? SEV_COLORS.critical : SEV_COLORS.warning;
+  const color = criticals > 0 ? SEVERITY_COLORS.critical : SEVERITY_COLORS.warning;
 
   return (
     <div
@@ -49,13 +41,13 @@ export function AlertBanner({ alerts }: AlertBannerProps) {
       <AlertTriangle size={14} style={{ color, flexShrink: 0 }} />
       <span className="alert-strip-counts">
         {criticals > 0 && (
-          <b style={{ color: SEV_COLORS.critical }}>
+          <b style={{ color: SEVERITY_COLORS.critical }}>
             ▲ {criticals} CRITICAL{criticals > 1 ? 'S' : ''}
           </b>
         )}
         {criticals > 0 && warnings > 0 && <span className="alert-strip-sep">·</span>}
         {warnings > 0 && (
-          <b style={{ color: SEV_COLORS.warning }}>
+          <b style={{ color: SEVERITY_COLORS.warning }}>
             {warnings} WARNING{warnings > 1 ? 'S' : ''}
           </b>
         )}

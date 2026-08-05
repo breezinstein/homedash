@@ -74,14 +74,16 @@ export function MonitorApp() {
       {/* ── Top row: 4 summary cards ── */}
       <div className="top-grid">
         {overview?.solar && <SolarCard solar={overview.solar} />}
-        {!overview?.solar && <SolarCardPlaceholder />}
+        {!overview?.solar && (
+          <CardPlaceholder title="Power" subtitle="Solar Assistant" message="No solar data source configured" />
+        )}
 
         <DockerCard docker={overview?.docker ?? emptyDocker} />
 
         {overview?.opnsense ? (
           <OpnsenseCard opnsense={overview.opnsense} />
         ) : (
-          <OpnsenseCardPlaceholder />
+          <CardPlaceholder title="OPNsense" subtitle="Multi-WAN" message="No OPNsense data source configured" />
         )}
 
         <HomeStatusCard homeAssistant={overview?.homeassistant ?? null} />
@@ -142,7 +144,7 @@ export function MonitorApp() {
                   {overview?.usenet ? (
                     <UsenetCard usenet={overview.usenet} />
                   ) : (
-                    <MediaPlaceholder title="Downloads" subtitle="Usenet" icon="⬇" />
+                    <CardPlaceholder title="Downloads" subtitle="Usenet" icon="⬇" message="Not configured" fillHeight bodyHeight={80} />
                   )}
                 </div>
 
@@ -151,7 +153,7 @@ export function MonitorApp() {
                   {overview?.arr ? (
                     <ArrCard arr={overview.arr} />
                   ) : (
-                    <MediaPlaceholder title="Sonarr / Radarr" subtitle="Arr" icon="🎬" />
+                    <CardPlaceholder title="Sonarr / Radarr" subtitle="Arr" icon="🎬" message="Not configured" fillHeight bodyHeight={80} />
                   )}
                 </div>
 
@@ -160,7 +162,7 @@ export function MonitorApp() {
                   {overview?.seerr ? (
                     <SeerrCard seerr={overview.seerr} />
                   ) : (
-                    <MediaPlaceholder title="Seerr" subtitle="Overseerr / Jellyseerr" icon="🔍" />
+                    <CardPlaceholder title="Seerr" subtitle="Overseerr / Jellyseerr" icon="🔍" message="Not configured" fillHeight bodyHeight={80} />
                   )}
                 </div>
               </div>
@@ -213,41 +215,29 @@ export function MonitorApp() {
 
 /* ── Placeholder cards (shown when data source is unavailable) ── */
 
-function SolarCardPlaceholder() {
+function CardPlaceholder({
+  title, subtitle, icon, message, fillHeight = false, bodyHeight = 100,
+}: {
+  title: string; subtitle: string; icon?: string; message: string;
+  fillHeight?: boolean; bodyHeight?: number;
+}) {
+  const Tag = fillHeight ? 'div' : 'section';
   return (
-    <section className="card">
+    <Tag className="card" style={fillHeight ? { height: '100%' } : undefined}>
       <div className="card-header">
         <div className="title-group">
-          <span className="title">Power</span>
-          <span className="subtitle">Solar Assistant</span>
+          <span className="title">{icon ? `${icon} ${title}` : title}</span>
+          <span className="subtitle">{subtitle}</span>
         </div>
-        <span className="status-ok" style={{ opacity: 0.4 }}>
-          offline
-        </span>
+        <span className="status-ok" style={{ opacity: 0.4 }}>offline</span>
       </div>
-      <div className="flex items-center justify-center h-[100px] text-[#a0a0a0] text-[12px]">
-        No solar data source configured
+      <div
+        className="flex items-center justify-center text-[#a0a0a0] text-[12px]"
+        style={{ height: bodyHeight }}
+      >
+        {message}
       </div>
-    </section>
-  );
-}
-
-function OpnsenseCardPlaceholder() {
-  return (
-    <section className="card">
-      <div className="card-header">
-        <div className="title-group">
-          <span className="title">OPNsense</span>
-          <span className="subtitle">Multi-WAN</span>
-        </div>
-        <span className="status-ok" style={{ opacity: 0.4 }}>
-          offline
-        </span>
-      </div>
-      <div className="flex items-center justify-center h-[100px] text-[#a0a0a0] text-[12px]">
-        No OPNsense data source configured
-      </div>
-    </section>
+    </Tag>
   );
 }
 
@@ -262,22 +252,3 @@ const emptyDocker = {
   restarting: 0,
   problems: [] as any[],
 };
-
-/* ── Media placeholder ── */
-
-function MediaPlaceholder({ title, subtitle, icon }: { title: string; subtitle: string; icon: string }) {
-  return (
-    <div className="card" style={{ height: '100%' }}>
-      <div className="card-header">
-        <div className="title-group">
-          <span className="title">{icon} {title}</span>
-          <span className="subtitle">{subtitle}</span>
-        </div>
-        <span className="status-ok" style={{ opacity: 0.4 }}>offline</span>
-      </div>
-      <div className="flex items-center justify-center h-[80px] text-[#a0a0a0] text-[12px]">
-        Not configured
-      </div>
-    </div>
-  );
-}

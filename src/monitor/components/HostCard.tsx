@@ -1,24 +1,9 @@
 import type { HostSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
+import { formatByteRate, formatBytesBinary } from '../format';
 
 interface HostCardProps {
   host: HostSnapshot;
-}
-
-function formatBytes(bytes: number | null): string {
-  if (bytes == null || !Number.isFinite(bytes) || bytes === 0) return '—';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function netLabel(bps: number | null): string {
-  if (bps == null || !Number.isFinite(bps)) return '—';
-  if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)} GB/s`;
-  if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} MB/s`;
-  if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} KB/s`;
-  return `${Math.round(bps)} B/s`;
 }
 
 /**
@@ -38,7 +23,7 @@ export function HostCard({ host }: HostCardProps) {
       ? `${load['1m'].toFixed(1)} · ${load['5m']?.toFixed(1) ?? '—'} · ${load['15m']?.toFixed(1) ?? '—'}`
       : '—';
   const diskDetail = disk.total
-    ? `${formatBytes(disk.used)} / ${formatBytes(disk.total)}`
+    ? `${formatBytesBinary(disk.used)} / ${formatBytesBinary(disk.total)}`
     : undefined;
   const osLabel =
     host.system?.distro ||
@@ -116,7 +101,7 @@ export function HostCard({ host }: HostCardProps) {
           Up <b>{host.uptime?.formatted || '—'}</b>
         </span>
         <span>
-          ↓ {netLabel(network.rxBps ?? null)} ↑ {netLabel(network.txBps ?? null)}
+          ↓ {formatByteRate(network.rxBps ?? null)} ↑ {formatByteRate(network.txBps ?? null)}
         </span>
       </div>
     </div>

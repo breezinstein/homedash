@@ -17,6 +17,8 @@ import {
   fetchNotifications,
   openNotificationStream,
 } from '../api/notificationsApi';
+import { useToast } from '../components/ui';
+import { newId } from '../lib/id';
 import { useAuth } from './AuthContext';
 
 const defaultNotifications: NotificationsConfig = {
@@ -152,6 +154,7 @@ const DashboardContext = createContext<DashboardContextType | null>(null);
 
 export function DashboardProvider({ children }: { children: ReactNode }) {
   const { authenticated, authEnabled, ready: authReady } = useAuth();
+  const toast = useToast();
   const [config, setConfigState] = useState<DashboardConfig>(defaultConfig);
   const [backups, setBackups] = useState<ServerBackup[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
@@ -561,17 +564,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setConfig({ ...configRef.current, clips: next });
   }, [setConfig]);
 
-  const generateClipId = () => {
-    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-      return crypto.randomUUID();
-    }
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-  };
-
   const addClip = useCallback((label: string, content: string) => {
     const now = new Date().toISOString();
     const newClip: Clip = {
-      id: generateClipId(),
+      id: newId(),
       label: label.trim() || 'Untitled',
       content,
       pinned: false,
@@ -612,7 +608,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const addServer = useCallback((name: string, url: string, username?: string, password?: string) => {
     const newServer: RemoteServer = {
-      id: generateClipId(),
+      id: newId(),
       name: name.trim() || 'Untitled Server',
       url: url.trim(),
       ...(username ? { username: username.trim() } : {}),
@@ -649,7 +645,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   const addInverter = useCallback((name: string, url: string, username?: string, password?: string) => {
     const newInverter: InverterServer = {
-      id: generateClipId(),
+      id: newId(),
       name: name.trim() || 'Untitled Inverter',
       url: url.trim(),
       ...(username ? { username: username.trim() } : {}),
@@ -707,10 +703,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const importConfig = useCallback(async (file: File) => {
-    const text = await file.text();
-    const importedConfig = JSON.parse(text) as DashboardConfig;
-    setConfig(importedConfig);
-  }, [setConfig]);
+    try {
+      const importedConfig = JSON.parse(await file.text()) as DashboardConfig;
+      setConfig(importedConfig);
+    } catch (error) {
+      console.error('Failed to import config:', error);
+      toast.error('Invalid config file — could not be imported');
+    }
+  }, [setConfig, toast]);
 
   const exportConfig = useCallback(() => {
     const dataStr = JSON.stringify(configRef.current, null, 2);

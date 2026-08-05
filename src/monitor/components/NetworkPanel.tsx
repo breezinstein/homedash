@@ -1,40 +1,11 @@
 import type { OpnsenseSnapshot, NtopngSnapshot, NtopngTalker } from '../../types';
 import { RingGauge } from './RingGauge';
+import { formatBitRate, formatBytes, formatWindow } from '../format';
+import { activeWanSaturation } from '../wan';
 
 interface NetworkPanelProps {
   opnsense?: OpnsenseSnapshot | null;
   ntopng?: NtopngSnapshot | null;
-}
-
-function formatBps(bytesPerSec: number | null): string {
-  if (bytesPerSec == null || !Number.isFinite(bytesPerSec)) return '—';
-  const bits = bytesPerSec * 8; // bytes/sec → bits/sec
-  if (bits >= 1e9) return `${(bits / 1e9).toFixed(1)} Gbps`;
-  if (bits >= 1e6) return `${(bits / 1e6).toFixed(1)} Mbps`;
-  if (bits >= 1e3) return `${(bits / 1e3).toFixed(1)} Kbps`;
-  return `${Math.round(bits)} bps`;
-}
-
-function formatBytes(bytes: number): string {
-  if (!Number.isFinite(bytes)) return '—';
-  if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`;
-  if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(1)} MB`;
-  if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(1)} KB`;
-  return `${bytes} B`;
-}
-
-/** Compact window label for the DATA counter, e.g. "5d 13h" or "7m". */
-function formatWindow(firstSeen: number | null): string | null {
-  if (firstSeen == null) return null;
-  const secs = Math.max(0, Math.floor(Date.now() / 1000 - firstSeen));
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ${mins % 60}m`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ${hours % 24}h`;
 }
 
 /**
@@ -42,18 +13,15 @@ function formatWindow(firstSeen: number | null): string | null {
  * followed by a full-width Top Talkers table.
  */
 export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
-  // Gauge = active WAN uplink saturation: the active default-gateway's own
-  // traffic vs its negotiated link speed. Falls back to the aggregate links
-  // (or 1 Gbps) only if the active WAN's line rate is unknown.
-  const activeWan = opnsense?.wanInterfaces?.find((i) => i.active);
-  const wanIn = activeWan?.inBps ?? null;
-  const wanOut = activeWan?.outBps ?? null;
-  const wanBits = ((wanIn ?? 0) + (wanOut ?? 0)) * 8;
-  const wanCapacity = activeWan?.speedBps ?? null;
-  const denominator = wanCapacity && wanCapacity > 0
-    ? wanCapacity
-    : (opnsense?.totalLinkCapacityBps || 1e9);
-  const throughputPct = wanBits > 0 ? Math.min(100, (wanBits / denominator) * 100) : 0;
+  // Gauge = active WAN uplink saturation (see wan.ts). When opnsense is
+  // unconfigured the panel renders an ntopng-only view, so saturation is zeroed.
+  const sat = opnsense
+    ? activeWanSaturation(opnsense)
+    : { wan: undefined, wanInBps: null, wanOutBps: null, percent: 0 };
+  const activeWan = sat.wan;
+  const wanIn = sat.wanInBps;
+  const wanOut = sat.wanOutBps;
+  const throughputPct = sat.percent;
 
   // ntopng top talkers take precedence; OPNsense NetFlow is the fallback.
   const ntopngTalkers = ntopng?.topTalkers ?? [];
@@ -92,12 +60,12 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
               <div className="gauge-val" style={{ fontSize: 14 }}>{Math.round(throughputPct)}%</div>
             </div>
             <div className="net-throughput-label">
-              ↓ {formatBps(wanIn ?? 0)} · ↑ {formatBps(wanOut ?? 0)}
+              ↓ {formatBitRate(wanIn ?? 0)} · ↑ {formatBitRate(wanOut ?? 0)}
             </div>
             <div className="power-label" style={{ marginTop: 2 }}>
               {activeWan?.description || activeWan?.name || 'WAN'} link
-              {/* speedBps is already bits/sec; formatBps expects bytes/sec */}
-              {activeWan?.speedBps ? ` · ${formatBps(activeWan.speedBps / 8)}` : ''}
+              {/* speedBps is already bits/sec; formatBitRate expects bytes/sec */}
+              {activeWan?.speedBps ? ` · ${formatBitRate(activeWan.speedBps / 8)}` : ''}
               {' · '}
               FW: {opnsense.firewallStates != null ? opnsense.firewallStates.toLocaleString() : '—'} states
               {' · '}
@@ -196,7 +164,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
           </span>
           <div className="net-talker-trio">
             <div className="net-talker-col">
-              <span className="net-talker-col-label">{formatBps(t.txBps)}</span>
+              <span className="net-talker-col-label">{formatBitRate(t.txBps)}</span>
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"
@@ -205,7 +173,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
               </div>
             </div>
             <div className="net-talker-col">
-              <span className="net-talker-col-label">{formatBps(t.rxBps)}</span>
+              <span className="net-talker-col-label">{formatBitRate(t.rxBps)}</span>
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"
@@ -269,7 +237,7 @@ function IfacesTable({
             {/* Download bar */}
             <div className="net-iface-bar-line">
               <span className="net-iface-dir">↓</span>
-              <span className="net-iface-bps">{formatBps(iface.inBps)}</span>
+              <span className="net-iface-bps">{formatBitRate(iface.inBps)}</span>
               <div className="progress-bg" style={{ height: 3, flex: 1 }}>
                 <div className="progress-fill"
                   style={{ width: `${((iface.inBps ?? 0) / maxIn) * 100}%`, backgroundColor: barColor }} />
@@ -278,7 +246,7 @@ function IfacesTable({
             {/* Upload bar */}
             <div className="net-iface-bar-line">
               <span className="net-iface-dir">↑</span>
-              <span className="net-iface-bps">{formatBps(iface.outBps)}</span>
+              <span className="net-iface-bps">{formatBitRate(iface.outBps)}</span>
               <div className="progress-bg" style={{ height: 3, flex: 1 }}>
                 <div className="progress-fill"
                   style={{ width: `${((iface.outBps ?? 0) / maxOut) * 100}%`, backgroundColor: '#6c5ce7' }} />

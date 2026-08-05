@@ -10,6 +10,7 @@
 import type { HomeAssistantSnapshot, HomeAssistantMetric, HomeAssistantPump } from '../../types';
 import { SourceDot } from './SourceDot';
 import { SummaryRow } from './SummaryRow';
+import { formatDuration } from '../format';
 
 interface HomeStatusCardProps {
   homeAssistant: HomeAssistantSnapshot | null;
@@ -19,24 +20,13 @@ function metric(ha: HomeAssistantSnapshot, key: string): HomeAssistantMetric | u
   return ha.metrics.find((m) => m.key === key);
 }
 
-function formatElapsed(ms: number): string {
-  const secs = Math.max(0, Math.floor(ms / 1000));
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ${secs % 60}s`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ${mins % 60}m`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ${hours % 24}h`;
-}
-
 /** Hero duration line: timer remaining when running, otherwise stopped/paused. */
 function pumpDuration(pump: HomeAssistantPump): string {
   if (pump.running && pump.timerRemaining != null) {
-    return `${formatElapsed(pump.timerRemaining * 1000)} remaining`;
+    return `${formatDuration(pump.timerRemaining)} remaining`;
   }
   if (pump.running) {
-    if (pump.since) return `Running ${formatElapsed(Date.now() - pump.since)}`;
+    if (pump.since) return `Running ${formatDuration((Date.now() - pump.since) / 1000)}`;
     return 'Running indefinitely';
   }
   if (!pump.present) return 'Not configured';

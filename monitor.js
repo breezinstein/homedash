@@ -1867,7 +1867,7 @@ export class MonitorManager {
               message: f.message,
               priority: prio,
               tags: f.severity === 'critical' ? 'rotating_light' : 'warning',
-            }).catch(() => {});
+            });
             f.notifiedAt = Date.now();
           }
         } catch { /* ntfy publish is best-effort */ }
@@ -1893,7 +1893,9 @@ export class MonitorManager {
       const tempPath = `${MONITOR_ALERTS_PATH}.tmp`;
       await writeFile(tempPath, JSON.stringify(allAlerts, null, 2));
       await rename(tempPath, MONITOR_ALERTS_PATH);
-    } catch {}
+    } catch (err) {
+      console.warn('Failed to persist alert history:', err?.message ?? err);
+    }
     } finally {
       this._inFlight = false;
     }

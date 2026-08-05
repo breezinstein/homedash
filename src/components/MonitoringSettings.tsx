@@ -14,6 +14,7 @@ import type {
   AlertRule,
 } from '../types';
 import { AlertRulesEditor } from './AlertRulesEditor';
+import { newId } from '../lib/id';
 
 // ---------------------------------------------------------------------------
 // MonitoringSettings — read/write config.monitoring from the Settings modal.
@@ -156,7 +157,7 @@ export function MonitoringSettings() {
               onCancel={() => cancelEdit(setEditMediaId, setMediaForm)}
               onSave={() => saveEdit(editMediaId, mediaForm, mediaList, 'media',
                 (l) => update({ media: l as MonitoredMedia[] }), setEditMediaId, setMediaForm,
-                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', type: f.type || 'jellyfin', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '' }))}
+                (f) => ({ id: newId(), name: f.name?.trim() || '', type: f.type || 'jellyfin', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '' }))}
               onRemove={(id) => update({ media: mediaList.filter((m) => m.id !== id) })}
               typeField="type" typeOptions={[{ value: 'jellyfin', label: 'Jellyfin' }, { value: 'emby', label: 'Emby' }]}
               fields={[
@@ -177,7 +178,7 @@ export function MonitoringSettings() {
                 (l) => update({ usenet: l as MonitoredUsenet[] }), setEditUsenetId, setUsenetForm,
                 (f) => {
                   const t = f.type || 'sabnzbd';
-                  return { id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', type: t, url: f.url?.trim() || '',
+                  return { id: newId(), name: f.name?.trim() || '', type: t, url: f.url?.trim() || '',
                     apiKey: t === 'sabnzbd' ? f.apiKey?.trim() || undefined : undefined,
                     username: f.username?.trim() || undefined, password: f.password?.trim() || undefined };
                 })}
@@ -217,7 +218,7 @@ export function MonitoringSettings() {
               onCancel={() => cancelEdit(setEditArrId, setArrForm)}
               onSave={() => saveEdit(editArrId, arrForm, arrList, 'arr',
                 (l) => update({ arr: l as MonitoredArr[] }), setEditArrId, setArrForm,
-                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', type: f.type || 'sonarr', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '' }))}
+                (f) => ({ id: newId(), name: f.name?.trim() || '', type: f.type || 'sonarr', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '' }))}
               onRemove={(id) => update({ arr: arrList.filter((a) => a.id !== id) })}
               typeField="type" typeOptions={[{ value: 'sonarr', label: 'Sonarr' }, { value: 'radarr', label: 'Radarr' }]}
               fields={[
@@ -236,7 +237,7 @@ export function MonitoringSettings() {
               onCancel={() => cancelEdit(setEditSeerrId, setSeerrForm)}
               onSave={() => saveEdit(editSeerrId, seerrForm, seerrList, 'seerr',
                 (l) => update({ seerr: l as MonitoredSeerr[] }), setEditSeerrId, setSeerrForm,
-                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', type: f.type || 'overseerr', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '' }))}
+                (f) => ({ id: newId(), name: f.name?.trim() || '', type: f.type || 'overseerr', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '' }))}
               onRemove={(id) => update({ seerr: seerrList.filter((s) => s.id !== id) })}
               typeField="type" typeOptions={[{ value: 'overseerr', label: 'Overseerr' }, { value: 'seerr', label: 'Seerr' }, { value: 'jellyseerr', label: 'Jellyseerr' }]}
               fields={[
@@ -255,7 +256,7 @@ export function MonitoringSettings() {
               onCancel={() => cancelEdit(setEditOpnId, setOpnForm)}
               onSave={() => saveEdit(editOpnId, opnForm, opnList, 'opnsense',
                 (l) => update({ opnsense: l as MonitoredOpnsense[] }), setEditOpnId, setOpnForm,
-                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '', apiSecret: f.apiSecret?.trim() || '', insecureTls: f.insecureTls === true }))}
+                (f) => ({ id: newId(), name: f.name?.trim() || '', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '', apiSecret: f.apiSecret?.trim() || '', insecureTls: f.insecureTls === true }))}
               onRemove={(id) => update({ opnsense: opnList.filter((o) => o.id !== id) })}
               typeField="" typeOptions={[]}
               fields={[
@@ -282,7 +283,7 @@ export function MonitoringSettings() {
               onSave={() => saveEdit(editNtopId, ntopForm, ntopList, 'ntopng',
                 (l) => update({ ntopng: l as MonitoredNtopng[] }), setEditNtopId, setNtopForm,
                 (f) => ({
-                  id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2),
+                  id: newId(),
                   name: f.name?.trim() || '', url: f.url?.trim() || '',
                   username: f.username?.trim() || '', password: f.password || '',
                   ifid: f.ifid != null && f.ifid !== '' ? Number(f.ifid) : undefined,
@@ -314,7 +315,7 @@ export function MonitoringSettings() {
               onCancel={() => cancelEdit(setEditHaId, setHaForm)}
               onSave={() => saveEdit(editHaId, haForm, haList, 'homeassistant',
                 (l) => update({ homeassistant: l as MonitoredHomeAssistant[] }), setEditHaId, setHaForm,
-                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', url: f.url?.trim() || '', token: f.token || '', insecureTls: f.insecureTls === true }))}
+                (f) => ({ id: newId(), name: f.name?.trim() || '', url: f.url?.trim() || '', token: f.token || '', insecureTls: f.insecureTls === true }))}
               onRemove={(id) => update({ homeassistant: haList.filter((x) => x.id !== id) })}
               typeField="" typeOptions={[]}
               fields={[

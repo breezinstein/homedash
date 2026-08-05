@@ -1,5 +1,6 @@
 import type { SolarSnapshot, InverterDetail, BatteryDetail } from '../../types';
 import { RingGauge } from './RingGauge';
+import { formatRuntime } from '../format';
 
 interface PowerPanelProps {
   solar: SolarSnapshot;
@@ -15,21 +16,6 @@ function fmtPower(w: number | null): string {
   if (w == null || !Number.isFinite(w)) return '—';
   if (Math.abs(w) >= 1000) return `${(w / 1000).toFixed(2)}\u202FkW`;
   return `${Math.round(w)}\u202FW`;
-}
-
-function formatRuntime(mins: number | null): { text: string; color: string } {
-  if (mins == null || !Number.isFinite(mins)) return { text: '—', color: '#808080' };
-  const total = Math.max(0, Math.round(mins));
-  if (total < 1) return { text: '<1m', color: '#e74c3c' };
-  const d = Math.floor(total / 1440);
-  const h = Math.floor((total % 1440) / 60);
-  const m = total % 60;
-  let text: string;
-  if (d > 0) text = `${d}d ${h}h`;
-  else if (h > 0) text = `${h}h ${m}m`;
-  else text = `${m}m`;
-  const color = total < 120 ? '#e74c3c' : total < 240 ? '#e67e22' : '#2ecc71';
-  return { text, color };
 }
 
 /**

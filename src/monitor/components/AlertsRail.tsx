@@ -1,28 +1,13 @@
 import type { AlertInstance, Severity } from '../../types';
+import { SEVERITY_COLORS } from '../constants';
+import { formatAgo, stripHtml } from '../format';
 
 interface AlertsRailProps {
   firing: AlertInstance[];
   recentlyResolved: AlertInstance[];
 }
 
-const SEV_COLORS: Record<Severity, string> = {
-  critical: '#e74c3c',
-  warning: '#e67e22',
-  info: '#6c5ce7',
-};
 const SEV_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
-
-function ago(ts: number): string {
-  const diff = Math.round((Date.now() - ts) / 1000);
-  if (diff < 60) return `${diff}s`;
-  if (diff < 3600) return `${Math.round(diff / 60)}m`;
-  if (diff < 86400) return `${Math.round(diff / 3600)}h`;
-  return `${Math.round(diff / 86400)}d`;
-}
-
-function stripHtml(s: string): string {
-  return s.replace(/<[^>]*>/g, '').trim();
-}
 
 /**
  * Right-hand alerts sidebar. Shows "FIRING" (severity-ordered and
@@ -50,7 +35,6 @@ export function AlertsRail({ firing, recentlyResolved }: AlertsRailProps) {
         )}
         variant="firing"
       />
-
       {/* Recently resolved */}
       <AlertGroup
         title="RECENTLY RESOLVED"
@@ -77,7 +61,7 @@ function AlertGroup({
       <div className="alert-group-title">{title}</div>
       {alerts.map((a) => {
         const isFiring = variant === 'firing';
-        const color = isFiring ? (SEV_COLORS[a.severity] ?? '#e67e22') : '#2ecc71';
+        const color = isFiring ? (SEVERITY_COLORS[a.severity] ?? '#e67e22') : '#2ecc71';
         return (
           <div
             key={a.id}
@@ -93,7 +77,7 @@ function AlertGroup({
               <span>{stripHtml(a.message)}</span>
               <span className="alert-ago">
                 {isFiring ? `${a.severity.toUpperCase()} · ` : ''}
-                {ago(a.since)} ago
+                {formatAgo(a.since)} ago
               </span>
             </div>
           </div>

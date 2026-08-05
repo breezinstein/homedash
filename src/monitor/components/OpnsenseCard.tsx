@@ -1,18 +1,11 @@
 import type { OpnsenseSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
 import { RingGauge } from './RingGauge';
+import { formatBitRate } from '../format';
+import { activeWanSaturation } from '../wan';
 
 interface OpnsenseCardProps {
   opnsense: OpnsenseSnapshot;
-}
-
-function formatBps(bytesPerSec: number | null): string {
-  if (bytesPerSec == null || !Number.isFinite(bytesPerSec)) return '—';
-  const bits = bytesPerSec * 8; // bytes/sec → bits/sec
-  if (bits >= 1e9) return `${(bits / 1e9).toFixed(1)} Gbps`;
-  if (bits >= 1e6) return `${(bits / 1e6).toFixed(1)} Mbps`;
-  if (bits >= 1e3) return `${(bits / 1e3).toFixed(1)} Kbps`;
-  return `${Math.round(bits)} bps`;
 }
 
 export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
@@ -25,20 +18,9 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
   const totalOut = allIfaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
   const totalBps = totalIn + totalOut;
 
-  const activeWan = opnsense.wanInterfaces.find((i) => i.active);
+  const { wan: activeWan, wanInBps: wanIn, wanOutBps: wanOut, percent: throughputPct } =
+    activeWanSaturation(opnsense);
   const standbyWans = opnsense.wanInterfaces.filter((i) => !i.active);
-
-  // Gauge = active WAN uplink saturation: the active default-gateway's own
-  // traffic vs its negotiated link speed. Falls back to the aggregate links
-  // (or 1 Gbps) only if the active WAN's line rate is unknown.
-  const wanIn = activeWan?.inBps ?? null;
-  const wanOut = activeWan?.outBps ?? null;
-  const wanBits = ((wanIn ?? 0) + (wanOut ?? 0)) * 8;
-  const wanCapacity = activeWan?.speedBps ?? null;
-  const denominator = wanCapacity && wanCapacity > 0
-    ? wanCapacity
-    : (opnsense.totalLinkCapacityBps || 1e9);
-  const throughputPct = wanBits > 0 ? Math.min(100, (wanBits / denominator) * 100) : 0;
 
   const memDetail = opnsense.memPercent != null
     ? `${Math.round(opnsense.memPercent)}%`
@@ -67,7 +49,7 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
               <RingGauge percent={throughputPct} size={70} warnAt={50} criticalAt={80} />
               <div className="gauge-val">{Math.round(throughputPct)}%</div>
             </div>
-            <div className="summary-hero-value">{formatBps(activeWan ? (wanIn ?? 0) + (wanOut ?? 0) : totalBps)}</div>
+            <div className="summary-hero-value">{formatBitRate(activeWan ? (wanIn ?? 0) + (wanOut ?? 0) : totalBps)}</div>
             <div className="summary-hero-label">WAN Throughput</div>
           </div>
 
@@ -90,7 +72,7 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
                   {activeWan.description || activeWan.name}
                 </span>
                 <span className="summary-row-value" style={{ color: '#2ecc71', fontSize: 11 }}>
-                  ↓ {formatBps(activeWan.inBps ?? 0)} · ↑ {formatBps(activeWan.outBps ?? 0)}
+                  ↓ {formatBitRate(activeWan.inBps ?? 0)} · ↑ {formatBitRate(activeWan.outBps ?? 0)}
                 </span>
               </div>
             )}
