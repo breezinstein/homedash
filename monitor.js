@@ -1142,6 +1142,7 @@ export function resolveMetric(rule, snapshot, targetHost = null) {
   if (source === 'media' && (metric === 'transcoding' || metric === 'streams.transcoding')) return snapshot.media?.transcoding ?? null;
   if (source === 'media' && (metric === 'streams' || metric === 'streams.count')) return snapshot.media?.activeStreams ?? null;
   if (source === 'solar' && metric === 'battery.soc') return snapshot.solar?.status === 'ok' ? snapshot.solar.batterySocPercent : null;
+  if (source === 'solar' && metric === 'battery.power') return snapshot.solar?.status === 'ok' ? snapshot.solar.batteryPowerW : null;
   if (source === 'solar' && metric === 'pv.power') return snapshot.solar?.status === 'ok' ? snapshot.solar.pvPowerW : null;
   if (source === 'solar' && metric === 'grid.power') return snapshot.solar?.status === 'ok' ? snapshot.solar.gridPowerW : null;
 
@@ -1162,6 +1163,16 @@ export function resolveMetric(rule, snapshot, targetHost = null) {
     if (metric === 'downloads.paused') return u.instances.some(i => i.paused) ? 1 : 0;
     if (metric === 'queue.slots') return u.instances.reduce((s, i) => s + i.queuedTotal, 0);
     if (metric === 'downloads.speed') return u.instances.reduce((s, i) => s + (i.speedBps || 0), 0);
+    return null;
+  }
+
+  // Seerr / Overseerr metrics
+  if (source === 'seerr') {
+    const s = snapshot.seerr;
+    if (!s || s.status === 'down') return null;
+    if (metric === 'seerr.issues') return s.issues.length;
+    if (metric === 'seerr.pending') return s.pending.length;
+    if (metric === 'seerr.failed') return s.failed.length;
     return null;
   }
 

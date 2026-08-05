@@ -215,7 +215,7 @@ export interface AlertRule {
   id: string;
   name: string;
   enabled: boolean;
-  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'reachability';
+  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'seerr' | 'reachability';
   host?: string;
   metric: string;
   operator: '>' | '>=' | '<' | '<=' | '==' | '!=';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
-import { Plus, Trash2, Edit2, Activity, Server, Sun, HardDrive, Tv, Download, Clock, Shield, Film, Clapperboard } from 'lucide-react';
+import { Plus, Trash2, Edit2, Activity, Server, Sun, HardDrive, Tv, Download, Clock, Shield, Film, Clapperboard, Bell } from 'lucide-react';
 import type {
   MonitoredMedia,
   MonitoredUsenet,
@@ -9,7 +9,9 @@ import type {
   MonitoredOpnsense,
   MonitoringConfig,
   RemoteServer,
+  AlertRule,
 } from '../types';
+import { AlertRulesEditor } from './AlertRulesEditor';
 
 // ---------------------------------------------------------------------------
 // MonitoringSettings — read/write config.monitoring from the Settings modal.
@@ -262,6 +264,15 @@ export function MonitoringSettings() {
               )}
             />
           </SectionCard>
+
+          {/* Alert rules */}
+          <SectionCard title="Alerts" description="Rules evaluated on every poll; firing alerts show in the banner + sidebar and can push notifications." icon={Bell}>
+            <AlertRulesEditor
+              rules={mon.alerts ?? []}
+              servers={servers}
+              onChange={(rules) => update({ alerts: rules })}
+            />
+          </SectionCard>
         </>
       )}
     </div>
@@ -430,7 +441,19 @@ function SliderRow({ label, value, min, max, step, unit, note, onChange }: {
   );
 }
 
+const DEFAULT_ALERT_RULES: AlertRule[] = [
+  { id: 'host-cpu-high', name: 'High CPU', enabled: true, source: 'glances', metric: 'cpu.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 120, notify: false },
+  { id: 'host-memory-high', name: 'High memory', enabled: true, source: 'glances', metric: 'memory.percent', operator: '>=', threshold: 95, severity: 'warning', forSeconds: 120, notify: false },
+  { id: 'host-disk-high', name: 'High disk usage', enabled: true, source: 'glances', metric: 'disk.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 120, notify: false },
+  { id: 'host-unreachable', name: 'Host unreachable', enabled: true, source: 'reachability', metric: 'reachable', operator: '==', threshold: 0, severity: 'critical', forSeconds: 60, notify: true },
+  { id: 'docker-unhealthy', name: 'Unhealthy Docker container', enabled: true, source: 'docker', metric: 'docker.unhealthy', operator: '>=', threshold: 1, severity: 'warning', forSeconds: 60, notify: false },
+  { id: 'battery-low', name: 'Low battery', enabled: true, source: 'solar', metric: 'battery.soc', operator: '<=', threshold: 15, severity: 'critical', forSeconds: 60, notify: true },
+  { id: 'stream-transcoding', name: 'High transcode count', enabled: true, source: 'media', metric: 'streams.transcoding', operator: '>=', threshold: 4, severity: 'warning', forSeconds: 60, notify: false },
+  { id: 'downloads-paused', name: 'Downloads paused', enabled: true, source: 'usenet', metric: 'downloads.paused', operator: '==', threshold: 1, severity: 'info', forSeconds: 1800, notify: false },
+  { id: 'seerr-issues', name: 'Seerr open issues', enabled: true, source: 'seerr', metric: 'seerr.issues', operator: '>=', threshold: 1, severity: 'warning', forSeconds: 60, notify: false },
+];
+
 const defaultMonitoring: MonitoringConfig = {
   enabled: false, pollIntervalSeconds: 10, glancesHosts: [], solar: { enabled: false }, docker: { enabled: true },
-  media: [], usenet: [], arr: [], seerr: [], opnsense: [], ui: { tabRotationSeconds: 15 }, alerts: [],
+  media: [], usenet: [], arr: [], seerr: [], opnsense: [], ui: { tabRotationSeconds: 15 }, alerts: DEFAULT_ALERT_RULES,
 };

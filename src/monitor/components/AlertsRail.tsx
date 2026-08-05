@@ -1,10 +1,17 @@
-import type { AlertInstance } from '../../types';
+import type { AlertInstance, Severity } from '../../types';
 
 interface AlertsRailProps {
   firing: AlertInstance[];
   recentlyResolved: AlertInstance[];
   onAck: (id: string) => void;
 }
+
+const SEV_COLORS: Record<Severity, string> = {
+  critical: '#e74c3c',
+  warning: '#e67e22',
+  info: '#6c5ce7',
+};
+const SEV_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
 
 function ago(ts: number): string {
   const diff = Math.round((Date.now() - ts) / 1000);
@@ -19,8 +26,8 @@ function stripHtml(s: string): string {
 }
 
 /**
- * Right-hand alerts sidebar matching the dashboard mockup.
- * Shows "FIRING" and "RECENTLY RESOLVED" sections with coloured alert boxes.
+ * Right-hand alerts sidebar. Shows "FIRING" (severity-ordered and
+ * colour-coded) and "RECENTLY RESOLVED" sections.
  */
 export function AlertsRail({ firing, recentlyResolved, onAck }: AlertsRailProps) {
   const firingCount = firing.length;
@@ -36,10 +43,12 @@ export function AlertsRail({ firing, recentlyResolved, onAck }: AlertsRailProps)
         )}
       </div>
 
-      {/* Firing */}
+      {/* Firing — critical first, then by age */}
       <AlertGroup
         title="FIRING"
-        alerts={firing}
+        alerts={[...firing].sort(
+          (a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.since - a.since,
+        )}
         variant="firing"
         onAck={onAck}
       />
@@ -70,26 +79,42 @@ function AlertGroup({
   return (
     <div>
       <div className="alert-group-title">{title}</div>
-      {alerts.map((a) => (
-        <div key={a.id} className={`alert-box ${variant}`}>
-          <span>{variant === 'firing' ? '⚠️' : '✔'}</span>
-          <div className="alert-text">
-            <span>{stripHtml(a.message)}</span>
-            <span className="alert-ago">{ago(a.since)} ago</span>
+      {alerts.map((a) => {
+        const isFiring = variant === 'firing';
+        const color = isFiring ? (SEV_COLORS[a.severity] ?? '#e67e22') : '#2ecc71';
+        return (
+          <div
+            key={a.id}
+            className="alert-box"
+            style={{
+              border: `1px solid ${color}`,
+              background: `color-mix(in srgb, ${color} 10%, transparent)`,
+              color,
+            }}
+          >
+            <span>{isFiring ? '⚠️' : '✔'}</span>
+            <div className="alert-text">
+              <span>{stripHtml(a.message)}</span>
+              <span className="alert-ago">
+                {isFiring ? `${a.severity.toUpperCase()} · ` : ''}
+                {ago(a.since)} ago
+              </span>
+            </div>
+            {isFiring && onAck && !a.acked && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAck(a.id);
+                }}
+                className="alert-ack-btn"
+                style={{ borderColor: `color-mix(in srgb, ${color} 40%, transparent)` }}
+              >
+                Ack
+              </button>
+            )}
           </div>
-          {variant === 'firing' && onAck && !a.acked && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onAck(a.id);
-              }}
-              className="alert-ack-btn"
-            >
-              Ack
-            </button>
-          )}
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

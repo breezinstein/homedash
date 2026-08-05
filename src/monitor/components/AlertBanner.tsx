@@ -56,7 +56,11 @@ export function AlertBanner({ alerts }: AlertBannerProps) {
         </span>
       )}
       <span style={{ color: '#a0a0a0', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {alerts
+        {[...alerts]
+          .sort((a, b) => {
+            const rank = (s: string) => (s === 'critical' ? 0 : s === 'warning' ? 1 : 2);
+            return rank(a.severity) - rank(b.severity);
+          })
           .slice(0, 3)
           .map((a) => stripHtml(a.message))
           .join('  ·  ')}

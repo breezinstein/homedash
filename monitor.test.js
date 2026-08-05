@@ -8,6 +8,7 @@ import {
   getAlertInstancesForTests,
   fetchSeerr,
   estimateBatteryRuntime,
+  resolveMetric,
 } from './monitor.js';
 
 function snapshot(hosts = []) {
@@ -206,4 +207,21 @@ test('battery runtime returns null without capacity or meaningful load', () => {
   assert.equal(estimateBatteryRuntime('x', 100, 0, 0, []), null);
   assert.equal(estimateBatteryRuntime('y', 100, 0, 0, [{ capacityAh: 206, voltage: 58 }]), null);
   assert.equal(estimateBatteryRuntime('z', null, 0, 4000, [{ capacityAh: 206, voltage: 58 }]), null);
+});
+
+test('resolveMetric supports solar battery power and seerr sources', () => {
+  const snapshot = {
+    solar: { status: 'ok', batteryPowerW: 120, batterySocPercent: 80 },
+    seerr: { status: 'degraded', issues: [1, 2], pending: [], failed: [1] },
+  };
+  assert.equal(resolveMetric({ source: 'solar', metric: 'battery.power' }, snapshot), 120);
+  assert.equal(resolveMetric({ source: 'solar', metric: 'battery.soc' }, snapshot), 80);
+  assert.equal(resolveMetric({ source: 'seerr', metric: 'seerr.issues' }, snapshot), 2);
+  assert.equal(resolveMetric({ source: 'seerr', metric: 'seerr.failed' }, snapshot), 1);
+  assert.equal(resolveMetric({ source: 'seerr', metric: 'seerr.pending' }, snapshot), 0);
+  // A down Seerr instance should not feed alert rules.
+  assert.equal(resolveMetric({ source: 'seerr', metric: 'seerr.issues' }, { seerr: { status: 'down' } }), null);
+  // Unknown sources / metrics resolve to null.
+  assert.equal(resolveMetric({ source: 'seerr', metric: 'nope' }, snapshot), null);
+  assert.equal(resolveMetric({ source: 'usenet', metric: 'nope' }, snapshot), null);
 });
