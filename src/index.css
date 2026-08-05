@@ -1213,8 +1213,9 @@ select {
 .streams-list {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-content: start;
   gap: 8px;
   overflow: hidden;
 }
@@ -1229,6 +1230,7 @@ select {
 }
 
 .streams-more {
+  grid-column: 1 / -1;
   display: flex;
   justify-content: center;
   padding-top: 2px;

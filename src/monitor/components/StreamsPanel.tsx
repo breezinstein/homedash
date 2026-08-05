@@ -5,14 +5,14 @@ interface StreamsPanelProps {
   media: MediaSnapshot;
 }
 
-// Kiosk: cap visible rows so the card always fits without scrolling.
-const MAX_VISIBLE_STREAMS = 3;
+// Kiosk: cap visible streams so the card always fits without scrolling.
+// 4 streams = 2 rows × 2 columns.
+const MAX_VISIBLE_STREAMS = 4;
 
 /**
- * Redesigned "Active Streams" card. Single-column list of compact stream
- * rows (no more 2-col grid that overflowed), with a "+N more" badge when
- * the stream count exceeds what fits. Child rows are designed to fit the
- * 1920×1080 kiosk cell: title + meta + progress + play-method badge.
+ * "Active Streams" card. Two-per-row grid of compact stream rows that fit
+ * the 1920×1080 kiosk cell (title + meta + progress + play-method badge),
+ * with a "+N more" badge when the stream count exceeds what fits.
  */
 export function StreamsPanel({ media }: StreamsPanelProps) {
   const streams = media.streams;
