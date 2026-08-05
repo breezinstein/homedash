@@ -323,4 +323,34 @@ export class NotificationManager extends EventEmitter {
     }
     await res.text();
   }
+
+  // Publish a server-originated notification, used by the monitor alert
+  // engine. Subscription topics are deliberately not reused: callers choose
+  // an explicit topic so alert delivery can be configured independently.
+  async publish({ topic, title, message, priority, tags }) {
+    const notif = this.config;
+    if (!notif?.enabled || !notif.serverUrl || !topic) {
+      throw new Error('Notifications are not configured');
+    }
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (notif.username) {
+      headers.Authorization =
+        'Basic ' + Buffer.from(`${notif.username}:${notif.password || ''}`).toString('base64');
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
+    try {
+      const res = await fetch(String(notif.serverUrl).replace(/\/+$/, ''), {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ topic, title, message, priority, tags }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`ntfy publish failed (${res.status})`);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
 }

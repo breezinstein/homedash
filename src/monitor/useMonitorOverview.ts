@@ -20,11 +20,14 @@ export function useMonitorOverview(): UseMonitorOverviewResult {
 
   const failCount = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intervalRef = useRef(5000);
+  const stoppedRef = useRef(false);
 
   const poll = useCallback(async () => {
     try {
       const data = await fetchOverview();
       setOverview(data);
+      intervalRef.current = Math.max(2000, Math.min(30000, data.pollIntervalMs / 2));
       setError(null);
       failCount.current = 0;
     } catch (err) {
@@ -39,9 +42,8 @@ export function useMonitorOverview(): UseMonitorOverviewResult {
     }
 
     // Schedule next poll. Backoff: 2^failCount * base, clamped to 60 s.
-    const base = overview?.pollIntervalMs
-      ? Math.max(2000, Math.min(30000, overview.pollIntervalMs / 2))
-      : 5000;
+    if (stoppedRef.current || document.hidden) return;
+    const base = intervalRef.current;
     const backoff = failCount.current > 2
       ? Math.min(60000, base * Math.pow(2, failCount.current - 2))
       : base;
@@ -50,27 +52,25 @@ export function useMonitorOverview(): UseMonitorOverviewResult {
 
   // Start / stop the poll loop.
   useEffect(() => {
+    stoppedRef.current = false;
     poll();
-    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+    return () => {
+      stoppedRef.current = true;
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [poll]);
 
   // Pause when the tab is hidden; resume on focus.
   useEffect(() => {
-    const onVis = () => {
+    const onVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         if (timerRef.current) clearTimeout(timerRef.current);
         poll();
-      }
+      } else if (timerRef.current) clearTimeout(timerRef.current);
     };
-    const onHide = () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') onVis();
-      else onHide();
-    });
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
-      document.removeEventListener('visibilitychange', onVis);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
     };
   }, [poll]);
 

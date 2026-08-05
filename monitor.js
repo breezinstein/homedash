@@ -9,10 +9,11 @@
 // cached snapshot.
 // ---------------------------------------------------------------------------
 
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, rename } from 'fs/promises';
 import { existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import https from 'https';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -28,6 +29,8 @@ const DEFAULT_POLL_INTERVAL_MS = 10_000;
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_ALERTS = 100;
 const NETWORK_PREV_PATH = join(MONITOR_CONFIG_DIR, 'monitor-net-prev.json');
+const solarSocHistory = new Map();
+const opnsenseInterfaceSamples = new Map();
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -75,9 +78,45 @@ function formatDuration(mins) {
   return `${m}m`;
 }
 
+function estimateBatteryRuntime(key, soc, batteryPowerW, loadPowerW, pvPowerW) {
+  if (!Number.isFinite(soc)) return null;
+  const now = Date.now();
+  const samples = solarSocHistory.get(key) || [];
+  const last = samples[samples.length - 1];
+  if (!last || now - last.timestamp >= 5_000) samples.push({ timestamp: now, soc });
+  const cutoff = now - 15 * 60_000;
+  while (samples.length && samples[0].timestamp < cutoff) samples.shift();
+  solarSocHistory.set(key, samples);
+
+  // Primary: SOC trend-based estimate (most accurate, accounts for all losses).
+  // Requires at least 3 samples and a consistent trend.
+  if (samples.length >= 3 && Number.isFinite(batteryPowerW) && Math.abs(batteryPowerW) > 2) {
+    const first = samples[0];
+    const latest = samples[samples.length - 1];
+    const elapsedMins = (latest.timestamp - first.timestamp) / 60_000;
+    const slope = elapsedMins > 0 ? (latest.soc - first.soc) / elapsedMins : 0;
+    const charging = batteryPowerW > 0;
+    if (Math.abs(slope) >= 0.005 && (slope > 0) === charging) {
+      return charging ? (100 - soc) / slope : (soc - 5) / -slope;
+    }
+  }
+
+  // Fallback: power-based estimate using net battery power.
+  // Assumes ~10 kWh usable per 100% SOC for a typical home battery bank.
+  const assumedKwhPer100Pct = 10;
+  const netBattW = Number.isFinite(batteryPowerW) ? batteryPowerW : 0;
+  if (Math.abs(netBattW) > 10) {
+    const kwhRemaining = (netBattW > 0 ? (100 - soc) : (soc - 5)) / 100 * assumedKwhPer100Pct;
+    const hours = kwhRemaining / (Math.abs(netBattW) / 1000);
+    if (hours > 0 && Number.isFinite(hours)) return hours * 60;
+  }
+
+  return null;
+}
+
 // Docker status string parser. Glances returns simple status strings (not
 // the full Docker CLI "Up 2 hours (healthy)" format), so we handle both.
-function parseContainerHealth(statusStr) {
+export function parseContainerHealth(statusStr) {
   if (!statusStr || typeof statusStr !== 'string') return { state: 'other', health: 'none' };
   const s = statusStr.toLowerCase().trim();
   // Simple single-word statuses (Glances default format)
@@ -128,6 +167,27 @@ async function fetchJson(url, username, password) {
     clearTimeout(timeout);
     return { ok: false, error: err.name === 'AbortError' ? 'Request timed out' : err.message };
   }
+}
+
+async function fetchOpnsenseJson(url, headers, insecureTls) {
+  if (!insecureTls) {
+    const response = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    return response.ok ? response.json() : null;
+  }
+
+  return new Promise(resolve => {
+    const request = https.get(url, { headers, rejectUnauthorized: false, timeout: FETCH_TIMEOUT_MS }, response => {
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => { body += chunk; });
+      response.on('end', () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) return resolve(null);
+        try { resolve(JSON.parse(body)); } catch { resolve(null); }
+      });
+    });
+    request.on('timeout', () => request.destroy());
+    request.on('error', () => resolve(null));
+  });
 }
 
 // Tick representation for progress.
@@ -258,42 +318,114 @@ async function fetchSolar(config) {
     for (const t of targets) {
       const r = await fetchJson(t, inv.username, inv.password);
       if (!r.ok) return { status: 'down', error: r.error };
-      // Reuse the server.js normalizeInverter logic in simplified form
+
       const list = Array.isArray(r.data) ? r.data : [];
+
+      // Parse all metrics — group by prefix: total/, inverter_N/, battery_N/
       const totals = {};
+      const invGroups = new Map();  // key → { field: value }
+      const batGroups = new Map();
+
       for (const m of list) {
         if (!m || typeof m.topic !== 'string') continue;
         const slash = m.topic.indexOf('/');
-        if (slash === -1 || m.topic.slice(0, slash) !== 'total') continue;
-        totals[m.topic.slice(slash + 1)] = m.value;
+        if (slash === -1) continue;
+        const prefix = m.topic.slice(0, slash);
+        const field = m.topic.slice(slash + 1);
+        const val = m.value;
+
+        if (prefix === 'total') {
+          totals[field] = val;
+        } else if (/^inverter_\d+$/i.test(prefix)) {
+          if (!invGroups.has(prefix)) invGroups.set(prefix, { id: prefix.replace(/^inverter_/i, '') });
+          invGroups.get(prefix)[field] = val;
+        } else if (/^battery_\d+$/i.test(prefix)) {
+          if (!batGroups.has(prefix)) batGroups.set(prefix, { id: prefix.replace(/^battery_/i, '') });
+          batGroups.get(prefix)[field] = val;
+        }
       }
-      const pick = (key) => {
-        const v = totals[key];
+
+      const pick = (obj, key) => {
+        const v = obj[key];
         if (typeof v === 'number') return v;
         if (typeof v === 'string') { const n = parseFloat(v); return Number.isFinite(n) ? n : null; }
         return v ?? null;
       };
-      const batteryRuntime = typeof r.data._batteryRuntime === 'object' ? r.data._batteryRuntime : null;
+
+      // Build inverter details
+      const inverters = [...invGroups.values()].map(g => ({
+        id: g.id,
+        serialNumber: pick(g, 'serial_number') != null ? String(pick(g, 'serial_number')) : null,
+        deviceMode: pick(g, 'device_mode') != null ? String(pick(g, 'device_mode')) : null,
+        temperature: pick(g, 'temperature'),
+        busVoltage: pick(g, 'bus_voltage'),
+        systemPowerW: pick(g, 'system_power'),
+        loadPercent: pick(g, 'load_percent'),
+        loadPowerW: pick(g, 'load_power'),
+        loadApparentPowerVa: pick(g, 'load_apparent_power'),
+        acOutputVoltage: pick(g, 'ac_output_voltage'),
+        acOutputFrequency: pick(g, 'ac_output_frequency'),
+        pvPowerW: pick(g, 'pv_power'),
+        pvVoltage: pick(g, 'pv_voltage'),
+        pvCurrent: pick(g, 'pv_current'),
+        batteryVoltage: pick(g, 'battery_voltage'),
+        batteryCurrent: pick(g, 'battery_current'),
+        batteryPowerW: pick(g, 'battery_power'),
+        batteryPowerFromAcW: pick(g, 'battery_power_from_ac'),
+        gridPowerW: pick(g, 'grid_power'),
+        gridVoltage: pick(g, 'grid_voltage'),
+        gridFrequency: pick(g, 'grid_frequency'),
+        generatorPowerW: pick(g, 'generator_power'),
+        generatorVoltage: pick(g, 'generator_voltage'),
+      })).sort((a, b) => Number(a.id) - Number(b.id));
+
+      // Build battery details — try both 'state_of_charge' and 'soc' field names
+      const batteries = [...batGroups.values()].map(g => ({
+        id: g.id,
+        capacityAh: pick(g, 'capacity'),
+        stateOfChargePercent: pick(g, 'state_of_charge') ?? pick(g, 'soc'),
+        powerW: pick(g, 'power'),
+        currentA: pick(g, 'current'),
+        voltage: pick(g, 'voltage'),
+        temperature: pick(g, 'temperature'),
+        temperatureMos: pick(g, 'temperature_mos'),
+        temperatureEnv: pick(g, 'temperature_env'),
+        cycles: pick(g, 'cycles') != null ? Math.round(pick(g, 'cycles')) : null,
+        chargeCapacityAh: pick(g, 'charge_capacity'),
+        cellVoltageHighest: pick(g, 'cell_voltage_highest'),
+        cellVoltageLowest: pick(g, 'cell_voltage_lowest'),
+        cellVoltageImbalance: pick(g, 'cell_voltage_imbalance'),
+        cellTempHighest: pick(g, 'cell_temp_highest'),
+        cellTempLowest: pick(g, 'cell_temp_lowest'),
+        cellTempAverage: pick(g, 'cell_temp_average'),
+      })).sort((a, b) => Number(a.id) - Number(b.id));
+
+      const batterySocPercent = pick(totals, 'battery_state_of_charge');
+      const batteryPowerW = pick(totals, 'battery_power');
+      const loadPowerW = pick(totals, 'load_power');
+      const pvPowerW = pick(totals, 'pv_power');
       return {
         status: 'ok',
-        pvPowerW: pick('pv_power'),
-        loadPowerW: pick('load_power'),
-        gridPowerW: pick('grid_power'),
-        batterySocPercent: pick('battery_state_of_charge'),
-        batteryPowerW: pick('battery_power'),
-        batteryRuntimeMins: batteryRuntime?.minutes ?? null,
+        pvPowerW,
+        loadPowerW,
+        gridPowerW: pick(totals, 'grid_power'),
+        batterySocPercent,
+        batteryPowerW,
+        batteryRuntimeMins: estimateBatteryRuntime(inv.url, batterySocPercent, batteryPowerW, loadPowerW, pvPowerW),
+        inverters,
+        batteries,
       };
     }
-    return { status: 'down', error: 'No metrics found' };
+    return { status: 'down', error: 'No metrics found', inverters: [], batteries: [] };
   } catch (err) {
-    return { status: 'down', error: err.message };
+    return { status: 'down', error: err.message, inverters: [], batteries: [] };
   }
 }
 
 async function fetchMedia(mediaConfigs) {
   if (!Array.isArray(mediaConfigs) || mediaConfigs.length === 0) return null;
   const allStreams = [];
-  let worstStatus = 'ok';
+  let successfulSources = 0;
   let worstError = undefined;
 
   for (const m of mediaConfigs) {
@@ -303,10 +435,10 @@ async function fetchMedia(mediaConfigs) {
       // Emby uses api_key query param; Jellyfin accepts it too
       const r = await fetch(`${url}?api_key=${encodeURIComponent(m.apiKey)}`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!r.ok) {
-        worstStatus = 'down';
         worstError = `HTTP ${r.status} from ${m.name}`;
         continue;
       }
+      successfulSources++;
       const sessions = await r.json();
       for (const s of Array.isArray(sessions) ? sessions : []) {
         if (!s.NowPlayingItem) continue;
@@ -346,7 +478,8 @@ async function fetchMedia(mediaConfigs) {
           server: m.name,
           serverType: m.type,
           user: s.UserName || '—',
-          client: s.Client || s.DeviceName || '—',
+          client: s.Client || '—',
+          device: s.DeviceName || '—',
           title: item.SeriesName || item.Name || '—',
           subtitle: subtitle || undefined,
           progressPercent: pct,
@@ -354,21 +487,21 @@ async function fetchMedia(mediaConfigs) {
           playMethod: play.PlayMethod || 'DirectPlay',
           transcodeDetail,
           paused: play.IsPaused || false,
+          startedAt: typeof play.StartTimeTicks === 'number' ? ticksToSeconds(play.StartTimeTicks) : null,
         });
       }
     } catch (err) {
-      worstStatus = worstStatus === 'ok' ? 'degraded' : worstStatus;
       worstError = worstError || err.message;
     }
   }
 
-  allStreams.sort((a, b) => (b.progressPercent ?? 0) - (a.progressPercent ?? 0));
+  allStreams.sort((a, b) => (a.startedAt ?? 0) - (b.startedAt ?? 0));
   const top = allStreams.slice(0, 8);
   return {
-    status: worstStatus,
+    status: successfulSources === 0 ? 'down' : successfulSources === mediaConfigs.length ? 'ok' : 'degraded',
     error: worstError,
-    activeStreams: top.length,
-    transcoding: top.filter(s => s.playMethod === 'Transcode').length,
+    activeStreams: allStreams.length,
+    transcoding: allStreams.filter(s => s.playMethod === 'Transcode').length,
     streams: top,
   };
 }
@@ -475,18 +608,28 @@ async function fetchArr(arrConfigs) {
   for (const a of arrConfigs) {
     try {
       const headers = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0', 'X-Api-Key': a.apiKey };
-      const [qRes, sysRes, healthRes] = await Promise.all([
-        fetch(`${a.url}/api/v3/queue`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
-        fetch(`${a.url}/api/v3/system/status`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
-        fetch(`${a.url}/api/v3/health`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+      const base = String(a.url).replace(/\/+$/, '');
+      const wantedPath = a.type === 'sonarr' ? '/api/v3/wanted/missing?page=1&pageSize=1' : '/api/v3/wanted/missing?page=1&pageSize=1';
+      const [qRes, sysRes, healthRes, wantedRes] = await Promise.all([
+        fetch(`${base}/api/v3/queue?page=1&pageSize=6&sortKey=estimatedCompletionTime&sortDirection=ascending`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+        fetch(`${base}/api/v3/system/status`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+        fetch(`${base}/api/v3/health`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
+        fetch(`${base}${wantedPath}`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) }),
       ].map(p => p.catch(() => null)));
 
-      const queue = qRes?.ok ? await qRes.json().catch(() => ({})) : {};
+      if (!qRes?.ok || !sysRes?.ok) {
+        const status = qRes?.status || sysRes?.status || 'network error';
+        throw new Error(`HTTP ${status}`);
+      }
+
+      const queue = await qRes.json().catch(() => ({}));
       const health = healthRes?.ok ? await healthRes.json().catch(() => []) : [];
+      const wanted = wantedRes?.ok ? await wantedRes.json().catch(() => ({})) : {};
 
       const queueRecords = Array.isArray(queue.records) ? queue.records : (Array.isArray(queue) ? queue : []);
       const warnings = Array.isArray(health) ? health.filter(h => h.type === 'warning' || h.type === 'error') : [];
-      const wanted = typeof queue.totalRecords === 'number' ? queue.totalRecords : queueRecords.length;
+      const queueCount = typeof queue.totalRecords === 'number' ? queue.totalRecords : queueRecords.length;
+      const wantedCount = typeof wanted.totalRecords === 'number' ? wanted.totalRecords : 0;
 
       for (const r of queueRecords.slice(0, 6)) {
         allQueue.push({
@@ -505,8 +648,8 @@ async function fetchArr(arrConfigs) {
 
       instances.push({
         name: a.name, type: a.type, status: 'ok',
-        queueCount: wanted,
-        wantedCount: 0, // filled from missing endpoint in v2; ok to default
+        queueCount,
+        wantedCount,
         healthOk: warnings.length === 0,
         healthWarnings: warnings.map(w => w.message || w.source || 'unknown'),
       });
@@ -534,78 +677,193 @@ async function fetchOpnsense(opnConfigs) {
   const headers = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
   headers.Authorization = 'Basic ' + Buffer.from(`${o.apiKey}:${o.apiSecret}`).toString('base64');
 
-  // Try to fetch multiple endpoints; each failure degrades to null for that section.
+  // These endpoints are stable across current OPNsense releases. Interface
+  // statistics are byte counters, so per-second rates are derived locally.
+  // Insight (NetFlow) top talkers require a POST to /api/insight/service/top
+  // with JSON body specifying type and time window.
   async function fetchOpn(path) {
     try {
-      const res = await fetch(`${o.url}${path}`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-      if (!res.ok) return null;
-      return await res.json().catch(() => null);
+      return await fetchOpnsenseJson(`${String(o.url).replace(/\/+$/, '')}${path}`, headers, o.insecureTls === true);
     } catch { return null; }
   }
 
-  const [sys, iface, fw] = await Promise.all([
-    fetchOpn('/api/core/system/status'),
-    fetchOpn('/api/diagnostics/interface/getInterfaceStatistics'),
-    fetchOpn('/api/diagnostics/firewall/get_firewall_statistics'),
+  // Insight POST helper — the top-talkers endpoint expects JSON body
+  async function fetchInsightTopTalkers() {
+    try {
+      const url = `${String(o.url).replace(/\/+$/, '')}/api/insight/service/top`;
+      const body = JSON.stringify({ type: 'talker', time: 3600, max: 10 });
+      const reqHeaders = { ...headers, 'Content-Type': 'application/json' };
+      if (!o.insecureTls) {
+        const res = await fetch(url, { method: 'POST', headers: reqHeaders, body, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        return res.ok ? res.json() : null;
+      }
+      return new Promise(resolve => {
+        const u = new URL(url);
+        const req = https.request({
+          hostname: u.hostname,
+          port: u.port || 443,
+          path: u.pathname + u.search,
+          method: 'POST',
+          headers: reqHeaders,
+          rejectUnauthorized: false,
+          timeout: FETCH_TIMEOUT_MS,
+        }, res => {
+          let data = '';
+          res.setEncoding('utf8');
+          res.on('data', c => { data += c; });
+          res.on('end', () => {
+            if (res.statusCode < 200 || res.statusCode >= 300) return resolve(null);
+            try { resolve(JSON.parse(data)); } catch { resolve(null); }
+          });
+        });
+        req.on('timeout', () => req.destroy());
+        req.on('error', () => resolve(null));
+        req.write(body);
+        req.end();
+      });
+    } catch { return null; }
+  }
+
+  const [info, resources, activity, traffic, pfStates, dnsmasqLeases, gwStatus, ifConfig, insightTalkers] = await Promise.all([
+    fetchOpn('/api/diagnostics/system/systemInformation'),
+    fetchOpn('/api/diagnostics/system/systemResources'),
+    fetchOpn('/api/diagnostics/activity/getActivity'),
+    fetchOpn('/api/diagnostics/traffic/interface'),
+    fetchOpn('/api/diagnostics/firewall/pf_states'),
+    fetchOpn('/api/dnsmasq/leases/search'),
+    fetchOpn('/api/routes/gateway/status'),
+    fetchOpn('/api/diagnostics/interface/getInterfaceConfig'),
+    fetchInsightTopTalkers(),
   ]);
 
-  // Normalise system data
-  const hostname = sys?.hostname || sys?.system?.hostname || null;
-  const version = sys?.version || sys?.product_version || sys?.system?.version || null;
-  const uptime = sys?.uptime || sys?.system?.uptime || null;
-  const cpuPct = typeof sys?.cpu === 'number' ? round1(sys.cpu) : null;
-  const memPct = typeof sys?.memory === 'number' ? round1(sys.memory)
-    : typeof sys?.mem === 'number' ? round1(sys.mem) : null;
-  const diskPct = typeof sys?.disk === 'number' ? round1(sys.disk) : null;
+  // DHCP leases: Dnsmasq is the primary provider on most OPNsense installs.
+  // Fall back to Kea if Dnsmasq returns no data.
+  let dhcpLeaseCount = null;
+  if (dnsmasqLeases && typeof dnsmasqLeases.total === 'number') {
+    dhcpLeaseCount = dnsmasqLeases.total;
+  } else {
+    const keaLeases = await fetchOpn('/api/kea/leases4/search');
+    if (keaLeases && typeof keaLeases.total === 'number') dhcpLeaseCount = keaLeases.total;
+  }
 
-  // Interface stats — OPNSense returns statistics as an object keyed by iface name
-  const ifList = Array.isArray(iface?.statistics) ? iface.statistics
-    : (iface && typeof iface === 'object' ? Object.values(iface).filter(v => typeof v === 'object' && v !== null) : []);
-  const wanIfaces = ifList.filter(i => {
-    const desc = ((i.description || i.descr || '') + (i.interface || i.if || '')).toLowerCase();
-    return desc.includes('wan') || desc.includes('igb') || desc.includes('vtnet');
-  }).slice(0, 4).map(i => ({
-    name: i.interface || i.if || i.device || '—',
-    description: i.description || i.descr || '',
-    status: i.status || i.linkstate || 'unknown',
-    inBps: typeof i.inbytes === 'number' ? i.inbytes : (typeof i.bytes_recv_rate_per_sec === 'number' ? i.bytes_recv_rate_per_sec : null),
-    outBps: typeof i.outbytes === 'number' ? i.outbytes : (typeof i.bytes_sent_rate_per_sec === 'number' ? i.bytes_sent_rate_per_sec : null),
-  }));
+  const hostname = info?.name || null;
+  const version = Array.isArray(info?.versions) ? info.versions[0] || null : null;
+  const activityHeaders = Array.isArray(activity?.headers) ? activity.headers : [];
+  const loadLine = activityHeaders.find(line => typeof line === 'string' && line.includes('load averages')) || '';
+  const uptime = loadLine.match(/up\s+(.+?)\s{2,}\d{2}:\d{2}:\d{2}/)?.[1] || null;
+  const cpuLine = activityHeaders.find(line => typeof line === 'string' && line.startsWith('CPU:')) || '';
+  const idle = Number(cpuLine.match(/([\d.]+)%\s+idle/)?.[1]);
+  const cpuPct = Number.isFinite(idle) ? round1(100 - idle) : null;
+  const totalMem = Number(resources?.memory?.total);
+  const usedMem = Number(resources?.memory?.used);
+  const memPct = Number.isFinite(totalMem) && totalMem > 0 && Number.isFinite(usedMem)
+    ? round1((usedMem / totalMem) * 100) : null;
 
-  // If no WAN interfaces identified by name, show the first few non-loopback interfaces
-  if (wanIfaces.length === 0 && ifList.length > 0) {
-    for (const i of ifList) {
-      const name = (i.interface || i.if || i.device || '').toLowerCase();
-      if (name === 'lo' || name === 'lo0' || name.startsWith('lo')) continue;
-      wanIfaces.push({
-        name: i.interface || i.if || i.device || '—',
-        description: i.description || i.descr || '',
-        status: i.status || i.linkstate || 'unknown',
-        inBps: typeof i.inbytes === 'number' ? i.inbytes : null,
-        outBps: typeof i.outbytes === 'number' ? i.outbytes : null,
+  const now = Date.now();
+  // Map device names to per-IP entries and flag running interfaces.
+  // Each physical interface appears multiple times in the traffic endpoint
+  // (once per IP/MAC) — deduplicate by device, preferring the entry with
+  // a routable IP address.
+  const deviceStatus = new Map(); // device → { running, ip }
+  if (ifConfig && typeof ifConfig === 'object') {
+    for (const [dev, cfg] of Object.entries(ifConfig)) {
+      if (!cfg || typeof cfg !== 'object') continue;
+      const flags = Array.isArray(cfg.flags) ? cfg.flags : [];
+      const ipv4 = Array.isArray(cfg.ipv4) ? cfg.ipv4 : [];
+      deviceStatus.set(dev, {
+        running: flags.includes('running') && flags.includes('up'),
+        ip: ipv4.length > 0 ? String(ipv4[0].ipaddr || ipv4[0]) : null,
       });
-      if (wanIfaces.length >= 4) break;
     }
   }
 
-  // Firewall states
-  const fwStates = typeof fw?.current === 'number' ? fw.current
-    : typeof fw?.states === 'number' ? fw.states : null;
+  // Gateway status maps to interface name via the gateway name.
+  // 'none' = online (active), 'down' = offline.
+  const gateways = Array.isArray(gwStatus?.items) ? gwStatus.items : [];
 
-  // Determine status: any data at all means ok
-  const hasAnyData = hostname || version || uptime || cpuPct !== null || memPct !== null || wanIfaces.length > 0;
-  if (!hasAnyData && !sys && !iface && !fw) {
+  const rawInterfaces = traffic?.interfaces && typeof traffic.interfaces === 'object'
+    ? Object.entries(traffic.interfaces) : [];
+  // Collect interfaces split by WAN vs LAN, deduplicated by physical device.
+  const wanDeviceSeen = new Map();
+  const lanDeviceSeen = new Map();
+  for (const [key, iface] of rawInterfaces) {
+    const dev = iface?.device;
+    if (!dev || dev === 'lo0' || dev === 'enc0' || dev === 'pflog0' || dev === 'pfsync0') continue;
+    const isWan = /wan/i.test(key) || /wan/i.test(iface?.name || '');
+    const target = isWan ? wanDeviceSeen : lanDeviceSeen;
+    if (target.has(dev)) {
+      if (key.includes('/') && /\d+\.\d+\.\d+\.\d+/.test(key)) target.set(dev, { key, iface });
+    } else {
+      target.set(dev, { key, iface });
+    }
+  }
+
+  const buildIfaces = (entries) =>
+    [...entries].map(([dev, { key, iface }]) => {
+      const ds = deviceStatus.get(dev);
+      const viaGateway = gateways.find(g => {
+        const gwName = String(g.name || '').toLowerCase();
+        const ifName = (iface?.name || '').toLowerCase();
+        return gwName.includes(dev.toLowerCase()) || (ifName && gwName.includes(ifName));
+      });
+      const gwDown = viaGateway && viaGateway.status === 'down';
+      const isActive = viaGateway ? viaGateway.status === 'none' : (ds?.running ?? false);
+      let ifStatus = 'down';
+      if (ds?.running && !gwDown) ifStatus = 'up';
+      else if (ds?.running && gwDown) ifStatus = 'degraded';
+      const ifDescr = (iface?.name || key).replace(/^\[\w+\]\s*/, '').replace(/\s*\/.+$/, '').trim() || key;
+      const counterKey = `${o.id}:${key}`;
+      const previous = opnsenseInterfaceSamples.get(counterKey);
+      const rxBytes = Number(iface?.['bytes received']);
+      const txBytes = Number(iface?.['bytes transmitted']);
+      const elapsedSeconds = previous ? (now - previous.timestamp) / 1000 : 0;
+      const inBps = previous && elapsedSeconds > 0 && Number.isFinite(rxBytes)
+        ? Math.max(0, (rxBytes - previous.rxBytes) / elapsedSeconds) : null;
+      const outBps = previous && elapsedSeconds > 0 && Number.isFinite(txBytes)
+        ? Math.max(0, (txBytes - previous.txBytes) / elapsedSeconds) : null;
+      if (Number.isFinite(rxBytes) && Number.isFinite(txBytes)) {
+        opnsenseInterfaceSamples.set(counterKey, { timestamp: now, rxBytes, txBytes });
+      }
+      return { name: iface?.device || key, description: ifDescr, status: ifStatus, active: isActive, inBps, outBps };
+    });
+
+  const wanIfaces = buildIfaces(wanDeviceSeen);
+  const lanIfaces = buildIfaces(lanDeviceSeen);
+
+  // Parse Insight NetFlow top talkers
+  const netflowTalkers = [];
+  if (insightTalkers && Array.isArray(insightTalkers.rows)) {
+    for (const row of insightTalkers.rows) {
+      if (!row || !row.address) continue;
+      const bytesIn = Number.isFinite(Number(row.bytes_in)) ? Number(row.bytes_in) : 0;
+      const bytesOut = Number.isFinite(Number(row.bytes_out)) ? Number(row.bytes_out) : 0;
+      const totalBytes = bytesIn + bytesOut || Number(row.bytes) || 0;
+      const pct = Number.isFinite(Number(row.percent)) ? Number(row.percent)
+        : Number.isFinite(Number(row.percentage)) ? Number(row.percentage) : 0;
+      netflowTalkers.push({
+        address: String(row.address),
+        hostname: row.hostname && typeof row.hostname === 'string' ? row.hostname : null,
+        bytes: totalBytes,
+        percentage: pct,
+      });
+    }
+    netflowTalkers.sort((a, b) => b.bytes - a.bytes);
+  }
+
+  if (!hostname && !resources && !activity && !traffic && !pfStates) {
     return { status: 'down', error: 'No data from OPNSense API — check URL, API key, and API secret',
       hostname: null, version: null, uptime: null, cpuPercent: null, memPercent: null, diskPercent: null,
-      wanInterfaces: [], firewallStates: null, dhcpLeases: null };
+      wanInterfaces: [], lanInterfaces: [], netflowTalkers: [], firewallStates: null, dhcpLeases: null };
   }
 
   return {
     status: 'ok',
-    hostname, version, uptime, cpuPercent: cpuPct, memPercent: memPct, diskPercent: diskPct,
+    hostname, version, uptime, cpuPercent: cpuPct, memPercent: memPct, diskPercent: null,
     wanInterfaces: wanIfaces,
-    firewallStates: fwStates,
-    dhcpLeases: typeof sys?.dhcp_leases === 'number' ? sys.dhcp_leases : null,
+    lanInterfaces: lanIfaces,
+    netflowTalkers,
+    firewallStates: Number.isFinite(Number(pfStates?.current)) ? Number(pfStates.current) : null,
+    dhcpLeases: dhcpLeaseCount,
   };
 }
 
@@ -628,7 +886,7 @@ function aggregateDocker(hosts) {
   const problems = allContainers.filter(c => c.health === 'unhealthy' || c.state === 'restarting' || c.state === 'dead').slice(0, 8);
 
   const down = hosts.length > 0 && hosts.every(h => h.status === 'down');
-  const degraded = hosts.some(h => h.status === 'down' && Array.isArray(h.containers) && h.containers.length > 0);
+  const degraded = !down && hosts.some(h => h.status === 'down') && total > 0;
 
   return {
     status: down ? 'down' : degraded ? 'degraded' : 'ok',
@@ -640,73 +898,90 @@ function aggregateDocker(hosts) {
 // Alert engine
 // ---------------------------------------------------------------------------
 
-let alertState = new Map(); // ruleId → { consecutiveBreachMs, instance }
+let alertState = new Map(); // ruleId[:hostId] → { consecutiveBreachMs, instance }
 
-function evaluateAlerts(rules, snapshot) {
+export function resetAlertStateForTests() {
+  alertState = new Map();
+}
+
+export function getAlertInstancesForTests() {
+  return [...alertState.values()].map(entry => entry.instance).filter(Boolean);
+}
+
+export function evaluateAlerts(rules, snapshot) {
   if (!Array.isArray(rules)) return;
-  const firing = [];
   const now = Date.now();
+  const evaluated = new Set();
 
   for (const rule of rules) {
     if (!rule.enabled) continue;
-    const value = resolveMetric(rule, snapshot);
-    if (value === null || value === undefined) continue;
+    const hosts = (rule.source === 'glances' || rule.source === 'reachability') && !rule.host
+      ? snapshot.hosts : [rule.host ? snapshot.hosts.find(h => h.host.id === rule.host) : null];
+    const targets = hosts.length ? hosts : [null];
+    for (const host of targets) {
+      const key = host ? `${rule.id}:${host.host.id}` : rule.id;
+      evaluated.add(key);
+      const value = resolveMetric(rule, snapshot, host);
+      const entry = alertState.get(key) || { consecutiveBreachMs: 0, instance: null };
+      const breach = value !== null && value !== undefined && compareMetric(rule.operator, value, rule.threshold);
 
-    const breach = compareMetric(rule.operator, value, rule.threshold);
-    let entry = alertState.get(rule.id) || { consecutiveBreachMs: 0, instance: null };
-
-    if (breach) {
-      entry.consecutiveBreachMs += snapshot.pollIntervalMs || 10_000;
-      if (entry.consecutiveBreachMs >= (rule.forSeconds || 0) * 1000) {
-        if (!entry.instance || entry.instance.state === 'resolved') {
-          entry.instance = {
-            id: rule.id,
-            ruleId: rule.id,
-            name: rule.name,
-            severity: rule.severity || 'warning',
-            state: 'firing',
-            message: buildAlertMessage(rule, value),
-            value: round1(value),
-            since: now,
-            acked: false,
-          };
-        } else {
-          entry.instance.value = round1(value);
-          entry.instance.message = buildAlertMessage(rule, value);
+      if (breach) {
+        entry.consecutiveBreachMs += snapshot.pollIntervalMs || DEFAULT_POLL_INTERVAL_MS;
+        if (entry.consecutiveBreachMs >= Math.max(0, rule.forSeconds || 0) * 1000) {
+          if (!entry.instance || entry.instance.state === 'resolved') {
+            entry.instance = {
+              id: key, ruleId: rule.id, name: rule.name, severity: rule.severity || 'warning',
+              state: 'firing', message: buildAlertMessage(rule, value, host), value: round1(value),
+              since: now, acked: false,
+            };
+          } else {
+            entry.instance.value = round1(value);
+            entry.instance.message = buildAlertMessage(rule, value, host);
+          }
         }
+      } else {
+        if (entry.instance?.state === 'firing') {
+          entry.instance.state = 'resolved';
+          entry.instance.resolvedAt = now;
+        }
+        entry.consecutiveBreachMs = 0;
       }
-    } else {
-      if (entry.instance && entry.instance.state === 'firing') {
-        entry.instance.state = 'resolved';
-        entry.instance.resolvedAt = now;
-      }
+      alertState.set(key, entry);
+    }
+  }
+
+  // Removed/disabled rules must not remain firing after configuration changes.
+  for (const [key, entry] of alertState) {
+    if (!evaluated.has(key) && entry.instance?.state === 'firing') {
+      entry.instance.state = 'resolved';
+      entry.instance.resolvedAt = now;
       entry.consecutiveBreachMs = 0;
     }
-    alertState.set(rule.id, entry);
   }
 }
 
-function resolveMetric(rule, snapshot) {
+export function resolveMetric(rule, snapshot, targetHost = null) {
   const { source, host, metric } = rule;
 
-  if (source === 'glances' && metric === 'reachable') {
-    const h = host ? snapshot.hosts.find(x => x.host.id === host) : snapshot.hosts[0];
+  if ((source === 'glances' || source === 'reachability') && metric === 'reachable') {
+    const h = targetHost || (host ? snapshot.hosts.find(x => x.host.id === host) : null);
     return h ? (h.status === 'down' ? 0 : 1) : 0;
   }
-  if (source === 'docker' && metric === 'unhealthy') return snapshot.docker?.unhealthy ?? null;
-  if (source === 'docker' && metric === 'restarting') return snapshot.docker?.restarting ?? null;
-  if (source === 'docker' && metric === 'runningRatio') {
+  if (source === 'docker' && (metric === 'unhealthy' || metric === 'docker.unhealthy')) return snapshot.docker?.unhealthy ?? null;
+  if (source === 'docker' && (metric === 'restarting' || metric === 'docker.restarting')) return snapshot.docker?.restarting ?? null;
+  if (source === 'docker' && (metric === 'runningRatio' || metric === 'docker.runningRatio')) {
     const d = snapshot.docker;
     return d && d.total > 0 ? d.running / d.total : null;
   }
-  if (source === 'media' && metric === 'transcoding') return snapshot.media?.transcoding ?? null;
-  if (source === 'media' && metric === 'streams') return snapshot.media?.activeStreams ?? null;
-  if (source === 'solar' && metric === 'batterySoc') return snapshot.solar?.batterySocPercent ?? null;
-  if (source === 'solar' && metric === 'pvPower') return snapshot.solar?.pvPowerW ?? null;
+  if (source === 'media' && (metric === 'transcoding' || metric === 'streams.transcoding')) return snapshot.media?.transcoding ?? null;
+  if (source === 'media' && (metric === 'streams' || metric === 'streams.count')) return snapshot.media?.activeStreams ?? null;
+  if (source === 'solar' && metric === 'battery.soc') return snapshot.solar?.status === 'ok' ? snapshot.solar.batterySocPercent : null;
+  if (source === 'solar' && metric === 'pv.power') return snapshot.solar?.status === 'ok' ? snapshot.solar.pvPowerW : null;
+  if (source === 'solar' && metric === 'grid.power') return snapshot.solar?.status === 'ok' ? snapshot.solar.gridPowerW : null;
 
   // Generic numeric metric resolution against hosts
   if (source === 'glances') {
-    const h = host ? snapshot.hosts.find(x => x.host.id === host) : snapshot.hosts[0];
+    const h = targetHost || (host ? snapshot.hosts.find(x => x.host.id === host) : null);
     if (!h) return null;
     const parts = metric.split('.');
     let obj = h;
@@ -718,16 +993,16 @@ function resolveMetric(rule, snapshot) {
   if (source === 'usenet') {
     const u = snapshot.usenet;
     if (!u) return null;
-    if (metric === 'paused') return u.instances.some(i => i.paused) ? 1 : 0;
-    if (metric === 'slots') return u.instances.reduce((s, i) => s + i.queuedTotal, 0);
-    if (metric === 'speed') return u.instances.reduce((s, i) => s + (i.speedBps || 0), 0);
+    if (metric === 'downloads.paused') return u.instances.some(i => i.paused) ? 1 : 0;
+    if (metric === 'queue.slots') return u.instances.reduce((s, i) => s + i.queuedTotal, 0);
+    if (metric === 'downloads.speed') return u.instances.reduce((s, i) => s + (i.speedBps || 0), 0);
     return null;
   }
 
   return null;
 }
 
-function compareMetric(op, value, threshold) {
+export function compareMetric(op, value, threshold) {
   switch (op) {
     case '>': return value > threshold;
     case '>=': return value >= threshold;
@@ -739,9 +1014,10 @@ function compareMetric(op, value, threshold) {
   }
 }
 
-function buildAlertMessage(rule, value) {
+function buildAlertMessage(rule, value, host) {
   const val = typeof value === 'number' ? round1(value) : value;
-  return `${rule.name}: current ${val} ${rule.operator} ${rule.threshold}`;
+  const source = host ? `${host.host.name} ` : '';
+  return `${source}${rule.name}: ${val} ${rule.operator} ${rule.threshold}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -755,6 +1031,9 @@ export class MonitorManager {
     this._cache = null;
     this._timer = null;
     this._running = false;
+    this._inFlight = false;
+    this._lastCycleDurationMs = null;
+    this._waiters = new Set();
   }
 
   start() {
@@ -763,7 +1042,8 @@ export class MonitorManager {
     if (!cfg?.monitoring?.enabled) return;
     this._running = true;
     this._tick();
-    this._timer = setInterval(() => this._tick(), cfg.monitoring.pollIntervalSeconds * 1000 || DEFAULT_POLL_INTERVAL_MS);
+    const seconds = Math.max(2, Math.min(60, Number(cfg.monitoring.pollIntervalSeconds) || 10));
+    this._timer = setInterval(() => this._tick(), seconds * 1000);
     console.log('Monitor: poller started');
   }
 
@@ -780,12 +1060,15 @@ export class MonitorManager {
   }
 
   async _tick() {
-    if (!this._running) return;
+    if (!this._running || this._inFlight) return;
+    this._inFlight = true;
+    const startedAt = Date.now();
+    try {
     const cfg = this._getConfig();
     if (!cfg?.monitoring?.enabled) { this.stop(); return; }
 
     const mon = cfg.monitoring;
-    const interval = mon.pollIntervalSeconds * 1000 || DEFAULT_POLL_INTERVAL_MS;
+    const interval = Math.max(2, Math.min(60, Number(mon.pollIntervalSeconds) || 10)) * 1000;
 
     // Fan out
     const hostCfgs = Array.isArray(mon.glancesHosts) ? mon.glancesHosts : [];
@@ -798,7 +1081,9 @@ export class MonitorManager {
       fetchOpnsense(mon.opnsense),
     ]);
 
-    const docker = aggregateDocker(hostResults);
+    const docker = mon.docker?.enabled === false
+      ? { status: 'ok', total: 0, running: 0, healthy: 0, unhealthy: 0, restarting: 0, problems: [] }
+      : aggregateDocker(hostResults);
 
     // Global status
     const hostDowns = hostResults.filter(h => h.status === 'down').length;
@@ -807,6 +1092,9 @@ export class MonitorManager {
     if (hostDowns > 0) globalStatus = 'degraded';
     if (hostDowns === hostResults.length && hostResults.length > 0) globalStatus = 'critical';
     if ((docker.unhealthy || 0) > 0 || (docker.restarting || 0) > 0) globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
+    if ([solarResult, mediaResult, usenetResult, arrResult, opnsenseResult].some(source => source?.status === 'down')) {
+      globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
+    }
 
     const snapshot = {
       timestamp: Date.now(),
@@ -837,7 +1125,7 @@ export class MonitorManager {
         try {
           if (mon.alerts.find(r => r.id === f.ruleId)?.notify) {
             const prio = f.severity === 'critical' ? 5 : f.severity === 'warning' ? 4 : 2;
-            await this._notificationManager.publish?.({
+            await this._notificationManager.publish({
               topic: 'homedash-monitor',
               title: `[${f.severity.toUpperCase()}] ${f.name}`,
               message: f.message,
@@ -848,15 +1136,31 @@ export class MonitorManager {
           }
         } catch { /* ntfy publish is best-effort */ }
       }
+
+      if (firing.some(alert => alert.severity === 'critical')) globalStatus = 'critical';
+      else if (firing.length > 0 && globalStatus === 'ok') globalStatus = 'degraded';
+      snapshot.globalStatus = globalStatus;
     }
 
     this._cache = snapshot;
+    this._lastCycleDurationMs = Date.now() - startedAt;
+    for (const waiter of this._waiters) waiter(snapshot);
+    this._waiters.clear();
 
     // Persist alerts
     try {
-      const allAlerts = [...alertState.values()].filter(e => e.instance).map(e => e.instance);
-      await writeFile(MONITOR_ALERTS_PATH, JSON.stringify(allAlerts.slice(0, MAX_ALERTS), null, 2));
+      const allAlerts = [...alertState.values()]
+        .filter(e => e.instance)
+        .map(e => e.instance)
+        .sort((a, b) => (b.resolvedAt || b.since) - (a.resolvedAt || a.since))
+        .slice(0, MAX_ALERTS);
+      const tempPath = `${MONITOR_ALERTS_PATH}.tmp`;
+      await writeFile(tempPath, JSON.stringify(allAlerts, null, 2));
+      await rename(tempPath, MONITOR_ALERTS_PATH);
     } catch {}
+    } finally {
+      this._inFlight = false;
+    }
   }
 
   getOverview() {
@@ -874,6 +1178,30 @@ export class MonitorManager {
 
   getSnapshotAge() {
     return this._cache ? Date.now() - this._cache.timestamp : null;
+  }
+
+  getHealth() {
+    return {
+      running: this._running,
+      polling: this._inFlight,
+      snapshotAge: this.getSnapshotAge(),
+      lastCycleDurationMs: this._lastCycleDurationMs,
+    };
+  }
+
+  waitForNextSnapshot(timeoutMs) {
+    return new Promise(resolve => {
+      const timeout = setTimeout(() => {
+        this._waiters.delete(done);
+        resolve(this.getOverview());
+      }, timeoutMs);
+      const done = (snapshot) => {
+        clearTimeout(timeout);
+        resolve(snapshot);
+      };
+      this._waiters.add(done);
+      this._tick();
+    });
   }
 }
 

@@ -222,7 +222,7 @@ export function MonitoringSettings() {
               onCancel={() => cancelEdit(setEditOpnId, setOpnForm)}
               onSave={() => saveEdit(editOpnId, opnForm, opnList, 'opnsense',
                 (l) => update({ opnsense: l as MonitoredOpnsense[] }), setEditOpnId, setOpnForm,
-                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '', apiSecret: f.apiSecret?.trim() || '' }))}
+                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', url: f.url?.trim() || '', apiKey: f.apiKey?.trim() || '', apiSecret: f.apiSecret?.trim() || '', insecureTls: f.insecureTls === true }))}
               onRemove={(id) => update({ opnsense: opnList.filter((o) => o.id !== id) })}
               typeField="" typeOptions={[]}
               fields={[
@@ -231,6 +231,12 @@ export function MonitoringSettings() {
                 { key: 'apiKey', label: 'API key', placeholder: '' },
                 { key: 'apiSecret', label: 'API secret', placeholder: '', pw: true },
               ]}
+              extraFields={(f, set) => (
+                <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                  <input type="checkbox" checked={f.insecureTls === true} onChange={e => set({ ...f, insecureTls: e.target.checked })} />
+                  Trust a self-signed TLS certificate
+                </label>
+              )}
             />
           </SectionCard>
         </>

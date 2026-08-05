@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useMemo } from 'react';
 import { LoginModal } from '../components/LoginModal';
 import { useMonitorOverview } from './useMonitorOverview';
 import { useTabRotation } from './useTabRotation';
@@ -11,55 +11,44 @@ import {
   DockerCard,
   AlertsRail,
   TabBar,
-  StreamsCard,
   UsenetCard,
   ArrCard,
   OpnsenseCard,
 } from './components';
+import { HomeStatusCard } from './components/HomeStatusCard';
+import { NetworkPanel } from './components/NetworkPanel';
+import { PowerPanel } from './components/PowerPanel';
+import { SourceDot } from './components/SourceDot';
+import type { MediaStream } from '../types';
 
-const HOSTS_PER_PAGE = 4;
+const MAX_VISIBLE_HOSTS = 9;
 
 export function MonitorApp() {
   const { overview, isLoading, error, authRequired } = useMonitorOverview();
-  const [showLoginModal, setShowLoginModal] = useState(authRequired);
-  const [hostPage, setHostPage] = useState(0);
 
-  const tabRotation = overview?.tabRotationSeconds ?? 15;
-  const hosts = overview?.hosts ?? [];
-  const totalPages = Math.max(1, Math.ceil(hosts.length / HOSTS_PER_PAGE));
-  const needsPagination = hosts.length > HOSTS_PER_PAGE;
-
-  // Rotate host pages on the same cadence as tab rotation
+  const tabRotationSeconds = overview?.tabRotationSeconds ?? 15;
   const { activeTab, switchTab, remainingSeconds } = useTabRotation({
-    rotationSeconds: hosts.length > HOSTS_PER_PAGE ? Math.max(6, tabRotation / 2) : 0,
+    rotationSeconds: tabRotationSeconds,
   });
 
-  // Auto-rotate host pages on the infra tab (only when pagination is needed)
-  useEffect(() => {
-    if (activeTab !== 'infra' || !needsPagination) return;
-    const id = setInterval(() => {
-      setHostPage(p => (p + 1) % totalPages);
-    }, Math.max(6000, tabRotation * 500));
-    return () => clearInterval(id);
-  }, [activeTab, totalPages, tabRotation, needsPagination]);
-
-  const visibleHosts = hosts.slice(hostPage * HOSTS_PER_PAGE, (hostPage + 1) * HOSTS_PER_PAGE);
-
-  const alertCount = (overview?.alerts?.firing?.length ?? 0);
+  const hosts = overview?.hosts ?? [];
+  const visibleHosts = hosts.slice(0, MAX_VISIBLE_HOSTS);
+  const hasMoreHosts = hosts.length > MAX_VISIBLE_HOSTS;
 
   const mediaBadge = useMemo(() => {
     const m = overview?.media;
     if (!m) return undefined;
     const u = overview?.usenet;
-    const dlCount = u ? u.instances.reduce((s, i) => s + (i.speedBps && i.speedBps > 0 ? 1 : 0), 0) : 0;
-    return `${m.activeStreams} · ${dlCount}`;
+    const dlCount = u
+      ? u.instances.reduce((s, i) => s + (i.speedBps && i.speedBps > 0 ? 1 : 0), 0)
+      : 0;
+    return `${m.activeStreams} streams · ${dlCount} downloading`;
   }, [overview]);
 
-  if (authRequired && !showLoginModal) setShowLoginModal(true);
   if (authRequired) {
     return (
-      <div className="min-h-dvh bg-[var(--color-background)] flex items-center justify-center">
-        <LoginModal onClose={() => setShowLoginModal(false)} forced />
+      <div className="min-h-dvh bg-[#121213] flex items-center justify-center">
+        <LoginModal forced />
       </div>
     );
   }
@@ -67,79 +56,272 @@ export function MonitorApp() {
   const bannerAlerts = overview?.alerts?.firing ?? [];
 
   return (
-    <div className="h-dvh bg-[var(--color-background)] text-[var(--color-text-primary)] overflow-hidden flex flex-col"
-      style={{ fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" }}>
-      <MonitorHeader overview={overview} alertCount={alertCount} isLoading={isLoading} connectionError={error} />
+    <div
+      className="monitor-shell"
+      style={{
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif",
+      }}
+    >
+      <MonitorHeader
+        overview={overview}
+        isLoading={isLoading}
+        connectionError={error}
+      />
       <AlertBanner alerts={bannerAlerts} />
 
-      <TabBar activeTab={activeTab} onSwitch={switchTab} remainingSeconds={remainingSeconds}
-        rotationSeconds={tabRotation} mediaBadge={mediaBadge} />
+      {/* ── Top row: 4 summary cards ── */}
+      <div className="top-grid">
+        {overview?.solar && <SolarCard solar={overview.solar} />}
+        {!overview?.solar && <SolarCardPlaceholder />}
 
-      {/* Infrastructure tab */}
-      <main className="flex-1 grid gap-[10px] p-[10px_16px_14px] min-h-0"
-        style={{ display: activeTab === 'infra' ? 'grid' : 'none', gridTemplateColumns: '1fr 1fr 0.85fr', gridTemplateRows: 'auto 1fr 1fr' }}>
-        {/* Solar — spans columns 1-2 at the top */}
-        {overview?.solar && (
-          <div style={{ gridColumn: '1 / span 2', gridRow: 1 }}>
-            <SolarCard solar={overview.solar} />
-          </div>
+        <DockerCard docker={overview?.docker ?? emptyDocker} />
+
+        {overview?.opnsense ? (
+          <OpnsenseCard opnsense={overview.opnsense} />
+        ) : (
+          <OpnsenseCardPlaceholder />
         )}
 
-        {/* Hosts — 2 per row in columns 1-2 */}
-        {visibleHosts.map((h, i) => {
-          const col = (i % 2) + 1;
-          const row = Math.floor(i / 2) + (overview?.solar ? 2 : 1);
-          return (
-            <div key={h.host.id} style={{ gridColumn: col, gridRow: row }} className="min-h-0 overflow-hidden">
-              <HostCard host={h} />
+        <HomeStatusCard />
+      </div>
+
+      {/* ── Bottom section: server content + alerts ── */}
+      <div className="bottom-grid">
+        {/* Left: server container with tabs */}
+        <div className="server-container">
+          <TabBar
+            activeTab={activeTab}
+            onSwitch={(t) => switchTab(t, true)}
+            remainingSeconds={remainingSeconds}
+            mediaBadge={mediaBadge}
+          />
+
+          {/* Server tab: 3×3 host grid */}
+          {activeTab === 'server' && (
+            <div className="nodes-grid">
+              {visibleHosts.map((h) => (
+                <HostCard key={h.host.id} host={h} />
+              ))}
+              {visibleHosts.length === 0 && (
+                <div className="empty-grid-msg">No hosts configured</div>
+              )}
+              {hasMoreHosts && (
+                <div className="empty-grid-msg">
+                  +{hosts.length - MAX_VISIBLE_HOSTS} more hosts
+                </div>
+              )}
             </div>
-          );
-        })}
+          )}
 
-        {/* Docker — always column 2, row 3 (last host row) */}
-        <div style={{ gridColumn: 2, gridRow: overview?.solar ? 3 : 2 }} className="min-h-0">
-          <DockerCard docker={overview?.docker ?? emptyDocker} />
-        </div>
+          {/* Media tab */}
+          {activeTab === 'media' && (
+            <div className="media-v2">
+              <div className="media-v2-grid">
+                {/* Top-left: Active Streams */}
+                <div className="media-v2-card media-v2-streams">
+                  {overview?.media && overview.media.streams.length > 0 ? (
+                    <>
+                      <div className="streams-header">
+                        <div className="title-group">
+                          <span className="title" style={{ fontSize: 15 }}>Active Streams</span>
+                          <span className="subtitle">
+                            {overview.media.activeStreams} playing · {overview.media.transcoding} transcoding
+                          </span>
+                        </div>
+                        <SourceDot status={overview.media.status} />
+                      </div>
+                      <div className="streams-grid-2col">
+                        {overview.media.streams.map((s, i) => (
+                          <StreamCardCompact key={i} stream={s} />
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-[#a0a0a0] text-[12px]">
+                      No active streams
+                    </div>
+                  )}
+                </div>
 
-        {/* Pagination dots — only when needed */}
-        {needsPagination && (
-          <div className="flex items-center justify-center gap-1 flex-shrink-0" style={{ gridColumn: '1 / span 2', gridRow: overview?.solar ? 4 : 3 }}>
-            {Array.from({ length: totalPages }).map((_, i) => (
-              <button key={i} onClick={() => setHostPage(i)}
-                className={`w-2 h-2 rounded-full transition-colors ${i === hostPage ? 'bg-[var(--color-primary)]' : 'bg-[var(--color-border)]'}`} />
-            ))}
-          </div>
-        )}
+                {/* Top-right: Downloads */}
+                <div className="media-v2-card">
+                  {overview?.usenet ? (
+                    <UsenetCard usenet={overview.usenet} />
+                  ) : (
+                    <MediaPlaceholder title="Downloads" subtitle="Usenet" icon="⬇" />
+                  )}
+                </div>
 
-        {/* Alerts rail — column 3, spans all rows */}
-        <div style={{ gridColumn: 3, gridRow: '1 / span 4' }} className="min-h-0">
-          <AlertsRail firing={overview?.alerts?.firing ?? []} recentlyResolved={overview?.alerts?.recentlyResolved ?? []}
-            onAck={(id) => { ackAlert(id).catch(() => {}); }} />
-        </div>
-      </main>
+                {/* Bottom-left: Sonarr / Radarr */}
+                <div className="media-v2-card">
+                  {overview?.arr ? (
+                    <ArrCard arr={overview.arr} />
+                  ) : (
+                    <MediaPlaceholder title="Sonarr / Radarr" subtitle="Arr" icon="🎬" />
+                  )}
+                </div>
 
-      {/* Media & Downloads tab */}
-      <main className="flex-1 grid gap-[14px] p-[14px_20px_18px] min-h-0"
-        style={{ display: activeTab === 'media' ? 'grid' : 'none', gridTemplateColumns: '1.55fr 1fr', gridTemplateRows: '1.35fr 1fr' }}>
-        {/* Active streams — spans both rows, scrollable */}
-        <div style={{ gridRow: '1 / span 2' }} className="min-h-0 overflow-hidden">
-          {overview?.media ? <StreamsCard media={overview.media} /> : (
-            <div className="flex items-center justify-center h-full text-[var(--color-text-secondary)] text-[13px]">No media servers configured</div>
+                {/* Bottom-right: Seerr */}
+                <div className="media-v2-card">
+                  <MediaPlaceholder title="Seerr" subtitle="Overseerr / Jellyseerr" icon="🔍" />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Network tab */}
+          {activeTab === 'network' && (
+            <div className="network-panel">
+              {overview?.opnsense ? (
+                <NetworkPanel opnsense={overview.opnsense} />
+              ) : (
+                <div className="empty-grid-msg">
+                  No network appliances configured
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Power tab */}
+          {activeTab === 'power' && (
+            <div className="power-tab">
+              {overview?.solar ? (
+                <PowerPanel solar={overview.solar} />
+              ) : (
+                <div className="empty-grid-msg">
+                  No solar/inverter data source configured
+                </div>
+              )}
+            </div>
           )}
         </div>
 
-        {/* Usenet / Arr / OPNSense cards — scrollable */}
-        <div className="flex flex-col gap-[14px] min-h-0 overflow-y-auto" style={{ gridRow: '1 / span 2' }}>
-          {overview?.usenet && <UsenetCard usenet={overview.usenet} />}
-          {overview?.arr && <ArrCard arr={overview.arr} />}
-          {overview?.opnsense && <OpnsenseCard opnsense={overview.opnsense} />}
-          {!overview?.usenet && !overview?.arr && !overview?.opnsense && (
-            <div className="flex items-center justify-center h-full text-[var(--color-text-secondary)] text-[13px]">No downloaders configured</div>
-          )}
-        </div>
-      </main>
+        {/* Right: alerts sidebar */}
+        <AlertsRail
+          firing={overview?.alerts?.firing ?? []}
+          recentlyResolved={overview?.alerts?.recentlyResolved ?? []}
+          onAck={(id) => {
+            ackAlert(id).catch(() => {});
+          }}
+        />
+      </div>
     </div>
   );
 }
 
-const emptyDocker = { status: 'ok' as const, total: 0, running: 0, healthy: 0, unhealthy: 0, restarting: 0, problems: [] };
+/* ── Placeholder cards (shown when data source is unavailable) ── */
+
+function SolarCardPlaceholder() {
+  return (
+    <section className="card">
+      <div className="card-header">
+        <div className="title-group">
+          <span className="title">Power</span>
+          <span className="subtitle">Solar Assistant</span>
+        </div>
+        <span className="status-ok" style={{ opacity: 0.4 }}>
+          offline
+        </span>
+      </div>
+      <div className="flex items-center justify-center h-[100px] text-[#a0a0a0] text-[12px]">
+        No solar data source configured
+      </div>
+    </section>
+  );
+}
+
+function OpnsenseCardPlaceholder() {
+  return (
+    <section className="card">
+      <div className="card-header">
+        <div className="title-group">
+          <span className="title">OPNsense</span>
+          <span className="subtitle">Multi-WAN</span>
+        </div>
+        <span className="status-ok" style={{ opacity: 0.4 }}>
+          offline
+        </span>
+      </div>
+      <div className="flex items-center justify-center h-[100px] text-[#a0a0a0] text-[12px]">
+        No OPNsense data source configured
+      </div>
+    </section>
+  );
+}
+
+/* ── Helper ── */
+
+const emptyDocker = {
+  status: 'ok' as const,
+  total: 0,
+  running: 0,
+  healthy: 0,
+  unhealthy: 0,
+  restarting: 0,
+  problems: [] as any[],
+};
+
+/* ── Media placeholder ── */
+
+function MediaPlaceholder({ title, subtitle, icon }: { title: string; subtitle: string; icon: string }) {
+  return (
+    <div className="card" style={{ height: '100%' }}>
+      <div className="card-header">
+        <div className="title-group">
+          <span className="title">{icon} {title}</span>
+          <span className="subtitle">{subtitle}</span>
+        </div>
+        <span className="status-ok" style={{ opacity: 0.4 }}>offline</span>
+      </div>
+      <div className="flex items-center justify-center h-[80px] text-[#a0a0a0] text-[12px]">
+        Not configured
+      </div>
+    </div>
+  );
+}
+
+/* ── Compact stream card (2-per-row) ── */
+
+function StreamCardCompact({ stream: s }: { stream: MediaStream }) {
+  const isTranscode = s.playMethod === 'Transcode';
+  const parts: string[] = [];
+  if (s.user && s.user !== '—') parts.push(s.user);
+  if (s.device && s.device !== '—') parts.push(`on ${s.device}`);
+  if (s.client && s.client !== '—') parts.push(`via ${s.client}`);
+  const userLine = parts.join(' ') || '—';
+
+  return (
+    <div className={`stream-row ${isTranscode ? 'stream-row-transcode' : ''}`}>
+      <div className="stream-info">
+        <div className="stream-title" title={s.title}>
+          {s.title}
+          {s.subtitle && <span className="stream-title-sub"> — {s.subtitle}</span>}
+        </div>
+        <div className="stream-meta">
+          <span>{userLine}</span>
+          <span> · </span>
+          <span>{s.server}</span>
+          {s.paused && <span className="stream-paused">PAUSED</span>}
+        </div>
+        {s.progressPercent != null && (
+          <div className="stream-progress">
+            <div className="progress-bg" style={{ height: 4 }}>
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${Math.min(100, s.progressPercent)}%`,
+                  background: isTranscode ? '#e67e22' : '#6c5ce7',
+                }}
+              />
+            </div>
+            <span className="stream-position">{s.positionLabel}</span>
+          </div>
+        )}
+      </div>
+      <span className={`stream-badge ${isTranscode ? 'stream-badge-warn' : 'stream-badge-ok'}`}>
+        {s.transcodeDetail || s.playMethod}
+      </span>
+    </div>
+  );
+}

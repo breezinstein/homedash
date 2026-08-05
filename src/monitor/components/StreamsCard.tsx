@@ -5,56 +5,83 @@ interface StreamsCardProps {
   media: MediaSnapshot;
 }
 
+/**
+ * Compact media streams panel designed to fit a 1080p screen without
+ * scrolling.  Each stream row is a single line with a thin progress bar
+ * and play-method badge.  The subtitle includes user, device, client app,
+ * and server.
+ */
 export function StreamsCard({ media }: StreamsCardProps) {
   return (
-    <section className="flex flex-col rounded-2xl border border-[var(--color-border)] p-[14px_16px] bg-[var(--color-surface)] min-h-0 overflow-hidden">
-      <div className="flex items-center gap-[9px] mb-[11px]">
-        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)]">🎬 Active Streams</h2>
-        <span className="text-[11px] text-[var(--color-text-secondary)]">
-          {media.activeStreams} playing · {media.transcoding} transcoding
-        </span>
-        <div className="ml-auto"><SourceDot status={media.status} /></div>
+    <div className="streams-panel">
+      {/* Header */}
+      <div className="streams-header">
+        <div className="title-group">
+          <span className="title">Active Streams</span>
+          <span className="subtitle">
+            {media.activeStreams} playing · {media.transcoding} transcoding
+          </span>
+        </div>
+        <SourceDot status={media.status} />
       </div>
 
-      <div className="overflow-y-auto flex flex-col gap-[10px] flex-1">
+      {/* Stream list */}
+      <div className="streams-list">
         {media.streams.length === 0 ? (
-          <div className="text-[var(--color-text-secondary)] text-[12px] py-[10px]">No active streams</div>
+          <div className="empty-grid-msg" style={{ padding: '20px 0' }}>
+            No active streams
+          </div>
         ) : (
-          media.streams.map((s, i) => <StreamRow key={i} stream={s} />)
+          media.streams.map((s, i) => <CompactStreamRow key={i} stream={s} />)
         )}
       </div>
-    </section>
+    </div>
   );
 }
 
-function StreamRow({ stream: s }: { stream: MediaStream }) {
+function CompactStreamRow({ stream: s }: { stream: MediaStream }) {
   const isTranscode = s.playMethod === 'Transcode';
 
-  return (
-    <div className="flex items-center gap-[13px] rounded-xl border border-[var(--color-border)] p-[11px_13px] bg-[var(--color-surface)]">
-      {/* Thumbnail placeholder */}
-      <div className="w-[46px] h-[62px] rounded-lg flex-shrink-0 bg-gradient-to-br from-[#312e81] to-[#1e1b4b] grid place-items-center text-[20px] border border-[var(--color-border)]">
-        🎬
-      </div>
+  // Build subtitle: "user on device via app · server"
+  const parts: string[] = [];
+  if (s.user && s.user !== '—') parts.push(s.user);
+  if (s.device && s.device !== '—') parts.push(`on ${s.device}`);
+  if (s.client && s.client !== '—') parts.push(`via ${s.client}`);
+  const userLine = parts.join(' ') || '—';
 
-      <div className="flex-1 min-w-0">
-        <div className="text-[13.5px] font-semibold truncate">
+  return (
+    <div className={`stream-row ${isTranscode ? 'stream-row-transcode' : ''}`}>
+      <div className="stream-info">
+        <div className="stream-title" title={s.title}>
           {s.title}
-          {s.subtitle && <span className="text-[var(--color-text-secondary)] font-medium ml-1">{s.subtitle}</span>}
+          {s.subtitle && (
+            <span className="stream-title-sub"> — {s.subtitle}</span>
+          )}
         </div>
-        <div className="text-[11px] text-[var(--color-text-secondary)] mt-[2px]">{s.user} · {s.client} · {s.server}</div>
+        <div className="stream-meta">
+          <span>{userLine}</span>
+          <span> · </span>
+          <span>{s.server}</span>
+          {s.paused && <span className="stream-paused">PAUSED</span>}
+        </div>
         {s.progressPercent != null && (
-          <div className="flex items-center gap-[10px] mt-[7px]">
-            <div className="flex-1 h-[7px] rounded-full bg-[var(--color-surface)] overflow-hidden">
-              <div className="h-full rounded-full bg-[var(--color-primary)]" style={{ width: `${Math.min(100, s.progressPercent)}%` }} />
+          <div className="stream-progress">
+            <div className="progress-bg" style={{ height: 4 }}>
+              <div
+                className="progress-fill"
+                style={{
+                  width: `${Math.min(100, s.progressPercent)}%`,
+                  background: isTranscode ? '#e67e22' : '#6c5ce7',
+                }}
+              />
             </div>
-            <span className="text-[11px] text-[var(--color-text-secondary)] tabular-nums flex-shrink-0">{s.positionLabel}</span>
+            <span className="stream-position">{s.positionLabel}</span>
           </div>
         )}
       </div>
-
-      {/* Play method badge */}
-      <span className={`flex-shrink-0 text-[10px] font-extrabold tracking-[.5px] uppercase px-[8px] py-[3px] rounded-md ${isTranscode ? 'bg-[color-mix(in_srgb,var(--color-warning)_14%,transparent)] text-[var(--color-warning)]' : 'bg-[color-mix(in_srgb,var(--color-success)_14%,transparent)] text-[var(--color-success)]'}`}>
+      <span
+        className={`stream-badge ${isTranscode ? 'stream-badge-warn' : 'stream-badge-ok'}`}
+      >
         {s.transcodeDetail || s.playMethod}
       </span>
     </div>

@@ -200,6 +200,7 @@ export interface MonitoredOpnsense {
   url: string;
   apiKey: string;
   apiSecret: string;
+  insecureTls?: boolean;
 }
 
 export interface AlertRule {
@@ -260,6 +261,56 @@ export interface SolarSnapshot {
   batterySocPercent: number | null;
   batteryPowerW: number | null;
   batteryRuntimeMins: number | null;
+  inverters: InverterDetail[];
+  batteries: BatteryDetail[];
+}
+
+/** Per-inverter metrics from Solar Assistant. */
+export interface InverterDetail {
+  id: string;
+  serialNumber: string | null;
+  deviceMode: string | null;       // e.g. "Solar/Grid"
+  temperature: number | null;
+  busVoltage: number | null;
+  systemPowerW: number | null;
+  loadPercent: number | null;
+  loadPowerW: number | null;
+  loadApparentPowerVa: number | null;
+  acOutputVoltage: number | null;
+  acOutputFrequency: number | null;
+  pvPowerW: number | null;
+  pvVoltage: number | null;
+  pvCurrent: number | null;
+  batteryVoltage: number | null;
+  batteryCurrent: number | null;
+  batteryPowerW: number | null;
+  batteryPowerFromAcW: number | null;
+  gridPowerW: number | null;
+  gridVoltage: number | null;
+  gridFrequency: number | null;
+  generatorPowerW: number | null;
+  generatorVoltage: number | null;
+}
+
+/** Per-battery (BMS) metrics from Solar Assistant. */
+export interface BatteryDetail {
+  id: string;
+  capacityAh: number | null;
+  stateOfChargePercent: number | null;
+  powerW: number | null;
+  currentA: number | null;
+  voltage: number | null;
+  temperature: number | null;
+  temperatureMos: number | null;
+  temperatureEnv: number | null;
+  cycles: number | null;
+  chargeCapacityAh: number | null;
+  cellVoltageHighest: number | null;
+  cellVoltageLowest: number | null;
+  cellVoltageImbalance: number | null;
+  cellTempHighest: number | null;
+  cellTempLowest: number | null;
+  cellTempAverage: number | null;
 }
 
 export interface DockerSummary {
@@ -277,6 +328,7 @@ export interface MediaStream {
   serverType: 'emby' | 'jellyfin';
   user: string;
   client: string;
+  device: string;
   title: string;
   subtitle?: string;
   progressPercent: number | null;
@@ -355,8 +407,17 @@ export interface OpnsenseInterfaceStats {
   name: string;
   description: string;
   status: string;               // up / down / no carrier
+  active: boolean;              // this WAN is the current default gateway
   inBps: number | null;
   outBps: number | null;
+}
+
+/** NetFlow / Insight top talker entry from OPNsense. */
+export interface NetFlowTalker {
+  address: string;
+  hostname: string | null;
+  bytes: number;
+  percentage: number;
 }
 
 export interface OpnsenseSnapshot {
@@ -369,6 +430,8 @@ export interface OpnsenseSnapshot {
   memPercent: number | null;
   diskPercent: number | null;
   wanInterfaces: OpnsenseInterfaceStats[];
+  lanInterfaces: OpnsenseInterfaceStats[];
+  netflowTalkers: NetFlowTalker[];
   firewallStates: number | null;
   dhcpLeases: number | null;
 }

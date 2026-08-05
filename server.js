@@ -188,7 +188,16 @@ const defaultConfig = {
     arr: [],
     opnsense: [],
     ui: { tabRotationSeconds: 15 },
-    alerts: [],
+    alerts: [
+      { id: 'host-cpu-high', name: 'High CPU', enabled: true, source: 'glances', metric: 'cpu.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 120, notify: false },
+      { id: 'host-memory-high', name: 'High memory', enabled: true, source: 'glances', metric: 'memory.percent', operator: '>=', threshold: 95, severity: 'warning', forSeconds: 120, notify: false },
+      { id: 'host-disk-high', name: 'High disk usage', enabled: true, source: 'glances', metric: 'disk.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 120, notify: false },
+      { id: 'host-unreachable', name: 'Host unreachable', enabled: true, source: 'reachability', metric: 'reachable', operator: '==', threshold: 0, severity: 'critical', forSeconds: 60, notify: true },
+      { id: 'docker-unhealthy', name: 'Unhealthy Docker container', enabled: true, source: 'docker', metric: 'docker.unhealthy', operator: '>=', threshold: 1, severity: 'warning', forSeconds: 60, notify: false },
+      { id: 'battery-low', name: 'Low battery', enabled: true, source: 'solar', metric: 'battery.soc', operator: '<=', threshold: 15, severity: 'critical', forSeconds: 60, notify: true },
+      { id: 'stream-transcoding', name: 'High transcode count', enabled: true, source: 'media', metric: 'streams.transcoding', operator: '>=', threshold: 4, severity: 'warning', forSeconds: 60, notify: false },
+      { id: 'downloads-paused', name: 'Downloads paused', enabled: true, source: 'usenet', metric: 'downloads.paused', operator: '==', threshold: 1, severity: 'info', forSeconds: 1800, notify: false },
+    ],
   },
   colors: {
     primary: "#6366f1",
@@ -1522,7 +1531,11 @@ app.post('/api/notifications/dismiss', requireAuth, (req, res) => {
 
 // GET /api/monitor/overview - Latest snapshot from the background poller.
 // Admin only: contains hostnames, IPs, container lists, media details.
-app.get('/api/monitor/overview', requireAuth, (req, res) => {
+app.get('/api/monitor/overview', requireAuth, async (req, res) => {
+  if (req.query.wait === '1') {
+    const interval = monitorManager.getOverview().pollIntervalMs;
+    return res.json(await monitorManager.waitForNextSnapshot(interval + 1000));
+  }
   res.json(monitorManager.getOverview());
 });
 
@@ -1539,10 +1552,7 @@ app.post('/api/monitor/alerts/:id/ack', requireAuth, (req, res) => {
 
 // GET /api/monitor/healthz - Liveness check (anonymous-safe).
 app.get('/api/monitor/healthz', (req, res) => {
-  res.json({
-    running: true,
-    snapshotAge: monitorManager.getSnapshotAge(),
-  });
+  res.json(monitorManager.getHealth());
 });
 
 // Serve static files in production
