@@ -1268,6 +1268,192 @@ export async function fetchNtopng(ntopConfigs) {
 }
 
 // ---------------------------------------------------------------------------
+// Home Assistant — smart-home REST API (https://developers.home-assistant.io
+// /docs/api/rest/). Long-lived access token via `Authorization: Bearer`.
+// Polls the entity state list and distils the glance-able household metrics
+// (power, energy, temperature, humidity, battery, counts) plus the list of
+// unavailable devices (typically dropped MQTT devices).
+// ---------------------------------------------------------------------------
+
+/** Heuristic: turn a Home Assistant state list into the snapshot the UI wants. */
+function buildHomeAssistantSnapshot(config, states) {
+  const friendlyName = e => (e.attributes && e.attributes.friendly_name) || e.entity_id;
+  const numState = e => {
+    const n = Number(e.state);
+    return Number.isFinite(n) ? n : null;
+  };
+  const deviceClass = e => e.attributes?.device_class ?? null;
+
+  // Glances entities duplicate the server integration, and inverter/solar
+  // power stats duplicate the solar integration — drop them from discovery.
+  const isGlancesEntity = e => /^(sensor|binary_sensor)\.glances/i.test(e.entity_id);
+  const isInverterStat = e => /inverter|solar|photovoltaic|\bpv\b|\bgrid\b/i.test(
+    `${e.entity_id} ${friendlyName(e)}`);
+
+  const entities = Array.isArray(states)
+    ? states.filter(e => e && typeof e.entity_id === 'string' && !isGlancesEntity(e))
+    : [];
+  const unitOf = e => e.attributes?.unit_of_measurement ?? null;
+
+  const unavailableEntities = entities.filter(e => e.state === 'unavailable');
+  const onCount = entities.filter(e => e.state === 'on').length;
+
+  const metrics = [];
+  const addMetric = (key, label, value, unit) => {
+    if (value != null && value !== '') metrics.push({ key, label, value, unit: unit ?? null });
+  };
+
+  // Power — the sensor with the largest |reading| (usually the utility meter),
+  // skipping inverter/solar power stats that the solar integration covers.
+  const powerSensors = entities
+    .filter(e => deviceClass(e) === 'power' && !isInverterStat(e))
+    .map(e => ({ e, v: Math.abs(numState(e) ?? 0) }))
+    .sort((a, b) => b.v - a.v);
+  if (powerSensors.length) {
+    const top = powerSensors[0].e;
+    addMetric('power', friendlyName(top), numState(top), unitOf(top) || 'W');
+  }
+
+  // Temperature — prefer a climate's current temperature, else a temp sensor.
+  let tempEntity = entities.find(e => e.entity_id.startsWith('climate.') && e.attributes?.current_temperature != null);
+  if (!tempEntity) tempEntity = entities.find(e => deviceClass(e) === 'temperature' && numState(e) != null);
+  if (tempEntity) {
+    const temp = tempEntity.entity_id.startsWith('climate.')
+      ? Number(tempEntity.attributes.current_temperature)
+      : numState(tempEntity);
+    addMetric('temperature', 'Temperature', Number.isFinite(temp) ? temp : null, '°C');
+  }
+
+  // Humidity.
+  const humidity = entities.find(e => deviceClass(e) === 'humidity' && numState(e) != null);
+  if (humidity) addMetric('humidity', 'Humidity', numState(humidity), unitOf(humidity) || '%');
+
+  // Battery — the lowest level currently reporting.
+  const batterySensors = entities.filter(e => deviceClass(e) === 'battery' && numState(e) != null);
+  if (batterySensors.length) {
+    const lowest = batterySensors.reduce((a, b) => (numState(a) ?? 100) <= (numState(b) ?? 100) ? a : b);
+    addMetric('battery', `${friendlyName(lowest)} battery`, numState(lowest), unitOf(lowest) || '%');
+  }
+
+  // On-counts.
+  const lightsOn = entities.filter(e => e.entity_id.startsWith('light.') && e.state === 'on').length;
+  if (lightsOn > 0) addMetric('lights', 'Lights on', lightsOn);
+  const switchesOn = entities.filter(e => e.entity_id.startsWith('switch.') && e.state === 'on').length;
+  if (switchesOn > 0) addMetric('switches', 'Switches on', switchesOn);
+  if (onCount > 0) addMetric('on', 'Entities on', onCount);
+  if (unavailableEntities.length > 0) addMetric('unavailable', 'Unavailable devices', unavailableEntities.length);
+
+  // Open doors / windows — always reported (0 is meaningful on a status card).
+  const openDoors = entities.filter(e =>
+    ['door', 'opening', 'garage_door'].includes(deviceClass(e)) && e.state === 'on').length;
+  addMetric('doors', 'Doors open', openDoors);
+
+  // Pressure pump — drives the Home Status card hero. Prefer a switch (on/off),
+  // else a binary_sensor, whose id/name mentions "pump".
+  const pumpEntity = entities.find(e =>
+    e.entity_id.startsWith('switch.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`))
+    || entities.find(e =>
+      e.entity_id.startsWith('binary_sensor.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`));
+  const pump = pumpEntity
+    ? {
+        present: true,
+        running: pumpEntity.state === 'on',
+        name: friendlyName(pumpEntity),
+        state: pumpEntity.state,
+        since: typeof pumpEntity.last_changed === 'string' ? Date.parse(pumpEntity.last_changed) : null,
+        label: (friendlyName(pumpEntity) || 'Pressure Pump').toUpperCase(),
+      }
+    : { present: false, running: false, name: 'Pressure Pump', state: 'off', since: null, label: 'PRESSURE PUMP' };
+
+  return {
+    status: 'ok',
+    version: config?.version ?? null,
+    locationName: config?.location_name ?? null,
+    entityCount: entities.length,
+    onCount,
+    unavailable: {
+      count: unavailableEntities.length,
+      devices: unavailableEntities.slice(0, 20).map(e => ({ entityId: e.entity_id, name: friendlyName(e) })),
+    },
+    metrics: metrics.slice(0, 10),
+    pump,
+  };
+}
+
+export async function fetchHomeAssistant(haConfigs) {
+  if (!Array.isArray(haConfigs) || haConfigs.length === 0) return null;
+  const ha = haConfigs[0];
+  if (!ha || !ha.url || !ha.token) return null;
+
+  const base = String(ha.url).replace(/\/+$/, '');
+  const insecureTls = ha.insecureTls === true;
+  const headers = {
+    Authorization: `Bearer ${ha.token}`,
+    Accept: 'application/json',
+    'Content-Type': 'application/json',
+  };
+
+  async function haGet(path) {
+    const url = `${base}${path}`;
+    try {
+      if (!insecureTls) {
+        const res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+        if (res.status < 200 || res.status >= 300) return { ok: false, status: res.status };
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('json')) return { ok: false, status: res.status };
+        return { ok: true, status: res.status, data: await res.json() };
+      }
+      return await new Promise(resolve => {
+        const u = new URL(url);
+        const req = https.request({
+          hostname: u.hostname,
+          port: u.port || 443,
+          path: u.pathname + u.search,
+          method: 'GET',
+          headers,
+          rejectUnauthorized: false,
+          timeout: FETCH_TIMEOUT_MS,
+        }, res => {
+          let body = '';
+          res.setEncoding('utf8');
+          res.on('data', c => { body += c; });
+          res.on('end', () => {
+            const status = res.statusCode || 0;
+            if (status < 200 || status >= 300) return resolve({ ok: false, status });
+            try { resolve({ ok: true, status, data: JSON.parse(body) }); }
+            catch { resolve({ ok: false, status }); }
+          });
+        });
+        req.on('timeout', () => req.destroy());
+        req.on('error', () => resolve({ ok: false, status: 0 }));
+      });
+    } catch { return { ok: false, status: 0 }; }
+  }
+
+  const [configRes, statesRes] = await Promise.all([
+    haGet('/api/config'),
+    haGet('/api/states'),
+  ]);
+
+  if (!configRes.ok && !statesRes.ok) {
+    const status = configRes.status || statesRes.status;
+    const authIssue = status === 401 || status === 403;
+    return {
+      status: 'down',
+      error: authIssue
+        ? 'Home Assistant authentication failed — check the long-lived access token'
+        : 'No data from Home Assistant — check URL and token',
+      version: null, locationName: null, entityCount: 0, onCount: 0,
+      unavailable: { count: 0, devices: [] },
+      metrics: [],
+      pump: { present: false, running: false, name: 'Pressure Pump', state: 'off', since: null, label: 'PRESSURE PUMP' },
+    };
+  }
+
+  return buildHomeAssistantSnapshot(configRes.ok ? configRes.data : null, statesRes.ok ? statesRes.data : null);
+}
+
+// ---------------------------------------------------------------------------
 // Docker aggregation (from Glances container lists)
 // ---------------------------------------------------------------------------
 
@@ -1483,7 +1669,7 @@ export class MonitorManager {
 
     // Fan out
     const hostCfgs = Array.isArray(mon.glancesHosts) ? mon.glancesHosts : [];
-    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult] = await Promise.all([
+    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult, homeAssistantResult] = await Promise.all([
       Promise.all(hostCfgs.map(h => fetchGlancesHost(h))),
       fetchSolar(cfg),
       fetchMedia(mon.media),
@@ -1492,6 +1678,7 @@ export class MonitorManager {
       fetchSeerr(mon.seerr),
       fetchOpnsense(mon.opnsense),
       fetchNtopng(mon.ntopng),
+      fetchHomeAssistant(mon.homeassistant),
     ]);
 
     const docker = mon.docker?.enabled === false
@@ -1505,7 +1692,7 @@ export class MonitorManager {
     if (hostDowns > 0) globalStatus = 'degraded';
     if (hostDowns === hostResults.length && hostResults.length > 0) globalStatus = 'critical';
     if ((docker.unhealthy || 0) > 0 || (docker.restarting || 0) > 0) globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
-    if ([solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult].some(source => source?.status === 'down')) {
+    if ([solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult, homeAssistantResult].some(source => source?.status === 'down')) {
       globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
     }
 
@@ -1521,6 +1708,7 @@ export class MonitorManager {
       seerr: seerrResult,
       opnsense: opnsenseResult,
       ntopng: ntopngResult,
+      homeassistant: homeAssistantResult,
       alerts: { firing: [], recentlyResolved: [] },
       pollIntervalMs: interval,
       tabRotationSeconds: mon.ui?.tabRotationSeconds ?? 15,

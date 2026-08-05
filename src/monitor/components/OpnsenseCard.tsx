@@ -25,14 +25,20 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
   const totalOut = allIfaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
   const totalBps = totalIn + totalOut;
 
-  // Honest saturation: real bit rate vs. the sum of negotiated link speeds.
-  // Falls back to a 1 Gbps reference only if OPNsense reports no line rates.
-  const capacity = opnsense.totalLinkCapacityBps;
-  const denominator = capacity && capacity > 0 ? capacity : 1e9;
-  const throughputPct = totalBps > 0 ? Math.min(100, ((totalBps * 8) / denominator) * 100) : 0;
-
   const activeWan = opnsense.wanInterfaces.find((i) => i.active);
   const standbyWans = opnsense.wanInterfaces.filter((i) => !i.active);
+
+  // Gauge = active WAN uplink saturation: the active default-gateway's own
+  // traffic vs its negotiated link speed. Falls back to the aggregate links
+  // (or 1 Gbps) only if the active WAN's line rate is unknown.
+  const wanIn = activeWan?.inBps ?? null;
+  const wanOut = activeWan?.outBps ?? null;
+  const wanBits = ((wanIn ?? 0) + (wanOut ?? 0)) * 8;
+  const wanCapacity = activeWan?.speedBps ?? null;
+  const denominator = wanCapacity && wanCapacity > 0
+    ? wanCapacity
+    : (opnsense.totalLinkCapacityBps || 1e9);
+  const throughputPct = wanBits > 0 ? Math.min(100, (wanBits / denominator) * 100) : 0;
 
   const memDetail = opnsense.memPercent != null
     ? `${Math.round(opnsense.memPercent)}%`
@@ -61,8 +67,8 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
               <RingGauge percent={throughputPct} size={70} warnAt={50} criticalAt={80} />
               <div className="gauge-val">{Math.round(throughputPct)}%</div>
             </div>
-            <div className="summary-hero-value">{formatBps(totalBps)}</div>
-            <div className="summary-hero-label">Throughput</div>
+            <div className="summary-hero-value">{formatBps(activeWan ? (wanIn ?? 0) + (wanOut ?? 0) : totalBps)}</div>
+            <div className="summary-hero-label">WAN Throughput</div>
           </div>
 
           {/* Interfaces + memory */}

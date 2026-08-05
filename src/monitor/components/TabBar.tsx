@@ -8,6 +8,7 @@ interface TabBarProps {
 }
 
 const tabs: { key: MonitorTab; label: string }[] = [
+  { key: 'home', label: 'Home' },
   { key: 'server', label: 'Server' },
   { key: 'media', label: 'Media' },
   { key: 'network', label: 'Network' },

@@ -15,6 +15,7 @@ import {
   OpnsenseCard,
 } from './components';
 import { HomeStatusCard } from './components/HomeStatusCard';
+import { HomePanel } from './components/HomePanel';
 import { NetworkPanel } from './components/NetworkPanel';
 import { PowerPanel } from './components/PowerPanel';
 import { StreamsPanel } from './components/StreamsPanel';
@@ -83,7 +84,7 @@ export function MonitorApp() {
           <OpnsenseCardPlaceholder />
         )}
 
-        <HomeStatusCard />
+        <HomeStatusCard homeAssistant={overview?.homeassistant ?? null} />
       </div>
 
       {/* ── Bottom section: server content + alerts ── */}
@@ -96,6 +97,13 @@ export function MonitorApp() {
             remainingSeconds={remainingSeconds}
             mediaBadge={mediaBadge}
           />
+
+          {/* Home tab */}
+          {activeTab === 'home' && (
+            <div className="network-panel">
+              <HomePanel homeAssistant={overview?.homeassistant ?? null} />
+            </div>
+          )}
 
           {/* Server tab: 3×3 host grid */}
           {activeTab === 'server' && (

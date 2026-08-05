@@ -1054,6 +1054,113 @@ select {
   padding: 3px 12px;
 }
 
+/* ── Home Assistant (Home tab) ── */
+
+.ha-summary-strip {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
+
+.ha-summary-item {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #c0c0c0;
+  font-variant-numeric: tabular-nums;
+}
+
+.ha-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.ha-metric {
+  background: #202022;
+  border: 1px solid #2a2a2e;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ha-metric-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ha-metric-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #ffffff;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ha-metric-unit {
+  font-size: 12px;
+  color: #a0a0a0;
+  margin-left: 2px;
+}
+
+.ha-metric-label {
+  font-size: 10.5px;
+  color: #8a8a90;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ha-unavailable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  overflow: hidden;
+}
+
+.ha-unavail-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #1b1b1e;
+  border: 1px solid #2a2a2e;
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+
+.ha-unavail-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e74c3c;
+  flex-shrink: 0;
+}
+
+.ha-unavail-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: #d0d0d0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ha-unavail-id {
+  margin-left: auto;
+  font-size: 10px;
+  color: #707070;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: nowrap;
+}
+
 .net-talker-bars {
   flex: 1;
   display: flex;

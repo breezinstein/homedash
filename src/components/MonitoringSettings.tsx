@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
-import { Plus, Trash2, Edit2, Activity, Server, Sun, HardDrive, Tv, Download, Clock, Shield, Film, Clapperboard, Bell, Radar } from 'lucide-react';
+import { Plus, Trash2, Edit2, Activity, Server, Sun, HardDrive, Tv, Download, Clock, Shield, Film, Clapperboard, Bell, Radar, House } from 'lucide-react';
 import type {
   MonitoredMedia,
   MonitoredUsenet,
@@ -8,6 +8,7 @@ import type {
   MonitoredSeerr,
   MonitoredOpnsense,
   MonitoredNtopng,
+  MonitoredHomeAssistant,
   MonitoringConfig,
   RemoteServer,
   AlertRule,
@@ -58,6 +59,8 @@ export function MonitoringSettings() {
   const [opnForm, setOpnForm] = useState<Partial<MonitoredOpnsense>>({});
   const [editNtopId, setEditNtopId] = useState<string | null>(null);
   const [ntopForm, setNtopForm] = useState<Partial<MonitoredNtopng>>({});
+  const [editHaId, setEditHaId] = useState<string | null>(null);
+  const [haForm, setHaForm] = useState<Partial<MonitoredHomeAssistant>>({});
 
   // --- CRUD helpers ---
   function startEdit(item: any, setEditId: (v: string | null) => void, setForm: (v: any) => void) {
@@ -94,6 +97,7 @@ export function MonitoringSettings() {
   const seerrList = mon.seerr ?? [];
   const opnList = mon.opnsense ?? [];
   const ntopList = mon.ntopng ?? [];
+  const haList = mon.homeassistant ?? [];
 
   return (
     <div className="space-y-6">
@@ -302,6 +306,31 @@ export function MonitoringSettings() {
             />
           </SectionCard>
 
+          {/* Home Assistant */}
+          <SectionCard title="Home Assistant" description="Smart home: glanceable metrics and unavailable device alerts on the Home tab + status card." icon={House}>
+            <EntityList
+              items={haList} editingId={editHaId} form={haForm} setForm={setHaForm}
+              onStartEdit={(item) => startEdit(item, setEditHaId, setHaForm)}
+              onCancel={() => cancelEdit(setEditHaId, setHaForm)}
+              onSave={() => saveEdit(editHaId, haForm, haList, 'homeassistant',
+                (l) => update({ homeassistant: l as MonitoredHomeAssistant[] }), setEditHaId, setHaForm,
+                (f) => ({ id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2), name: f.name?.trim() || '', url: f.url?.trim() || '', token: f.token || '', insecureTls: f.insecureTls === true }))}
+              onRemove={(id) => update({ homeassistant: haList.filter((x) => x.id !== id) })}
+              typeField="" typeOptions={[]}
+              fields={[
+                { key: 'name', label: 'Label', placeholder: 'home-assistant', helper: 'Display name shown on the dashboard.' },
+                { key: 'url', label: 'URL', placeholder: 'http://homeassistant.local:8123', helper: 'Base URL of the Home Assistant instance.' },
+                { key: 'token', label: 'Long-lived access token', placeholder: '', pw: true, helper: 'Profile → Security → Long-lived access tokens → Create Token.' },
+              ]}
+              extraFields={(f, set) => (
+                <label className="flex items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                  <input type="checkbox" checked={f.insecureTls === true} onChange={e => set({ ...f, insecureTls: e.target.checked })} />
+                  Trust a self-signed TLS certificate
+                </label>
+              )}
+            />
+          </SectionCard>
+
           {/* Alert rules */}
           <SectionCard title="Alerts" description="Rules evaluated on every poll; firing alerts show in the banner + sidebar and can push notifications." icon={Bell}>
             <AlertRulesEditor
@@ -492,5 +521,5 @@ const DEFAULT_ALERT_RULES: AlertRule[] = [
 
 const defaultMonitoring: MonitoringConfig = {
   enabled: false, pollIntervalSeconds: 10, glancesHosts: [], solar: { enabled: false }, docker: { enabled: true },
-  media: [], usenet: [], arr: [], seerr: [], opnsense: [], ntopng: [], ui: { tabRotationSeconds: 15 }, alerts: DEFAULT_ALERT_RULES,
+  media: [], usenet: [], arr: [], seerr: [], opnsense: [], ntopng: [], homeassistant: [], ui: { tabRotationSeconds: 15 }, alerts: DEFAULT_ALERT_RULES,
 };

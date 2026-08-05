@@ -42,19 +42,18 @@ function formatWindow(firstSeen: number | null): string | null {
  * followed by a full-width Top Talkers table.
  */
 export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
-  // Total throughput aggregates every interface (WAN + LAN), not just the WAN.
-  const allIfaces = [
-    ...(opnsense?.wanInterfaces ?? []),
-    ...(opnsense?.lanInterfaces ?? []),
-  ];
-  const totalIn = allIfaces.reduce((s, i) => s + (i.inBps ?? 0), 0);
-  const totalOut = allIfaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
-  const totalBps = totalIn + totalOut;
-  // Honest saturation: real bit rate vs. the sum of negotiated link speeds.
-  // Falls back to a 1 Gbps reference only if OPNsense reports no line rates.
-  const capacity = opnsense?.totalLinkCapacityBps;
-  const denominator = capacity && capacity > 0 ? capacity : 1e9;
-  const throughputPct = totalBps > 0 ? Math.min(100, ((totalBps * 8) / denominator) * 100) : 0;
+  // Gauge = active WAN uplink saturation: the active default-gateway's own
+  // traffic vs its negotiated link speed. Falls back to the aggregate links
+  // (or 1 Gbps) only if the active WAN's line rate is unknown.
+  const activeWan = opnsense?.wanInterfaces?.find((i) => i.active);
+  const wanIn = activeWan?.inBps ?? null;
+  const wanOut = activeWan?.outBps ?? null;
+  const wanBits = ((wanIn ?? 0) + (wanOut ?? 0)) * 8;
+  const wanCapacity = activeWan?.speedBps ?? null;
+  const denominator = wanCapacity && wanCapacity > 0
+    ? wanCapacity
+    : (opnsense?.totalLinkCapacityBps || 1e9);
+  const throughputPct = wanBits > 0 ? Math.min(100, (wanBits / denominator) * 100) : 0;
 
   // ntopng top talkers take precedence; OPNsense NetFlow is the fallback.
   const ntopngTalkers = ntopng?.topTalkers ?? [];
@@ -84,18 +83,22 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
     <div className="net-v2">
       {/* ── Row 1: 3 columns ── */}
       <div className="net-v2-row">
-        {/* Column 1: Total Throughput */}
+        {/* Column 1: WAN Uplink saturation */}
         <div className="net-v2-card">
-          <div className="net-section-title">Total Throughput</div>
+          <div className="net-section-title">WAN Uplink</div>
           <div style={{ textAlign: 'center', padding: '8px 0' }}>
             <div className="gauge-box" style={{ margin: '0 auto' }}>
               <RingGauge percent={throughputPct} size={64} warnAt={50} criticalAt={80} />
               <div className="gauge-val" style={{ fontSize: 14 }}>{Math.round(throughputPct)}%</div>
             </div>
             <div className="net-throughput-label">
-              ↓ {formatBps(totalIn)} · ↑ {formatBps(totalOut)}
+              ↓ {formatBps(wanIn ?? 0)} · ↑ {formatBps(wanOut ?? 0)}
             </div>
             <div className="power-label" style={{ marginTop: 2 }}>
+              {activeWan?.description || activeWan?.name || 'WAN'} link
+              {/* speedBps is already bits/sec; formatBps expects bytes/sec */}
+              {activeWan?.speedBps ? ` · ${formatBps(activeWan.speedBps / 8)}` : ''}
+              {' · '}
               FW: {opnsense.firewallStates != null ? opnsense.firewallStates.toLocaleString() : '—'} states
               {' · '}
               DHCP: {opnsense.dhcpLeases != null ? opnsense.dhcpLeases : '—'} leases

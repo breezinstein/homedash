@@ -224,6 +224,16 @@ export interface MonitoredNtopng {
   insecureTls?: boolean;
 }
 
+// Home Assistant — smart-home REST API. Auth via a long-lived access token
+// (Profile → Security → Long-lived access tokens).
+export interface MonitoredHomeAssistant {
+  id: string;
+  name: string;
+  url: string;
+  token: string;
+  insecureTls?: boolean;
+}
+
 export interface AlertRule {
   id: string;
   name: string;
@@ -250,6 +260,7 @@ export interface MonitoringConfig {
   seerr: MonitoredSeerr[];
   opnsense: MonitoredOpnsense[];
   ntopng: MonitoredNtopng[];
+  homeassistant: MonitoredHomeAssistant[];
   ui: { tabRotationSeconds: number };
   alerts: AlertRule[];
 }
@@ -513,6 +524,44 @@ export interface NtopngSnapshot {
   topTalkers: NtopngTalker[];
 }
 
+/** One glance-able Home Assistant metric (auto-discovered). */
+export interface HomeAssistantMetric {
+  key: string;
+  label: string;
+  value: number | string | null;
+  unit: string | null;
+}
+
+export interface HomeAssistantUnavailableDevice {
+  entityId: string;
+  name: string;
+}
+
+/** Pressure pump status for the Home Status card hero. */
+export interface HomeAssistantPump {
+  present: boolean;   // a pump entity was found in Home Assistant
+  running: boolean;
+  name: string;
+  state: string;      // raw HA state, e.g. 'on' | 'off' | 'unavailable'
+  since: number | null; // epoch ms of the last state change (when running)
+  label: string;      // display label, e.g. 'PRESSURE PUMP'
+}
+
+export interface HomeAssistantSnapshot {
+  status: SourceStatus;
+  error?: string;
+  version: string | null;
+  locationName: string | null;
+  entityCount: number;
+  onCount: number;
+  unavailable: {
+    count: number;
+    devices: HomeAssistantUnavailableDevice[];
+  };
+  metrics: HomeAssistantMetric[];
+  pump: HomeAssistantPump;
+}
+
 export interface AlertInstance {
   id: string;
   ruleId: string;
@@ -539,6 +588,7 @@ export interface MonitorOverview {
   seerr: SeerrSnapshot | null;
   opnsense: OpnsenseSnapshot | null;
   ntopng: NtopngSnapshot | null;
+  homeassistant: HomeAssistantSnapshot | null;
   alerts: { firing: AlertInstance[]; recentlyResolved: AlertInstance[] };
   pollIntervalMs: number;
   tabRotationSeconds: number;

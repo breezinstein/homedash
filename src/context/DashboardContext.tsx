@@ -129,6 +129,7 @@ const defaultConfig: DashboardConfig = {
     seerr: [],
     opnsense: [],
     ntopng: [],
+    homeassistant: [],
     ui: { tabRotationSeconds: 15 },
     alerts: [],
   },

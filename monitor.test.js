@@ -10,6 +10,7 @@ import {
   estimateBatteryRuntime,
   resolveMetric,
   fetchNtopng,
+  fetchHomeAssistant,
 } from './monitor.js';
 
 function snapshot(hosts = []) {
@@ -340,6 +341,71 @@ test('fetchNtopng reports an auth failure when every scheme is rejected', async 
       id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}`,
       username: 'admin', password: 'wrong',
     }]);
+    assert.equal(out.status, 'down');
+    assert.match(out.error, /authentication failed/i);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchHomeAssistant surfaces glanceable metrics and unavailable devices', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/api/config')) {
+      res.end(JSON.stringify({ version: '2024.1.0', location_name: 'Home' }));
+    } else if (req.url.startsWith('/api/states')) {
+      res.end(JSON.stringify([
+        { entity_id: 'sensor.power', state: '123.4', attributes: { friendly_name: 'Power', device_class: 'power', unit_of_measurement: 'W' } },
+        { entity_id: 'sensor.temp', state: '21.5', attributes: { friendly_name: 'Temp', device_class: 'temperature', unit_of_measurement: '°C' } },
+        { entity_id: 'light.living', state: 'on', attributes: { friendly_name: 'Living Light' } },
+        { entity_id: 'sensor.mqtt_bad', state: 'unavailable', attributes: { friendly_name: 'Bad MQTT' } },
+        // Open door → surfaces as a doors metric.
+        { entity_id: 'binary_sensor.front_door', state: 'on', attributes: { friendly_name: 'Front Door', device_class: 'door' } },
+        // Glances entity duplicates the server integration → excluded entirely.
+        { entity_id: 'sensor.glances_cpu', state: 'unavailable', attributes: { friendly_name: 'Glances CPU' } },
+        // Inverter power duplicates the solar integration → not the power metric.
+        { entity_id: 'sensor.inverter_power', state: '500', attributes: { friendly_name: 'Inverter Power', device_class: 'power', unit_of_measurement: 'W' } },
+        // Pressure pump → drives the Home Status card hero.
+        { entity_id: 'switch.pressure_pump', state: 'on', attributes: { friendly_name: 'Pressure Pump' }, last_changed: '2026-08-05T10:00:00.000Z' },
+      ]));
+    } else { res.statusCode = 404; res.end(); }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchHomeAssistant([{ id: 'ha1', name: 'ha', url: `http://127.0.0.1:${port}`, token: 'tok' }]);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.version, '2024.1.0');
+    assert.equal(out.locationName, 'Home');
+    // 8 entities minus the excluded Glances one.
+    assert.equal(out.entityCount, 7);
+    assert.equal(out.onCount, 3); // light + open door + pump
+    assert.equal(out.unavailable.count, 1); // Glances exclusion also applies here
+    assert.equal(out.unavailable.devices[0].name, 'Bad MQTT');
+    // Power picks the non-inverter sensor.
+    assert.equal(out.metrics.find(m => m.key === 'power').value, 123.4);
+    assert.equal(out.metrics.find(m => m.key === 'power').unit, 'W');
+    assert.equal(out.metrics.find(m => m.key === 'lights').value, 1);
+    assert.equal(out.metrics.find(m => m.key === 'doors').value, 1);
+    assert.equal(out.metrics.find(m => m.key === 'temperature').value, 21.5);
+    // Energy metric is intentionally not reported.
+    assert.equal(out.metrics.find(m => m.key === 'energy'), undefined);
+    // Pressure pump hero data.
+    assert.equal(out.pump.present, true);
+    assert.equal(out.pump.running, true);
+    assert.equal(out.pump.label, 'PRESSURE PUMP');
+    assert.ok(out.pump.since > 0);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchHomeAssistant reports auth failure on 401', async () => {
+  const server = createServer((req, res) => { res.statusCode = 401; res.end(); });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchHomeAssistant([{ id: 'ha1', name: 'ha', url: `http://127.0.0.1:${port}`, token: 'bad' }]);
     assert.equal(out.status, 'down');
     assert.match(out.error, /authentication failed/i);
   } finally {

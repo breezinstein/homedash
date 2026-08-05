@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 
-export type MonitorTab = 'server' | 'media' | 'network' | 'power';
+export type MonitorTab = 'home' | 'server' | 'media' | 'network' | 'power';
 
 interface UseTabRotationOpts {
   rotationSeconds: number;           // 0 = manual tabs only
   pauseDurationSeconds?: number;     // how long to pause after manual switch (default 60)
 }
 
-const TAB_ORDER: MonitorTab[] = ['server', 'media', 'network', 'power'];
+const TAB_ORDER: MonitorTab[] = ['home', 'server', 'media', 'network', 'power'];
 
 /**
  * Auto-rotates through server → media → network on the configured cadence,
@@ -21,7 +21,7 @@ export function useTabRotation({
   const [activeTab, setActiveTab] = useState<MonitorTab>(() => {
     const params = new URLSearchParams(window.location.search);
     const t = params.get('tab');
-    return t === 'media' ? 'media' : t === 'network' ? 'network' : t === 'power' ? 'power' : 'server';
+    return t === 'home' ? 'home' : t === 'media' ? 'media' : t === 'network' ? 'network' : t === 'power' ? 'power' : 'server';
   });
   const [remainingSeconds, setRemainingSeconds] = useState(rotationSeconds || 0);
   const pausedUntil = useRef(0);
