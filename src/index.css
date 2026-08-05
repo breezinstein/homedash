@@ -195,9 +195,14 @@ select {
 /* ── Common card ── */
 
 .card {
-  background-color: #181819;
-  border-radius: 14px;
+  background-color: var(--color-surface, #1a1a1a);
+  border: 1px solid var(--color-border, #27272a);
+  border-radius: 16px;
   padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .card-header {
@@ -221,6 +226,168 @@ select {
 .subtitle {
   font-size: 13px;
   color: #a0a0a0;
+}
+
+/* ── Redesigned summary cards (top row) ── */
+
+.card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.card-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.card-icon-green  { background: rgba(46, 204, 113, 0.14); }
+.card-icon-purple { background: rgba(108, 92, 231, 0.14); }
+.card-icon-orange { background: rgba(230, 126, 34, 0.14); }
+.card-icon-blue   { background: rgba(0, 170, 255, 0.14); }
+
+.summary-body {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 14px;
+  align-items: center;
+  flex: 1;
+  min-height: 0;
+}
+
+.summary-gauge {
+  text-align: center;
+}
+
+.summary-hero-value {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 800;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.summary-hero-label {
+  font-size: 9px;
+  color: #a0a0a0;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+}
+
+.summary-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.summary-row:last-child {
+  border-bottom: none;
+}
+
+.summary-row-key {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #a0a0a0;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.summary-row-icon {
+  flex-shrink: 0;
+  width: 15px;
+  text-align: center;
+  font-size: 12px;
+}
+
+.summary-row-value {
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* Docker counts + problems */
+.docker-counts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 14px;
+}
+
+.docker-count {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  color: #a0a0a0;
+  min-width: 0;
+}
+
+.docker-count b {
+  margin-left: auto;
+  color: #fff;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.docker-count-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.docker-problems {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.docker-problem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: #f87171;
+  background: rgba(231, 76, 60, 0.08);
+  border: 1px solid rgba(231, 76, 60, 0.25);
+  padding: 3px 8px;
+  border-radius: 999px;
+  max-width: 100%;
+}
+
+.docker-problem-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docker-problem-tag {
+  font-weight: 800;
 }
 
 /* ── Status indicators ── */

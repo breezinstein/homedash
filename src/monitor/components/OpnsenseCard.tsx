@@ -30,7 +30,6 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
   const activeWan = opnsense.wanInterfaces.find((i) => i.active);
   const standbyWans = opnsense.wanInterfaces.filter((i) => !i.active);
 
-  // Show GB used when total is known; server sends only percent currently
   const memDetail = opnsense.memPercent != null
     ? `${Math.round(opnsense.memPercent)}%`
     : '—';
@@ -38,9 +37,12 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
   return (
     <section className="card">
       <div className="card-header">
-        <div className="title-group">
-          <span className="title">OPNsense</span>
-          <span className="subtitle">Multi-WAN</span>
+        <div className="card-title-row">
+          <span className="card-icon card-icon-orange">🛡️</span>
+          <div className="title-group">
+            <span className="title">OPNsense</span>
+            <span className="subtitle">Multi-WAN</span>
+          </div>
         </div>
         <SourceDot status={opnsense.status as any} />
       </div>
@@ -48,62 +50,59 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
       {opnsense.status === 'down' ? (
         <div className="text-[#e74c3c] text-[12px]">{opnsense.error || 'Unreachable'}</div>
       ) : (
-        <div className="power-body">
-          {/* Gauge + throughput */}
-          <div style={{ textAlign: 'center' }}>
+        <div className="summary-body">
+          {/* Gauge + throughput headline */}
+          <div className="summary-gauge">
             <div className="gauge-box" style={{ margin: '0 auto' }}>
-              <RingGauge
-                percent={throughputPct}
-                size={70}
-                color="#e67e22"
-                warnAt={50}
-                warnColor="#e67e22"
-                criticalAt={80}
-                criticalColor="#e74c3c"
-              />
+              <RingGauge percent={throughputPct} size={70} color="#e67e22" />
               <div className="gauge-val">{Math.round(throughputPct)}%</div>
             </div>
-            <div className="power-kw">
-              {formatBps(totalBps).replace('/s', '')}
-              <span style={{ fontSize: 11, color: '#a0a0a0', fontWeight: 700 }}> Mbps</span>
-            </div>
-            <div className="power-label">Total Throughput</div>
+            <div className="summary-hero-value">{formatBps(totalBps)}</div>
+            <div className="summary-hero-label">Throughput</div>
           </div>
 
-          {/* Data rows */}
-          <div className="data-list">
-            <div className="data-row">
-              <span className="row-label">Active Gateway</span>
+          {/* Interfaces + memory */}
+          <div className="summary-list">
+            <div className="summary-row">
+              <span className="summary-row-key">
+                <span className="summary-row-icon">🌐</span>
+                Active gateway
+              </span>
               <span className="gateway-pill">
                 {activeWan?.description || activeWan?.name || 'WAN1 (Primary)'}
               </span>
             </div>
 
-            {/* Active WAN */}
             {activeWan && (
-              <div className="data-row">
-                <span className="row-label">
+              <div className="summary-row">
+                <span className="summary-row-key">
+                  <span className="summary-row-icon">⬆️</span>
                   {activeWan.description || activeWan.name}
                 </span>
-                <span className="row-value" style={{ color: '#2ecc71' }}>
-                  ● {formatBps((activeWan.inBps ?? 0) + (activeWan.outBps ?? 0)).replace('/s', '')} Mbps
+                <span className="summary-row-value" style={{ color: '#2ecc71' }}>
+                  {formatBps((activeWan.inBps ?? 0) + (activeWan.outBps ?? 0))}
                 </span>
               </div>
             )}
 
-            {/* Standby WANs — show ALL, not just the first */}
             {standbyWans.map((iface) => (
-              <div className="data-row" key={iface.name}>
-                <span className="row-label">{iface.description || iface.name}</span>
-                <span className="row-value" style={{ color: '#a0a0a0' }}>
-                  ● Standby
+              <div className="summary-row" key={iface.name}>
+                <span className="summary-row-key">
+                  <span className="summary-row-icon">⏸</span>
+                  {iface.description || iface.name}
+                </span>
+                <span className="summary-row-value" style={{ color: '#a0a0a0' }}>
+                  Standby
                 </span>
               </div>
             ))}
 
-            <div className="data-row">
-              <span className="row-label">Memory usage</span>
-              <span className="row-value">{memDetail}</span>
+            <div className="summary-row">
+              <span className="summary-row-key">
+                <span className="summary-row-icon">🧠</span>
+                Memory usage
+              </span>
+              <span className="summary-row-value">{memDetail}</span>
             </div>
           </div>
         </div>

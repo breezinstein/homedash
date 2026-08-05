@@ -1,6 +1,7 @@
 import type { SolarSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
 import { RingGauge } from './RingGauge';
+import { SummaryRow } from './SummaryRow';
 
 interface PowerCardProps {
   solar: SolarSnapshot;
@@ -28,12 +29,13 @@ function formatRuntime(mins: number | null): { text: string; color: string } {
 }
 
 /**
- * Top-row Power card matching the homelab dashboard mockup.
- * Replaces the old SolarCard with a compact 2-column internal grid
- * (gauge + metrics) that fits the 4-card top row.
+ * Top-row Power / Solar card. SOC gauge + PV headline on the left, and
+ * colour-coded Grid / Load / Battery / Runtime rows on the right. SOC is
+ * a "low is bad" gauge: green, amber ≤ 30 %, red ≤ 15 %.
  */
 export function SolarCard({ solar }: PowerCardProps) {
   const soc = solar.batterySocPercent;
+  const socColor = soc == null ? '#2ecc71' : soc <= 15 ? '#e74c3c' : soc <= 30 ? '#e67e22' : '#2ecc71';
 
   const batt = solar.batteryPowerW;
   const battCharging = batt != null && batt > 5;
@@ -45,72 +47,55 @@ export function SolarCard({ solar }: PowerCardProps) {
   const gridImport = grid != null && grid > 5;
   const gridExport = grid != null && grid < -5;
   const gridVal = gridImport
-    ? `${formatPower(grid)}`
+    ? formatPower(grid)
     : gridExport
-      ? `${formatPower(Math.abs(grid))}`
+      ? formatPower(Math.abs(grid))
       : formatPower(grid);
 
   const runtime = formatRuntime(solar.batteryRuntimeMins);
 
   return (
     <section className="card">
-      {/* Header */}
       <div className="card-header">
-        <div className="title-group">
-          <span className="title">Power</span>
-          <span className="subtitle">Solar Assistant</span>
+        <div className="card-title-row">
+          <span className="card-icon card-icon-green">☀️</span>
+          <div className="title-group">
+            <span className="title">Power</span>
+            <span className="subtitle">Solar Assistant</span>
+          </div>
         </div>
         <SourceDot status={solar.status} />
       </div>
 
-      {/* Body: gauge left, metrics right */}
-      <div className="power-body">
-        {/* Gauge + big number */}
-        <div style={{ textAlign: 'center' }}>
+      <div className="summary-body">
+        {/* Gauge + PV headline */}
+        <div className="summary-gauge">
           <div className="gauge-box" style={{ margin: '0 auto' }}>
-            <RingGauge percent={soc} size={70} />
+            <RingGauge percent={soc} size={70} color={socColor} />
             <div className="gauge-val">{soc != null ? `${Math.round(soc)}%` : '—'}</div>
           </div>
-          <div className="power-kw">{formatPower(solar.pvPowerW)}</div>
-          <div className="power-label">PV generation</div>
+          <div className="summary-hero-value">{formatPower(solar.pvPowerW)}</div>
+          <div className="summary-hero-label">PV generation</div>
         </div>
 
-        {/* Data rows */}
-        <div className="data-list">
-          <DataRow label="Grid" value={gridVal} muted={!gridImport && !gridExport} />
-          <DataRow label="Load" value={formatPower(solar.loadPowerW)} />
-          <DataRow
+        {/* Metrics */}
+        <div className="summary-list">
+          <SummaryRow
+            icon="🔋"
             label="Battery"
-            value={`${battSign} ${battVal}`}
-            accent={battCharging ? 'green' : battDischarging ? 'red' : undefined}
+            value={`${battSign} ${battVal}`.trim()}
+            accent={battCharging ? '#2ecc71' : battDischarging ? '#e74c3c' : undefined}
           />
-          <DataRow label="Battery runtime" value={runtime.text} runtimeColor={runtime.color} />
+          <SummaryRow
+            icon="🔌"
+            label="Grid"
+            value={gridVal}
+            accent={gridExport ? '#2ecc71' : gridImport ? '#e67e22' : undefined}
+          />
+          <SummaryRow icon="🏠" label="House load" value={formatPower(solar.loadPowerW)} />
+          <SummaryRow icon="⏱" label="Battery runtime" value={runtime.text} accent={runtime.color} />
         </div>
       </div>
     </section>
-  );
-}
-
-function DataRow({
-  label,
-  value,
-  muted,
-  accent,
-  runtimeColor,
-}: {
-  label: string;
-  value: string;
-  muted?: boolean;
-  accent?: 'green' | 'red';
-  runtimeColor?: string;
-}) {
-  const colorClass =
-    accent === 'green' ? 'text-[#2ecc71]' : accent === 'red' ? 'text-[#e74c3c]' : '';
-  const style = runtimeColor ? { color: runtimeColor, fontSize: 13, fontWeight: 800 } : undefined;
-  return (
-    <div className="data-row">
-      <span className={`row-label ${muted ? 'opacity-50' : ''}`}>{label}</span>
-      <span className={`row-value ${colorClass}`} style={style}>{value}</span>
-    </div>
   );
 }

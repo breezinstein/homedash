@@ -8,6 +8,7 @@
  */
 
 import { SourceDot } from './SourceDot';
+import { SummaryRow } from './SummaryRow';
 
 export interface HomeStatusData {
   pumpRunning: boolean;
@@ -39,47 +40,40 @@ export function HomeStatusCard({ data }: HomeStatusCardProps) {
   return (
     <section className="card">
       <div className="card-header">
-        <div className="title-group">
-          <span className="title">Home Status</span>
-          <span className="subtitle">Overview</span>
+        <div className="card-title-row">
+          <span className="card-icon card-icon-blue">🏠</span>
+          <div className="title-group">
+            <span className="title">Home Status</span>
+            <span className="subtitle">Overview</span>
+          </div>
         </div>
         <SourceDot status="ok" />
       </div>
 
-      <div className="power-body">
+      <div className="summary-body">
         {/* Pump indicator */}
-        <div className="pump-box">
-          <div className="pump-dot">
-            ● PUMP {d.pumpRunning ? 'RUNNING' : 'OFF'}
+        <div className="summary-gauge">
+          <div className="pump-box">
+            <div className="pump-dot">
+              ● PUMP {d.pumpRunning ? 'RUNNING' : 'OFF'}
+            </div>
+            <div className="infinity-symbol">∞</div>
+            <div className="pump-duration">⏱ {d.pumpDuration}</div>
+            <div className="pump-label">{d.pumpLabel}</div>
           </div>
-          <div className="infinity-symbol">∞</div>
-          <div className="pump-duration">⏱ {d.pumpDuration}</div>
-          <div className="pump-label">{d.pumpLabel}</div>
         </div>
 
         {/* Metrics */}
-        <div className="data-list" style={{ marginLeft: 10 }}>
-          <div className="data-row">
-            <span className="row-label">Lights on</span>
-            <span className="row-value">{d.lightsOn} lights</span>
-          </div>
-          <div className="data-row">
-            <span className="row-label">Media players</span>
-            <span className="row-value">{d.mediaActive} active</span>
-          </div>
-          <div className="data-row">
-            <span className="row-label">Fans</span>
-            <span className="row-value">{d.fansRunning} running</span>
-          </div>
-          <div className="data-row">
-            <span className="row-label">Doors open</span>
-            <span
-              className="row-value"
-              style={d.doorsOpen > 0 ? { color: '#e74c3c' } : undefined}
-            >
-              {d.doorsOpen} open
-            </span>
-          </div>
+        <div className="summary-list">
+          <SummaryRow icon="💡" label="Lights on" value={`${d.lightsOn} lights`} />
+          <SummaryRow icon="📺" label="Media players" value={`${d.mediaActive} active`} />
+          <SummaryRow icon="🌀" label="Fans" value={`${d.fansRunning} running`} />
+          <SummaryRow
+            icon="🚪"
+            label="Doors open"
+            value={`${d.doorsOpen} open`}
+            accent={d.doorsOpen > 0 ? '#e74c3c' : undefined}
+          />
         </div>
       </div>
     </section>
