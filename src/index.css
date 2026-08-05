@@ -97,7 +97,8 @@ select {
    ────────────────────────────────────────────────────────────── */
 
 .monitor-shell {
-  min-height: 100dvh;
+  height: 100dvh; /* kiosk: pin to viewport, never scroll */
+  overflow: hidden;
   background-color: #121213;
   color: #ffffff;
   padding: 16px;
@@ -407,8 +408,11 @@ select {
 /* ── Bottom grid ── */
 
 .bottom-grid {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 300px;
+  grid-template-rows: 1fr;
   gap: 16px;
 }
 
@@ -418,6 +422,10 @@ select {
   background: #181819;
   border-radius: 14px;
   padding: 16px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
 }
 
 /* ── Tab bar ── */
@@ -490,24 +498,30 @@ select {
   align-items: center;
 }
 
-.streams-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
 .stream-row {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
   background: #202022;
   border: 1px solid #2a2a2e;
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 8px 12px;
 }
 
 .stream-row-transcode {
   border-left: 3px solid #e67e22;
+}
+
+.stream-row-paused {
+  opacity: 0.72;
+}
+
+.stream-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .stream-info {
@@ -539,6 +553,11 @@ select {
   text-overflow: ellipsis;
 }
 
+.stream-meta-sep {
+  margin: 0 6px;
+  color: #606060;
+}
+
 .stream-paused {
   margin-left: 6px;
   font-size: 9px;
@@ -556,6 +575,21 @@ select {
   margin-top: 2px;
 }
 
+.stream-progress-bg {
+  flex: 1;
+  min-width: 0;
+  height: 4px;
+  background: #2e2e32;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.stream-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+
 .stream-position {
   font-size: 11px;
   color: #a0a0a0;
@@ -571,6 +605,7 @@ select {
   text-transform: uppercase;
   padding: 3px 8px;
   border-radius: 6px;
+  white-space: nowrap;
 }
 
 .stream-badge-ok {
@@ -581,6 +616,11 @@ select {
 .stream-badge-warn {
   background: rgba(230, 126, 34, 0.12);
   color: #e67e22;
+}
+
+.stream-badge-info {
+  background: rgba(108, 92, 231, 0.14);
+  color: #a78bfa;
 }
 
 /* ── Network panel ── */
@@ -835,12 +875,16 @@ select {
 /* ── Media panel v2 ── */
 
 .media-v2 {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
 }
 
 .media-v2-grid {
+  flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: 1fr 1fr;
@@ -848,50 +892,104 @@ select {
 }
 
 .media-v2-card {
+  display: flex;
+  flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
-.media-v2-streams {
+/* ── Active Streams card ── */
+
+.streams-panel {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: #181819;
-  border-radius: 14px;
+  background: var(--color-surface, #1a1a1a);
+  border: 1px solid var(--color-border, #27272a);
+  border-radius: 16px;
   padding: 14px 16px;
+  overflow: hidden;
 }
 
-.streams-grid-2col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+.streams-list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.streams-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a0a0a0;
+  font-size: 12px;
+}
+
+.streams-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.streams-more-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #a0a0a0;
+  background: #222224;
+  border: 1px solid #2a2a2e;
+  border-radius: 999px;
+  padding: 3px 12px;
 }
 
 /* ── Solar detail (power tab) ── */
 
 .solar-detail {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: hidden;
 }
 
-.power-v2-row {
+/* Top row: SOC gauge card + per-device sections */
+.power-top-row {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 240px 1fr;
   gap: 12px;
-  align-items: start;
 }
 
-.solar-gauge-row {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 2px;
+.power-top-row-single {
+  grid-template-columns: 1fr;
 }
 
 .solar-summary-card {
   background: #202022;
   border-radius: 10px;
-  padding: 14px 16px;
-  max-width: 240px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.solar-summary-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #808080;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
 }
 
 .solar-runtime {
@@ -910,7 +1008,7 @@ select {
 }
 
 .solar-runtime-value {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
 }
 
@@ -930,46 +1028,40 @@ select {
   margin-bottom: 2px;
 }
 
-.solar-cards-flex {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-  align-content: start;
-}
-
-.solar-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.solar-card-metrics {
+.solar-section {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
+  min-height: 0;
 }
 
-.solar-mini-kv {
-  display: flex;
+.solar-section-batteries {
+  flex: 1;
+  min-height: 0;
+}
+
+.solar-devices-grid {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-auto-rows: 1fr;
+  gap: 12px;
+}
+
+/* Power device cards stretch to fill their row without overflowing */
+.solar-devices-grid .node-card {
   justify-content: space-between;
-  font-size: 11px;
-  padding: 2px 0;
-  border-bottom: 1px solid #2a2a2e;
-}
-
-.solar-mini-kv:last-child {
-  border-bottom: none;
-}
-
-.solar-mini-kv span:first-child {
-  color: #808080;
+  overflow: hidden;
 }
 
 .power-tab {
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: hidden;
 }
 
 /* ── 3×3 Nodes grid ── */

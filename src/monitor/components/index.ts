@@ -6,6 +6,7 @@ export { DockerCard } from './DockerCard';
 export { AlertsRail } from './AlertsRail';
 export { TabBar } from './TabBar';
 export { StreamsCard } from './StreamsCard';
+export { StreamsPanel } from './StreamsPanel';
 export { UsenetCard } from './UsenetCard';
 export { ArrCard } from './ArrCard';
 export { OpnsenseCard } from './OpnsenseCard';

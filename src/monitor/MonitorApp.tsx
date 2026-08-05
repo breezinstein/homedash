@@ -18,8 +18,7 @@ import {
 import { HomeStatusCard } from './components/HomeStatusCard';
 import { NetworkPanel } from './components/NetworkPanel';
 import { PowerPanel } from './components/PowerPanel';
-import { SourceDot } from './components/SourceDot';
-import type { MediaStream } from '../types';
+import { StreamsPanel } from './components/StreamsPanel';
 
 const MAX_VISIBLE_HOSTS = 9;
 
@@ -119,24 +118,9 @@ export function MonitorApp() {
             <div className="media-v2">
               <div className="media-v2-grid">
                 {/* Top-left: Active Streams */}
-                <div className="media-v2-card media-v2-streams">
-                  {overview?.media && overview.media.streams.length > 0 ? (
-                    <>
-                      <div className="streams-header">
-                        <div className="title-group">
-                          <span className="title" style={{ fontSize: 15 }}>Active Streams</span>
-                          <span className="subtitle">
-                            {overview.media.activeStreams} playing · {overview.media.transcoding} transcoding
-                          </span>
-                        </div>
-                        <SourceDot status={overview.media.status} />
-                      </div>
-                      <div className="streams-grid-2col">
-                        {overview.media.streams.map((s, i) => (
-                          <StreamCardCompact key={i} stream={s} />
-                        ))}
-                      </div>
-                    </>
+                <div className="media-v2-card">
+                  {overview?.media ? (
+                    <StreamsPanel media={overview.media} />
                   ) : (
                     <div className="flex items-center justify-center h-full text-[#a0a0a0] text-[12px]">
                       No active streams
@@ -277,51 +261,6 @@ function MediaPlaceholder({ title, subtitle, icon }: { title: string; subtitle: 
       <div className="flex items-center justify-center h-[80px] text-[#a0a0a0] text-[12px]">
         Not configured
       </div>
-    </div>
-  );
-}
-
-/* ── Compact stream card (2-per-row) ── */
-
-function StreamCardCompact({ stream: s }: { stream: MediaStream }) {
-  const isTranscode = s.playMethod === 'Transcode';
-  const parts: string[] = [];
-  if (s.user && s.user !== '—') parts.push(s.user);
-  if (s.device && s.device !== '—') parts.push(`on ${s.device}`);
-  if (s.client && s.client !== '—') parts.push(`via ${s.client}`);
-  const userLine = parts.join(' ') || '—';
-
-  return (
-    <div className={`stream-row ${isTranscode ? 'stream-row-transcode' : ''}`}>
-      <div className="stream-info">
-        <div className="stream-title" title={s.title}>
-          {s.title}
-          {s.subtitle && <span className="stream-title-sub"> — {s.subtitle}</span>}
-        </div>
-        <div className="stream-meta">
-          <span>{userLine}</span>
-          <span> · </span>
-          <span>{s.server}</span>
-          {s.paused && <span className="stream-paused">PAUSED</span>}
-        </div>
-        {s.progressPercent != null && (
-          <div className="stream-progress">
-            <div className="progress-bg" style={{ height: 4 }}>
-              <div
-                className="progress-fill"
-                style={{
-                  width: `${Math.min(100, s.progressPercent)}%`,
-                  background: isTranscode ? '#e67e22' : '#6c5ce7',
-                }}
-              />
-            </div>
-            <span className="stream-position">{s.positionLabel}</span>
-          </div>
-        )}
-      </div>
-      <span className={`stream-badge ${isTranscode ? 'stream-badge-warn' : 'stream-badge-ok'}`}>
-        {s.transcodeDetail || s.playMethod}
-      </span>
     </div>
   );
 }
