@@ -165,9 +165,12 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
 
 /** Top talker table for ntopng — three columns per row: TX, RX, DATA. */
 function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
-  const maxTx = Math.max(1, ...talkers.map((t) => t.txBps ?? 0));
-  const maxRx = Math.max(1, ...talkers.map((t) => t.rxBps ?? 0));
-  const maxBytes = Math.max(1, ...talkers.map((t) => t.bytes));
+  const MAX_VISIBLE_TALKERS = 8;
+  const visible = talkers.slice(0, MAX_VISIBLE_TALKERS);
+  const more = talkers.length - visible.length;
+  const maxTx = Math.max(1, ...visible.map((t) => t.txBps ?? 0));
+  const maxRx = Math.max(1, ...visible.map((t) => t.rxBps ?? 0));
+  const maxBytes = Math.max(1, ...visible.map((t) => t.bytes));
   return (
     <div className="net-talkers-table">
       <div className="net-talker-row net-talker-head">
@@ -178,7 +181,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
           <span className="net-talker-col-head">DATA</span>
         </div>
       </div>
-      {talkers.map((t) => (
+      {visible.map((t) => (
         <div className="net-talker-row" key={t.address}>
           <span className="net-talker-name" title={t.address}>
             {t.name || t.address}
@@ -219,6 +222,11 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
           </div>
         </div>
       ))}
+      {more > 0 && (
+        <div className="net-talker-more">
+          <span className="net-talker-more-badge">+ {more} more</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -1038,6 +1038,22 @@ select {
   opacity: 0.85;
 }
 
+.net-talker-more {
+  display: flex;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.net-talker-more-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: #a0a0a0;
+  background: #222224;
+  border: 1px solid #2a2a2e;
+  border-radius: 999px;
+  padding: 3px 12px;
+}
+
 .net-talker-bars {
   flex: 1;
   display: flex;

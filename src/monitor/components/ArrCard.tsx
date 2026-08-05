@@ -10,8 +10,8 @@ const ARR_TYPE_COLOR: Record<string, string> = {
   radarr: '#e17055',   // orange
 };
 
-// Kiosk: show only the top queue items, then a "+N more" badge.
-const MAX_VISIBLE_QUEUE = 2;
+// Kiosk: show only the top queue items (2 per row), then a "+N more" badge.
+const MAX_VISIBLE_QUEUE = 4;
 
 function instanceLabel(inst: { name?: string; type: string }): string {
   const name = (inst.name || '').trim();
@@ -98,10 +98,10 @@ export function ArrCard({ arr }: ArrCardProps) {
       {arr.queue.length === 0 ? (
         <div className="text-[var(--color-text-secondary)] text-[12px] py-1">No active downloads</div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col gap-[6px]">
+        <div className="flex-1 min-h-0 grid grid-cols-2 content-start gap-[6px]">
           {arr.queue.slice(0, MAX_VISIBLE_QUEUE).map((q, i) => <QueueRow key={i} item={q} />)}
           {arr.queue.length > MAX_VISIBLE_QUEUE && (
-            <div className="self-center text-[11px] font-semibold text-[var(--color-text-secondary)] bg-[var(--color-background)] border border-[var(--color-border)] rounded-full px-[12px] py-[4px]">
+            <div className="col-span-2 justify-self-center text-[11px] font-semibold text-[var(--color-text-secondary)] bg-[var(--color-background)] border border-[var(--color-border)] rounded-full px-[12px] py-[4px]">
               + {arr.queue.length - MAX_VISIBLE_QUEUE} more
             </div>
           )}
