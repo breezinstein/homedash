@@ -1173,6 +1173,7 @@ export async function fetchNtopng(ntopConfigs) {
           bytes,
           bytesSent: 0,
           bytesRcvd: 0,
+          firstSeen: null,
         };
       }).filter(Boolean);
       source = 'pro';
@@ -1215,6 +1216,7 @@ export async function fetchNtopng(ntopConfigs) {
             : (Number.isFinite(Number(e.thpt?.bps)) ? Number(e.thpt.bps) : null);
           return {
             address, name, txBps, rxBps, throughputBps: combined, bytes, bytesSent, bytesRcvd,
+            firstSeen: Number.isFinite(Number(e.first_seen)) ? Number(e.first_seen) : null,
           };
         }).filter(Boolean);
         source = 'community';

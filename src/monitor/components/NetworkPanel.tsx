@@ -23,6 +23,19 @@ function formatBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+/** Compact window label for the DATA counter, e.g. "5d 13h" or "7m". */
+function formatWindow(firstSeen: number | null): string | null {
+  if (firstSeen == null) return null;
+  const secs = Math.max(0, Math.floor(Date.now() / 1000 - firstSeen));
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ${mins % 60}m`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ${hours % 24}h`;
+}
+
 /**
  * Network overview panel: 3-column top row (throughput gauge, WAN, LAN)
  * followed by a full-width Top Talkers table.
@@ -190,7 +203,12 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
               </div>
             </div>
             <div className="net-talker-col">
-              <span className="net-talker-col-label">{formatBytes(t.bytes)}</span>
+              <span className="net-talker-col-label">
+                {formatBytes(t.bytes)}
+                {formatWindow(t.firstSeen) && (
+                  <span className="net-talker-sub">· {formatWindow(t.firstSeen)}</span>
+                )}
+              </span>
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"

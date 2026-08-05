@@ -499,6 +499,7 @@ export interface NtopngTalker {
   bytes: number;                // total cumulative traffic
   bytesSent: number;            // cumulative bytes sent
   bytesRcvd: number;            // cumulative bytes received
+  firstSeen: number | null;     // epoch seconds when ntopng started counting this host
 }
 
 export interface NtopngSnapshot {

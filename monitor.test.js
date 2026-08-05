@@ -267,8 +267,8 @@ test('fetchNtopng falls back to community active hosts', async () => {
       res.statusCode = 403; res.end(); // not granted on Community
     } else if (req.url.startsWith('/lua/rest/v2/get/host/active.lua')) {
       res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: { data: [
-        { ip: '10.0.0.5', name: 'nas', bytes: { total: 9000000, sent: 3000000, recvd: 6000000 }, thpt: { bps: 1200000 } },
-        { ip: '10.0.0.9', name: '0', bytes: { total: 2000000, sent: 500000, recvd: 1500000 }, thpt: { bps: 300000 } },
+        { ip: '10.0.0.5', name: 'nas', bytes: { total: 9000000, sent: 3000000, recvd: 6000000 }, thpt: { bps: 1200000 }, first_seen: 1700000000 },
+        { ip: '10.0.0.9', name: '0', bytes: { total: 2000000, sent: 500000, recvd: 1500000 }, thpt: { bps: 300000 }, first_seen: 1700000100 },
       ] } }));
     } else { res.statusCode = 404; res.end(); }
   });
@@ -284,6 +284,7 @@ test('fetchNtopng falls back to community active hosts', async () => {
     assert.equal(out.topTalkers[0].throughputBps, 1200000);
     assert.equal(out.topTalkers[0].bytesSent, 3000000);
     assert.equal(out.topTalkers[0].bytesRcvd, 6000000);
+    assert.equal(out.topTalkers[0].firstSeen, 1700000000);
     // First poll has no prior sample, so per-direction rates are not yet known.
     assert.equal(out.topTalkers[0].txBps, null);
     assert.equal(out.topTalkers[0].rxBps, null);
