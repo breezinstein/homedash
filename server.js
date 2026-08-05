@@ -8,7 +8,7 @@ import { dirname, join, basename, extname, resolve, sep } from 'path';
 import crypto from 'crypto';
 import os from 'os';
 import { NotificationManager } from './notifications.js';
-import { MonitorManager } from './monitor.js';
+import { MonitorManager, ensureAutoAlertRules } from './monitor.js';
 import {
   authEnabled,
   optionalAuth,
@@ -77,6 +77,17 @@ async function refreshConfigCache() {
 // Track file modification time for change detection (mirrors cache for
 // any code paths still using it directly).
 let lastModified = 0;
+
+/** Write the config to disk and refresh the in-memory cache atomically. */
+async function persistConfig(config) {
+  const serialized = JSON.stringify(config, null, 2);
+  await writeFile(CONFIG_PATH, serialized);
+  const stats = await stat(CONFIG_PATH);
+  lastModified = stats.mtimeMs;
+  configCache.config = config;
+  configCache.mtimeMs = stats.mtimeMs;
+  configCache.serialized = serialized;
+}
 
 app.use(cors());
 // gzip text-ish responses. The default filter skips images / already
@@ -244,6 +255,10 @@ refreshConfigCache();
 (async () => {
   await notificationManager.load();
   if (configCache.config === null) await refreshConfigCache();
+  // Auto-create sensible alert rules for whatever services are configured.
+  if (configCache.config && ensureAutoAlertRules(configCache.config)) {
+    await persistConfig(configCache.config);
+  }
   notificationManager.reconfigure(configCache.config?.notifications);
   monitorManager.start();
 })();
@@ -285,13 +300,9 @@ app.put('/api/config', requireAuth, async (req, res) => {
         lastModified: new Date().toISOString()
       }
     };
-    const serialized = JSON.stringify(config, null, 2);
-    await writeFile(CONFIG_PATH, serialized);
-    const stats = await stat(CONFIG_PATH);
-    lastModified = stats.mtimeMs;
-    configCache.config = config;
-    configCache.mtimeMs = stats.mtimeMs;
-    configCache.serialized = serialized;
+    // Auto-create sensible alert rules for newly configured services.
+    ensureAutoAlertRules(config);
+    await persistConfig(config);
     // Re-apply notifications config (no-op unless a connection-relevant field
     // actually changed, so routine saves don't drop the upstream stream).
     notificationManager.reconfigure(config.notifications);

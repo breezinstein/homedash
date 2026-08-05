@@ -6,6 +6,8 @@ interface AlertRulesEditorProps {
   rules: AlertRule[];
   servers: RemoteServer[];
   onChange: (rules: AlertRule[]) => void;
+  /** Called when a rule is deleted; lets the parent record auto-rule suppression. */
+  onRemove?: (id: string) => void;
 }
 
 type SourceKey = AlertRule['source'];
@@ -17,6 +19,8 @@ const SOURCE_LABELS: Record<SourceKey, string> = {
   media: 'Media streams',
   usenet: 'Usenet',
   seerr: 'Seerr / Overseerr',
+  homeassistant: 'Home Assistant',
+  ntopng: 'ntopng',
   reachability: 'Host reachability',
 };
 
@@ -53,6 +57,17 @@ const METRICS: Record<SourceKey, { value: string; label: string }[]> = {
     { value: 'seerr.issues', label: 'Open media issues' },
     { value: 'seerr.pending', label: 'Pending requests' },
     { value: 'seerr.failed', label: 'Failed requests' },
+  ],
+  homeassistant: [
+    { value: 'ha.unavailable', label: 'Devices offline' },
+    { value: 'ha.unavailableRatio', label: 'Share of devices offline (0–1)' },
+    { value: 'ha.batteryLow', label: 'Lowest battery %' },
+    { value: 'ha.doorsOpen', label: 'Doors open' },
+    { value: 'ha.entities', label: 'Entity count' },
+  ],
+  ntopng: [
+    { value: 'ntopng.topThroughput', label: 'Busiest host (B/s)' },
+    { value: 'ntopng.talkerCount', label: 'Top talkers tracked' },
   ],
   reachability: [
     { value: 'reachable', label: 'Host reachable (0/1)' },
@@ -95,7 +110,7 @@ const labelCls = 'text-[11px] font-medium text-[var(--color-text-secondary)]';
  * evaluated on every poll by the monitor backend against the configured
  * source metric.
  */
-export function AlertRulesEditor({ rules, servers, onChange }: AlertRulesEditorProps) {
+export function AlertRulesEditor({ rules, servers, onChange, onRemove }: AlertRulesEditorProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<AlertRule | null>(null);
 
@@ -119,7 +134,10 @@ export function AlertRulesEditor({ rules, servers, onChange }: AlertRulesEditorP
     cancel();
   };
 
-  const remove = (id: string) => onChange(rules.filter((r) => r.id !== id));
+  const remove = (id: string) => {
+    if (onRemove) onRemove(id);
+    else onChange(rules.filter((r) => r.id !== id));
+  };
   const toggle = (id: string) => onChange(rules.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
 
   const activeForm = editingId && form ? form : null;

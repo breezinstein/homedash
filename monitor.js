@@ -1621,6 +1621,39 @@ export function resolveMetric(rule, snapshot, targetHost = null) {
     return null;
   }
 
+  // Home Assistant metrics
+  if (source === 'homeassistant') {
+    const ha = snapshot.homeassistant;
+    if (!ha || ha.status === 'down') return null;
+    if (metric === 'ha.unavailable') return ha.unavailable.count;
+    if (metric === 'ha.unavailableRatio') {
+      if (ha.entityCount > 0) return ha.unavailable.count / ha.entityCount;
+      return ha.unavailable.count > 0 ? 1 : 0;
+    }
+    if (metric === 'ha.entities') return ha.entityCount;
+    if (metric === 'ha.doorsOpen') {
+      const m = ha.metrics.find(x => x.key === 'doors');
+      return m && m.value != null ? Number(m.value) : 0;
+    }
+    if (metric === 'ha.batteryLow') {
+      const m = ha.metrics.find(x => x.key === 'battery');
+      return m && m.value != null ? Number(m.value) : null;
+    }
+    return null;
+  }
+
+  // ntopng metrics
+  if (source === 'ntopng') {
+    const n = snapshot.ntopng;
+    if (!n || n.status === 'down' || !Array.isArray(n.topTalkers)) return null;
+    if (metric === 'ntopng.topThroughput') {
+      const top = n.topTalkers.reduce((mx, t) => Math.max(mx, t.throughputBps ?? 0), 0);
+      return top > 0 ? top : null;
+    }
+    if (metric === 'ntopng.talkerCount') return n.topTalkers.length;
+    return null;
+  }
+
   return null;
 }
 
@@ -1640,6 +1673,81 @@ function buildAlertMessage(rule, value, host) {
   const val = typeof value === 'number' ? round1(value) : value;
   const source = host ? `${host.host.name} ` : '';
   return `${source}${rule.name}: ${val} ${rule.operator} ${rule.threshold}`;
+}
+
+// ---------------------------------------------------------------------------
+// Auto-created alert rules
+//
+// Sensible defaults generated from whatever services are configured, so the
+// kiosk shows meaningful alerts without hand-crafting every rule. Idempotent:
+// ensureAutoAlertRules() only adds rules that don't already exist (matched by
+// source+metric+host) and honours a suppression list for rules the user has
+// explicitly deleted.
+// ---------------------------------------------------------------------------
+
+export function buildAutoAlertRules(mon) {
+  const rules = [];
+  const add = (id, name, source, metric, operator, threshold, severity, forSeconds, notify, host) => {
+    rules.push({ id, name, enabled: true, source, metric, operator, threshold, severity, forSeconds, notify: !!notify, host });
+  };
+  const has = arr => Array.isArray(arr) && arr.length > 0;
+
+  if (has(mon?.glancesHosts)) {
+    add('auto-host-down', 'Host down', 'reachability', 'reachable', '==', 0, 'critical', 120, true);
+    add('auto-host-cpu', 'High CPU', 'glances', 'cpu.percent', '>=', 90, 'warning', 300);
+    add('auto-host-memory', 'High memory', 'glances', 'memory.percent', '>=', 95, 'warning', 300);
+    add('auto-host-disk', 'High disk usage', 'glances', 'disk.percent', '>=', 90, 'warning', 300);
+  }
+  if (mon?.docker?.enabled !== false) {
+    add('auto-docker-unhealthy', 'Unhealthy Docker container', 'docker', 'docker.unhealthy', '>=', 1, 'warning', 60);
+    add('auto-docker-restarting', 'Container restarting', 'docker', 'docker.restarting', '>=', 1, 'warning', 60);
+  }
+  if (mon?.solar?.enabled) {
+    add('auto-solar-battery-low', 'Low battery', 'solar', 'battery.soc', '<=', 15, 'critical', 60, true);
+  }
+  if (has(mon?.media)) {
+    add('auto-media-transcoding', 'High transcode count', 'media', 'streams.transcoding', '>=', 4, 'warning', 60);
+  }
+  if (has(mon?.usenet)) {
+    add('auto-usenet-paused', 'Downloads paused', 'usenet', 'downloads.paused', '==', 1, 'info', 1800);
+  }
+  if (has(mon?.seerr)) {
+    add('auto-seerr-issues', 'Seerr open issues', 'seerr', 'seerr.issues', '>=', 1, 'warning', 300);
+    add('auto-seerr-failed', 'Seerr failed requests', 'seerr', 'seerr.failed', '>=', 1, 'warning', 300);
+  }
+  if (has(mon?.homeassistant)) {
+    // Adaptive: alert only when a large share of entities is offline, so the
+    // chronically-unavailable baseline on real HA installs doesn't pin the
+    // banner permanently. ~15% of a 1300-entity install is ~200 devices.
+    add('auto-ha-unavailable', 'Large share of devices offline', 'homeassistant', 'ha.unavailableRatio', '>=', 0.15, 'warning', 300);
+    add('auto-ha-battery-low', 'Home Assistant battery low', 'homeassistant', 'ha.batteryLow', '<=', 20, 'warning', 3600);
+  }
+  if (has(mon?.ntopng)) {
+    // ~100 MB/s (~800 Mbps) on the busiest host — a genuinely suspicious spike.
+    add('auto-ntopng-busy', 'Very high host throughput', 'ntopng', 'ntopng.topThroughput', '>=', 100e6, 'warning', 300);
+  }
+
+  return rules;
+}
+
+/**
+ * Merge the sensible auto rules for the configured services into
+ * config.monitoring.alerts. Returns true if the config was modified.
+ */
+export function ensureAutoAlertRules(config) {
+  const mon = config?.monitoring;
+  if (!mon) return false;
+  const alerts = Array.isArray(mon.alerts) ? mon.alerts : [];
+  const suppressed = new Set(Array.isArray(mon.suppressedAutoAlerts) ? mon.suppressedAutoAlerts : []);
+  const existingKeys = new Set(alerts.map(a => `${a.source}|${a.metric}|${a.host || ''}`));
+  const toAdd = buildAutoAlertRules(mon).filter(r => {
+    if (suppressed.has(r.id)) return false;
+    const key = `${r.source}|${r.metric}|${r.host || ''}`;
+    return !existingKeys.has(key);
+  });
+  if (toAdd.length === 0) return false;
+  mon.alerts = [...alerts, ...toAdd];
+  return true;
 }
 
 // ---------------------------------------------------------------------------

@@ -238,7 +238,7 @@ export interface AlertRule {
   id: string;
   name: string;
   enabled: boolean;
-  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'seerr' | 'reachability';
+  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'seerr' | 'homeassistant' | 'ntopng' | 'reachability';
   host?: string;
   metric: string;
   operator: '>' | '>=' | '<' | '<=' | '==' | '!=';
@@ -263,6 +263,9 @@ export interface MonitoringConfig {
   homeassistant: MonitoredHomeAssistant[];
   ui: { tabRotationSeconds: number };
   alerts: AlertRule[];
+  // Auto-created rule ids the user has explicitly deleted, so the backend
+  // doesn't re-create them on the next save.
+  suppressedAutoAlerts?: string[];
 }
 
 export interface ContainerHealth {

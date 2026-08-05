@@ -337,6 +337,10 @@ export function MonitoringSettings() {
               rules={mon.alerts ?? []}
               servers={servers}
               onChange={(rules) => update({ alerts: rules })}
+              onRemove={(id) => update({
+                alerts: (mon.alerts ?? []).filter((r) => r.id !== id),
+                suppressedAutoAlerts: [...(mon.suppressedAutoAlerts ?? []), id],
+              })}
             />
           </SectionCard>
         </>

@@ -11,6 +11,8 @@ import {
   resolveMetric,
   fetchNtopng,
   fetchHomeAssistant,
+  buildAutoAlertRules,
+  ensureAutoAlertRules,
 } from './monitor.js';
 
 function snapshot(hosts = []) {
@@ -209,6 +211,83 @@ test('battery runtime returns null without capacity or meaningful load', () => {
   assert.equal(estimateBatteryRuntime('x', 100, 0, 0, []), null);
   assert.equal(estimateBatteryRuntime('y', 100, 0, 0, [{ capacityAh: 206, voltage: 58 }]), null);
   assert.equal(estimateBatteryRuntime('z', null, 0, 4000, [{ capacityAh: 206, voltage: 58 }]), null);
+});
+
+test('resolveMetric supports homeassistant and ntopng sources', () => {
+  const snapshot = {
+    homeassistant: {
+      status: 'ok',
+      unavailable: { count: 4 },
+      entityCount: 100,
+      metrics: [
+        { key: 'battery', value: 12 },
+        { key: 'doors', value: 2 },
+      ],
+    },
+    ntopng: {
+      status: 'ok',
+      topTalkers: [
+        { throughputBps: 100 },
+        { throughputBps: 500000000 },
+      ],
+    },
+  };
+  assert.equal(resolveMetric({ source: 'homeassistant', metric: 'ha.unavailable' }, snapshot), 4);
+  assert.equal(resolveMetric({ source: 'homeassistant', metric: 'ha.entities' }, snapshot), 100);
+  assert.equal(resolveMetric({ source: 'homeassistant', metric: 'ha.unavailableRatio' }, snapshot), 0.04);
+  assert.equal(resolveMetric({ source: 'homeassistant', metric: 'ha.batteryLow' }, snapshot), 12);
+  assert.equal(resolveMetric({ source: 'homeassistant', metric: 'ha.doorsOpen' }, snapshot), 2);
+  assert.equal(resolveMetric({ source: 'ntopng', metric: 'ntopng.topThroughput' }, snapshot), 500000000);
+  assert.equal(resolveMetric({ source: 'ntopng', metric: 'ntopng.talkerCount' }, snapshot), 2);
+  // A down source must not feed alerts.
+  assert.equal(resolveMetric({ source: 'homeassistant', metric: 'ha.unavailable' }, { homeassistant: { status: 'down' } }), null);
+  assert.equal(resolveMetric({ source: 'ntopng', metric: 'ntopng.topThroughput' }, { ntopng: null }), null);
+});
+
+test('ensureAutoAlertRules adds sensible rules for configured services and dedupes', () => {
+  const config = {
+    monitoring: {
+      glancesHosts: [{ id: 'h1', name: 'one', url: 'http://x' }],
+      docker: { enabled: true },
+      solar: { enabled: true },
+      media: [{ id: 'm1' }],
+      usenet: [{ id: 'u1' }],
+      seerr: [{ id: 's1' }],
+      homeassistant: [{ id: 'ha1' }],
+      ntopng: [{ id: 'n1' }],
+      alerts: [
+        // An existing equivalent rule must prevent the matching auto rule.
+        { id: 'custom-cpu', name: 'CPU', source: 'glances', metric: 'cpu.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 60, enabled: true, notify: false },
+      ],
+    },
+  };
+  assert.equal(ensureAutoAlertRules(config), true);
+  const ids = config.monitoring.alerts.map(a => a.id);
+  assert.ok(!ids.includes('auto-host-cpu'), 'existing cpu rule should suppress the auto one');
+  for (const expected of [
+    'auto-host-down', 'auto-host-memory', 'auto-host-disk',
+    'auto-docker-unhealthy', 'auto-docker-restarting', 'auto-solar-battery-low',
+    'auto-media-transcoding', 'auto-usenet-paused', 'auto-seerr-issues', 'auto-seerr-failed',
+    'auto-ha-unavailable', 'auto-ha-battery-low', 'auto-ntopng-busy',
+  ]) {
+    assert.ok(ids.includes(expected), `missing auto rule ${expected}`);
+  }
+  // Second run is a no-op.
+  assert.equal(ensureAutoAlertRules(config), false);
+});
+
+test('ensureAutoAlertRules honours suppression of deleted auto rules', () => {
+  const config = {
+    monitoring: {
+      seerr: [{ id: 's1' }],
+      suppressedAutoAlerts: ['auto-seerr-issues'],
+      alerts: [],
+    },
+  };
+  ensureAutoAlertRules(config);
+  const ids = config.monitoring.alerts.map(a => a.id);
+  assert.ok(!ids.includes('auto-seerr-issues'), 'suppressed auto rule must not be re-added');
+  assert.ok(ids.includes('auto-seerr-failed'));
 });
 
 test('resolveMetric supports solar battery power and seerr sources', () => {
