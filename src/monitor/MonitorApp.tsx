@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { LoginModal } from '../components/LoginModal';
 import { useMonitorOverview } from './useMonitorOverview';
 import { useTabRotation } from './useTabRotation';
-import { ackAlert } from './monitorApi';
 import {
   MonitorHeader,
   AlertBanner,
@@ -190,9 +189,6 @@ export function MonitorApp() {
         <AlertsRail
           firing={overview?.alerts?.firing ?? []}
           recentlyResolved={overview?.alerts?.recentlyResolved ?? []}
-          onAck={(id) => {
-            ackAlert(id).catch(() => {});
-          }}
         />
       </div>
     </div>

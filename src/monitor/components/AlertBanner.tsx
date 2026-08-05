@@ -1,69 +1,67 @@
-import { AlertTriangle } from 'lucide-react';
-import type { AlertInstance } from '../../types';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+import type { AlertInstance, Severity } from '../../types';
 
 interface AlertBannerProps {
   alerts: AlertInstance[];
 }
 
+const SEV_COLORS: Record<Severity, string> = {
+  critical: '#e74c3c',
+  warning: '#e67e22',
+  info: '#6c5ce7',
+};
+
 function stripHtml(s: string): string {
   return s.replace(/<[^>]+>/g, '').trim();
 }
 
+/**
+ * Kiosk status strip. Always rendered at a fixed height so the rest of the
+ * dashboard never shifts when alerts appear or clear. Shows a subtle "all
+ * nominal" state when healthy, and a severity-coloured warning when firing.
+ */
 export function AlertBanner({ alerts }: AlertBannerProps) {
-  const criticals = alerts.filter((a) => a.severity === 'critical');
-  const warnings = alerts.filter((a) => a.severity === 'warning');
-  if (alerts.length === 0) return null;
+  const firing = [...alerts]
+    .sort(
+      (a, b) =>
+        (a.severity === 'critical' ? 0 : 1) - (b.severity === 'critical' ? 0 : 1) ||
+        b.since - a.since,
+    );
+
+  if (firing.length === 0) {
+    return (
+      <div className="alert-strip alert-strip-ok">
+        <CheckCircle2 size={14} />
+        <span>All systems nominal</span>
+      </div>
+    );
+  }
+
+  const criticals = firing.filter((a) => a.severity === 'critical').length;
+  const warnings = firing.filter((a) => a.severity === 'warning').length;
+  const color = criticals > 0 ? SEV_COLORS.critical : SEV_COLORS.warning;
 
   return (
     <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 10,
-        padding: '9px 20px',
-        background:
-          criticals.length > 0
-            ? 'rgba(231,76,60,0.14)'
-            : 'rgba(230,126,34,0.1)',
-        borderBottom: `1px solid ${
-          criticals.length > 0
-            ? 'rgba(231,76,60,0.35)'
-            : 'rgba(230,126,34,0.3)'
-        }`,
-        fontSize: 13,
-        overflow: 'hidden',
-        whiteSpace: 'nowrap',
-      }}
+      className="alert-strip alert-strip-firing"
+      style={{ '--alert-color': color } as React.CSSProperties}
     >
-      <AlertTriangle
-        size={16}
-        style={{
-          color: criticals.length > 0 ? '#e74c3c' : '#e67e22',
-          flexShrink: 0,
-        }}
-      />
-      {criticals.length > 0 && (
-        <span style={{ color: '#e74c3c', fontWeight: 700 }}>
-          ▲ {criticals.length} CRITICAL{criticals.length > 1 ? 'S' : ''}
-        </span>
-      )}
-      {warnings.length > 0 && (
-        <span style={{ color: '#e67e22', fontWeight: 700 }}>
-          {criticals.length > 0 && (
-            <span style={{ color: '#a0a0a0', margin: '0 4px' }}>·</span>
-          )}
-          {warnings.length} WARNING{warnings.length > 1 ? 'S' : ''}
-        </span>
-      )}
-      <span style={{ color: '#a0a0a0', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-        {[...alerts]
-          .sort((a, b) => {
-            const rank = (s: string) => (s === 'critical' ? 0 : s === 'warning' ? 1 : 2);
-            return rank(a.severity) - rank(b.severity);
-          })
-          .slice(0, 3)
-          .map((a) => stripHtml(a.message))
-          .join('  ·  ')}
+      <AlertTriangle size={14} style={{ color, flexShrink: 0 }} />
+      <span className="alert-strip-counts">
+        {criticals > 0 && (
+          <b style={{ color: SEV_COLORS.critical }}>
+            ▲ {criticals} CRITICAL{criticals > 1 ? 'S' : ''}
+          </b>
+        )}
+        {criticals > 0 && warnings > 0 && <span className="alert-strip-sep">·</span>}
+        {warnings > 0 && (
+          <b style={{ color: SEV_COLORS.warning }}>
+            {warnings} WARNING{warnings > 1 ? 'S' : ''}
+          </b>
+        )}
+      </span>
+      <span className="alert-strip-msg">
+        {firing.slice(0, 3).map((a) => stripHtml(a.message)).join('  ·  ')}
       </span>
     </div>
   );

@@ -3,7 +3,6 @@ import type { AlertInstance, Severity } from '../../types';
 interface AlertsRailProps {
   firing: AlertInstance[];
   recentlyResolved: AlertInstance[];
-  onAck: (id: string) => void;
 }
 
 const SEV_COLORS: Record<Severity, string> = {
@@ -29,7 +28,7 @@ function stripHtml(s: string): string {
  * Right-hand alerts sidebar. Shows "FIRING" (severity-ordered and
  * colour-coded) and "RECENTLY RESOLVED" sections.
  */
-export function AlertsRail({ firing, recentlyResolved, onAck }: AlertsRailProps) {
+export function AlertsRail({ firing, recentlyResolved }: AlertsRailProps) {
   const firingCount = firing.length;
 
   return (
@@ -50,7 +49,6 @@ export function AlertsRail({ firing, recentlyResolved, onAck }: AlertsRailProps)
           (a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.since - a.since,
         )}
         variant="firing"
-        onAck={onAck}
       />
 
       {/* Recently resolved */}
@@ -67,12 +65,10 @@ function AlertGroup({
   title,
   alerts,
   variant,
-  onAck,
 }: {
   title: string;
   alerts: AlertInstance[];
   variant: 'firing' | 'ok';
-  onAck?: (id: string) => void;
 }) {
   if (alerts.length === 0) return null;
 
@@ -100,18 +96,6 @@ function AlertGroup({
                 {ago(a.since)} ago
               </span>
             </div>
-            {isFiring && onAck && !a.acked && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onAck(a.id);
-                }}
-                className="alert-ack-btn"
-                style={{ borderColor: `color-mix(in srgb, ${color} 40%, transparent)` }}
-              >
-                Ack
-              </button>
-            )}
           </div>
         );
       })}
