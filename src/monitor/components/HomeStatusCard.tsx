@@ -78,7 +78,11 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
               >
                 ● PUMP {ha.pump.running ? 'RUNNING' : 'OFF'}
               </div>
-              <div className="infinity-symbol">∞</div>
+              <div className="infinity-symbol" style={{ color: ha.pump.running ? '#ffffff' : '#707070' }}>
+                {ha.pump.running
+                  ? (ha.pump.timerRemaining != null ? '⏳' : '∞')
+                  : '■'}
+              </div>
               <div className="pump-duration">⏱ {pumpDuration(ha.pump)}</div>
               <div className="pump-label">{ha.pump.label}</div>
             </div>
