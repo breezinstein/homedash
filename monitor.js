@@ -29,7 +29,9 @@ const DEFAULT_POLL_INTERVAL_MS = 10_000;
 const FETCH_TIMEOUT_MS = 8_000;
 const MAX_ALERTS = 100;
 const NETWORK_PREV_PATH = join(MONITOR_CONFIG_DIR, 'monitor-net-prev.json');
-const solarSocHistory = new Map();
+// Rolling house-load history per solar instance (keyed by inverter URL),
+// used to estimate how long the battery will last under the average load.
+const solarLoadHistory = new Map();
 const opnsenseInterfaceSamples = new Map();
 
 // ---------------------------------------------------------------------------
@@ -78,36 +80,56 @@ function formatDuration(mins) {
   return `${m}m`;
 }
 
-function estimateBatteryRuntime(key, soc, batteryPowerW, loadPowerW, pvPowerW) {
-  if (!Number.isFinite(soc)) return null;
+/**
+ * Estimate battery runtime in minutes.
+ *
+ * Two complementary estimates:
+ *  - While charging, "how long until the battery is full" — derived from the
+ *    battery's own charge power (batteryPowerW > 0) and the energy still
+ *    missing at the current SOC.
+ *  - Otherwise, "how long the battery will last" — derived from the battery
+ *    bank's stored energy (per-battery capacity × voltage × SOC) divided by
+ *    the average house load over the last 10 minutes.
+ *
+ * Batteries report their capacity in Ah (e.g. cap:206); energy = Ah × V.
+ */
+export function estimateBatteryRuntime(key, soc, batteryPowerW, loadPowerW, batteries) {
+  if (!Number.isFinite(soc) || !Array.isArray(batteries) || batteries.length === 0) return null;
   const now = Date.now();
-  const samples = solarSocHistory.get(key) || [];
-  const last = samples[samples.length - 1];
-  if (!last || now - last.timestamp >= 5_000) samples.push({ timestamp: now, soc });
-  const cutoff = now - 15 * 60_000;
-  while (samples.length && samples[0].timestamp < cutoff) samples.shift();
-  solarSocHistory.set(key, samples);
 
-  // Primary: SOC trend-based estimate (most accurate, accounts for all losses).
-  // Requires at least 3 samples and a consistent trend.
-  if (samples.length >= 3 && Number.isFinite(batteryPowerW) && Math.abs(batteryPowerW) > 2) {
-    const first = samples[0];
-    const latest = samples[samples.length - 1];
-    const elapsedMins = (latest.timestamp - first.timestamp) / 60_000;
-    const slope = elapsedMins > 0 ? (latest.soc - first.soc) / elapsedMins : 0;
-    const charging = batteryPowerW > 0;
-    if (Math.abs(slope) >= 0.005 && (slope > 0) === charging) {
-      return charging ? (100 - soc) / slope : (soc - 5) / -slope;
-    }
+  // --- Track a rolling 10-minute average of house load ---
+  const samples = solarLoadHistory.get(key) || [];
+  samples.push({ ts: now, load: Number.isFinite(loadPowerW) ? loadPowerW : 0 });
+  const cutoff = now - 10 * 60_000;
+  while (samples.length && samples[0].ts < cutoff) samples.shift();
+  solarLoadHistory.set(key, samples);
+  const avgLoadW = samples.reduce((s, x) => s + x.load, 0) / Math.max(1, samples.length);
+
+  // --- Total battery energy capacity from per-battery capacity (Ah) × voltage ---
+  let totalWh = 0;
+  for (const b of batteries) {
+    const capAh = b.capacityAh;
+    if (!Number.isFinite(capAh) || capAh <= 0) continue;
+    const v = Number.isFinite(b.voltage) && b.voltage > 0 ? b.voltage : 51.2; // 16S LiFePO4 nominal
+    totalWh += capAh * v;
+  }
+  if (totalWh <= 0) return null;
+
+  const socPct = Math.max(0, Math.min(100, soc));
+  const remainingWh = totalWh * (socPct / 100);
+  const missingWh = totalWh * ((100 - socPct) / 100);
+
+  const battW = Number.isFinite(batteryPowerW) ? batteryPowerW : 0;
+
+  // --- Charging: time until full, using the battery's charge power ---
+  if (battW > 25) {
+    const hours = missingWh / battW;
+    if (hours > 0 && Number.isFinite(hours)) return hours * 60;
   }
 
-  // Fallback: power-based estimate using net battery power.
-  // Assumes ~10 kWh usable per 100% SOC for a typical home battery bank.
-  const assumedKwhPer100Pct = 10;
-  const netBattW = Number.isFinite(batteryPowerW) ? batteryPowerW : 0;
-  if (Math.abs(netBattW) > 10) {
-    const kwhRemaining = (netBattW > 0 ? (100 - soc) : (soc - 5)) / 100 * assumedKwhPer100Pct;
-    const hours = kwhRemaining / (Math.abs(netBattW) / 1000);
+  // --- Otherwise: time the battery will last, using the 10-min average load ---
+  if (avgLoadW > 25) {
+    const hours = remainingWh / avgLoadW;
     if (hours > 0 && Number.isFinite(hours)) return hours * 60;
   }
 
@@ -411,7 +433,7 @@ async function fetchSolar(config) {
         gridPowerW: pick(totals, 'grid_power'),
         batterySocPercent,
         batteryPowerW,
-        batteryRuntimeMins: estimateBatteryRuntime(inv.url, batterySocPercent, batteryPowerW, loadPowerW, pvPowerW),
+        batteryRuntimeMins: estimateBatteryRuntime(inv.url, batterySocPercent, batteryPowerW, loadPowerW, batteries),
         inverters,
         batteries,
       };

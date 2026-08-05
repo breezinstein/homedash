@@ -7,6 +7,7 @@ import {
   resetAlertStateForTests,
   getAlertInstancesForTests,
   fetchSeerr,
+  estimateBatteryRuntime,
 } from './monitor.js';
 
 function snapshot(hosts = []) {
@@ -154,4 +155,55 @@ test('fetchSeerr returns null when nothing is configured and marks unreachable a
   const down = await fetchSeerr([{ name: 'x', url: 'http://127.0.0.1:1', apiKey: 'k' }]);
   assert.equal(down.status, 'down');
   assert.ok(down.error);
+});
+
+// ---------------------------------------------------------------------------
+// Battery runtime estimation tests.
+// Batteries report capacity in Ah (e.g. cap:206); energy = Ah × voltage.
+// ---------------------------------------------------------------------------
+
+function batteryBank(n = 3, capAh = 206, voltage = 58) {
+  return Array.from({ length: n }, () => ({ capacityAh: capAh, voltage }));
+}
+
+test('battery runtime to empty uses the 10-minute average house load', () => {
+  const key = 'test-runtime-empty';
+  const batteries = batteryBank(3); // 3 × 206 Ah × 58 V = 35,844 Wh
+  const totalWh = 3 * 206 * 58;
+
+  // Seed three load samples (4 kW, 2 kW, 6 kW) → average = 4 kW.
+  estimateBatteryRuntime(key, 100, 0, 4000, batteries);
+  estimateBatteryRuntime(key, 100, 0, 2000, batteries);
+  const mins = estimateBatteryRuntime(key, 100, 0, 6000, batteries);
+
+  const expectedMins = (totalWh / 4000) * 60; // ~537.7 min at 4 kW average
+  assert.ok(Math.abs(mins - expectedMins) < 1, `expected ~${expectedMins}, got ${mins}`);
+});
+
+test('battery runtime to full uses the battery charge power', () => {
+  const batteries = batteryBank(1); // 1 × 206 Ah × 58 V = 11,948 Wh
+  const totalWh = 206 * 58;
+  // SOC 50% at 1 kW charging → (50% × 11,948 Wh) / 1000 W = ~5.97 h.
+  const mins = estimateBatteryRuntime('test-runtime-full', 50, 1000, 4000, batteries);
+  const expectedMins = (totalWh * 0.5) / 1000 * 60;
+  assert.ok(Math.abs(mins - expectedMins) < 1, `expected ~${expectedMins}, got ${mins}`);
+});
+
+test('battery runtime scales with SOC when discharging against the load', () => {
+  const key = 'test-runtime-soc';
+  const batteries = batteryBank(3);
+  const totalWh = 3 * 206 * 58;
+  // Fixed 4 kW load; SOC 50% should last exactly half of SOC 100%.
+  estimateBatteryRuntime(key, 100, 0, 4000, batteries);
+  const minsFull = estimateBatteryRuntime(key, 100, 0, 4000, batteries);
+  const minsHalf = estimateBatteryRuntime(key, 50, 0, 4000, batteries);
+  const expectedHalf = (totalWh * 0.5) / 4000 * 60;
+  assert.ok(minsFull > minsHalf);
+  assert.ok(Math.abs(minsHalf - expectedHalf) < 1, `expected ~${expectedHalf}, got ${minsHalf}`);
+});
+
+test('battery runtime returns null without capacity or meaningful load', () => {
+  assert.equal(estimateBatteryRuntime('x', 100, 0, 0, []), null);
+  assert.equal(estimateBatteryRuntime('y', 100, 0, 0, [{ capacityAh: 206, voltage: 58 }]), null);
+  assert.equal(estimateBatteryRuntime('z', null, 0, 4000, [{ capacityAh: 206, voltage: 58 }]), null);
 });

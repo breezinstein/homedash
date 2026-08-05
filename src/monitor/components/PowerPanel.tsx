@@ -102,8 +102,8 @@ function SocCard({ soc, runtime }: { soc: number | null; runtime: { text: string
       </div>
       <div className="solar-runtime-hint">
         {runtime.text !== '—'
-          ? 'Time to full charge or depletion based on current rate.'
-          : 'Based on SOC trend over last 15 min.'}
+          ? 'Charge: battery power · Discharge: 10-min average house load.'
+          : 'Not enough load data to estimate runtime yet.'}
       </div>
     </div>
   );
