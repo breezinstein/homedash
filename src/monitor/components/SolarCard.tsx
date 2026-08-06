@@ -1,7 +1,10 @@
 import type { SolarSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
+import { RingGauge } from './RingGauge';
+import { SummaryRow } from './SummaryRow';
+import { formatRuntime } from '../format';
 
-interface SolarCardProps {
+interface PowerCardProps {
   solar: SolarSnapshot;
 }
 
@@ -11,72 +14,74 @@ function formatPower(w: number | null): string {
   return `${Math.round(w)} W`;
 }
 
-function formatRuntime(mins: number | null): string {
-  if (mins == null || !Number.isFinite(mins)) return '—';
-  const total = Math.max(0, Math.round(mins));
-  if (total < 1) return '<1m';
-  const d = Math.floor(total / 1440);
-  const h = Math.floor((total % 1440) / 60);
-  const m = total % 60;
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m`;
-}
-
-export function SolarCard({ solar }: SolarCardProps) {
+/**
+ * Top-row Power / Solar card. SOC gauge + PV headline on the left, and
+ * colour-coded Grid / Load / Battery / Runtime rows on the right. SOC is
+ * a "low is bad" gauge: green, amber ≤ 30 %, red ≤ 15 %.
+ */
+export function SolarCard({ solar }: PowerCardProps) {
   const soc = solar.batterySocPercent;
-  const socColor = soc != null
-    ? soc <= 20 ? 'var(--color-error)' : soc <= 40 ? 'var(--color-warning)' : 'var(--color-success)'
-    : 'var(--color-border)';
+  const socColor = soc == null ? '#2ecc71' : soc <= 15 ? '#e74c3c' : soc <= 30 ? '#e67e22' : '#2ecc71';
 
   const batt = solar.batteryPowerW;
   const battCharging = batt != null && batt > 5;
   const battDischarging = batt != null && batt < -5;
-  const battLabel = battCharging ? `${formatPower(batt)} charging` : battDischarging ? `${formatPower(Math.abs(batt))} discharging` : formatPower(batt);
+  const battSign = battCharging ? '+' : battDischarging ? '-' : '';
+  const battVal = batt != null ? formatPower(Math.abs(batt)) : '—';
 
   const grid = solar.gridPowerW;
   const gridImport = grid != null && grid > 5;
   const gridExport = grid != null && grid < -5;
+  const gridVal = gridImport
+    ? formatPower(grid)
+    : gridExport
+      ? formatPower(Math.abs(grid))
+      : formatPower(grid);
+
+  const runtime = formatRuntime(solar.batteryRuntimeMins);
 
   return (
-    <section className="flex flex-col rounded-2xl border border-[var(--color-border)] p-[14px_16px] bg-[var(--color-surface)] min-h-0 flex-[1.15]">
-      <div className="flex items-center gap-[9px] mb-[11px]">
-        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)]">☀️ Solar</h2>
-        <span className="text-[11px] text-[var(--color-text-secondary)]">Solar Assistant</span>
-        <div className="ml-auto"><SourceDot status={solar.status} /></div>
+    <section className="card">
+      <div className="card-header">
+        <div className="card-title-row">
+          <span className="card-icon card-icon-green">☀️</span>
+          <div className="title-group">
+            <span className="title">Power</span>
+            <span className="subtitle">Solar Assistant</span>
+          </div>
+        </div>
+        <SourceDot status={solar.status} />
       </div>
 
-      <div className="flex items-center gap-[18px] mb-3">
-        {/* SOC ring */}
-        <div
-          className="w-[86px] h-[86px] rounded-full flex-shrink-0 relative grid place-items-center"
-          style={{
-            background: `conic-gradient(${socColor} ${soc ?? 0}%, var(--color-surface) 0)`,
-          }}
-        >
-          <div className="absolute w-[64px] h-[64px] rounded-full bg-[var(--color-surface)]" />
-          <span className="relative font-bold text-[16px] tabular-nums">{soc != null ? `${Math.round(soc)}%` : '—'}</span>
+      <div className="summary-body">
+        {/* Gauge + PV headline */}
+        <div className="summary-gauge">
+          <div className="gauge-box" style={{ margin: '0 auto' }}>
+            <RingGauge percent={soc} size={70} color={socColor} />
+            <div className="gauge-val">{soc != null ? `${Math.round(soc)}%` : '—'}</div>
+          </div>
+          <div className="summary-hero-value">{formatPower(solar.pvPowerW)}</div>
+          <div className="summary-hero-label">PV generation</div>
         </div>
 
-        <div>
-          <div className="text-[30px] font-[750] tabular-nums">{formatPower(solar.pvPowerW)}</div>
-          <div className="text-[11px] text-[var(--color-text-secondary)] mt-[2px]">PV generation</div>
+        {/* Metrics */}
+        <div className="summary-list">
+          <SummaryRow
+            icon="🔋"
+            label="Battery"
+            value={`${battSign} ${battVal}`.trim()}
+            accent={battCharging ? '#2ecc71' : battDischarging ? '#e74c3c' : undefined}
+          />
+          <SummaryRow
+            icon="🔌"
+            label="Grid"
+            value={gridVal}
+            accent={gridExport ? '#2ecc71' : gridImport ? '#e67e22' : undefined}
+          />
+          <SummaryRow icon="🏠" label="House load" value={formatPower(solar.loadPowerW)} />
+          <SummaryRow icon="⏱" label="Battery runtime" value={runtime.text} accent={runtime.color} />
         </div>
       </div>
-
-      <KvRow label="🔋 Battery" value={battLabel} color={battCharging ? 'text-[var(--color-success)]' : battDischarging ? 'text-[var(--color-error)]' : 'text-[var(--color-text-primary)]'} />
-      <KvRow label="🔌 Grid" value={gridImport ? `${formatPower(grid)} importing` : gridExport ? `${formatPower(Math.abs(grid))} exporting` : formatPower(grid)} color={gridImport ? 'text-[var(--color-warning)]' : gridExport ? 'text-[var(--color-gray-400)]' : undefined} />
-      <KvRow label="🏠 House load" value={formatPower(solar.loadPowerW)} />
-      <KvRow label="⏱ Battery runtime" value={formatRuntime(solar.batteryRuntimeMins)} />
     </section>
-  );
-}
-
-function KvRow({ label, value, color }: { label: string; value: string; color?: string }) {
-  return (
-    <div className="flex justify-between py-[7px] border-t border-[var(--color-border)] text-[12.5px]">
-      <span className="text-[var(--color-text-secondary)] flex items-center gap-[7px]">{label}</span>
-      <span className={`font-semibold tabular-nums ${color || 'text-[var(--color-text-primary)]'}`}>{value}</span>
-    </div>
   );
 }

@@ -1,84 +1,109 @@
 import type { HostSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
+import { formatByteRate, formatBytesBinary } from '../format';
 
 interface HostCardProps {
   host: HostSnapshot;
 }
 
-function barColor(v: number | null): string {
-  if (v === null) return 'var(--color-border)';
-  if (v >= 90) return 'var(--color-error)';
-  if (v >= 75) return 'var(--color-warning)';
-  return 'var(--color-primary)';
-}
-
-function StatBar({ label, icon, pct, detail }: { label: string; icon: string; pct: number | null; detail?: string }) {
-  const val = pct === null ? '—' : `${pct.toFixed(0)}%`;
-  return (
-    <div className="mb-[9px]">
-      <div className="flex justify-between text-[12px] mb-1">
-        <span className="text-[var(--color-text-secondary)] flex gap-[6px] items-center">{icon} {label}</span>
-        <span className="font-semibold tabular-nums text-[var(--color-text-primary)]">{val}</span>
-      </div>
-      <div className="h-[7px] rounded-full bg-[var(--color-surface)] overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${Math.min(100, Math.max(0, pct ?? 0))}%`, backgroundColor: barColor(pct) }}
-        />
-      </div>
-      {detail && <div className="text-[10px] text-[var(--color-text-secondary)] mt-[3px]">{detail}</div>}
-    </div>
-  );
-}
-
-function formatBytes(bytes: number | null): string {
-  if (bytes == null || !Number.isFinite(bytes) || bytes === 0) return '—';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function netLabel(bps: number | null): string {
-  if (bps == null || !Number.isFinite(bps)) return '—';
-  if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)} GB/s`;
-  if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} MB/s`;
-  if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} KB/s`;
-  return `${Math.round(bps)} B/s`;
-}
-
+/**
+ * Node card for the 3×3 server grid.  Compact layout with CPU/Memory/Disk
+ * progress bars, load average, uptime, and network I/O in the footer.
+ */
 export function HostCard({ host }: HostCardProps) {
   const down = host.status === 'down';
   const h = host.host;
-  const diskDetail = host.disk.total ? `${formatBytes(host.disk.used)} / ${formatBytes(host.disk.total)}` : undefined;
-  const load = host.cpu.load;
-  const loadLabel = load['1m'] != null ? `${load['1m'].toFixed(1)} · ${load['5m']?.toFixed(1) ?? '—'} · ${load['15m']?.toFixed(1) ?? '—'}` : '—';
+  const disk = host.disk ?? { total: null, used: null, percent: null };
+  const cpu = host.cpu ?? { percent: null, cores: null, load: { '1m': null, '5m': null, '15m': null } };
+  const memory = host.memory ?? { percent: null };
+  const network = host.network ?? { rxBps: null, txBps: null };
+  const load = cpu.load;
+  const loadLabel =
+    load['1m'] != null
+      ? `${load['1m'].toFixed(1)} · ${load['5m']?.toFixed(1) ?? '—'} · ${load['15m']?.toFixed(1) ?? '—'}`
+      : '—';
+  const diskDetail = disk.total
+    ? `${formatBytesBinary(disk.used)} / ${formatBytesBinary(disk.total)}`
+    : undefined;
+  const osLabel =
+    host.system?.distro ||
+    host.system?.platform ||
+    '';
 
   return (
-    <section className={`flex flex-col rounded-2xl border p-[10px_14px] bg-[var(--color-surface)] min-h-0 h-full overflow-hidden ${down ? 'opacity-75 border-[color-mix(in_srgb,var(--color-error)_50%,transparent)]' : 'border-[var(--color-border)]'}`}>
-      <div className="flex items-center gap-[6px] mb-[6px]">
-        <h2 className="text-[13px] font-semibold text-[var(--color-text-primary)]">{h.name}</h2>
-        <span className="text-[10px] text-[var(--color-text-secondary)] truncate">
-          {host.system?.distro || host.system?.platform || ''}
-        </span>
-        <div className="ml-auto"><SourceDot status={host.status} /></div>
+    <div className={`node-card ${down ? 'opacity-60' : ''}`}>
+      {/* Title row */}
+      <div className="node-title-row">
+        <div>
+          <span className="node-title">{h.name}</span>
+          {osLabel && <span className="node-os">{osLabel}</span>}
+        </div>
+        <SourceDot status={host.status} />
       </div>
 
-      <StatBar label="CPU" icon="🖥" pct={host.cpu?.percent ?? null} />
-      <StatBar label="Memory" icon="🧠" pct={host.memory?.percent ?? null} />
-      <StatBar label="Disk" icon="💾" pct={host.disk?.percent ?? null} detail={diskDetail} />
+      {/* CPU — just percentage */}
+      <div className="metric-row" style={{ marginBottom: 4 }}>
+        <div className="metric-header">
+          <span>CPU</span>
+          <span
+            className="metric-val"
+            style={cpu.percent != null && cpu.percent >= 75 ? { color: '#e67e22' } : undefined}
+          >
+            {cpu.percent != null ? `${Math.round(cpu.percent)}%` : '—'}
+          </span>
+        </div>
+      </div>
+
+      {/* Memory bar */}
+      <div className="metric-row">
+        <div className="metric-header">
+          <span>Memory</span>
+          <span className="metric-val">{memory.percent != null ? `${Math.round(memory.percent)}%` : '—'}</span>
+        </div>
+        <div className="progress-bg">
+          <div
+            className={`progress-fill ${(memory.percent ?? 0) >= 90 ? 'critical' : (memory.percent ?? 0) >= 75 ? 'high' : ''}`}
+            style={{ width: `${Math.min(100, Math.max(0, memory.percent ?? 0))}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Disk bar */}
+      <div className="metric-row">
+        <div className="metric-header">
+          <span>Disk</span>
+          <span
+            className="metric-val"
+            style={(disk.percent ?? 0) >= 90 ? { color: '#e74c3c' } : (disk.percent ?? 0) >= 75 ? { color: '#e67e22' } : undefined}
+          >
+            {disk.percent != null ? `${Math.round(disk.percent)}%` : '—'}
+          </span>
+        </div>
+        <div className="progress-bg">
+          <div
+            className={`progress-fill ${(disk.percent ?? 0) >= 90 ? 'critical' : (disk.percent ?? 0) >= 75 ? 'high' : ''}`}
+            style={{ width: `${Math.min(100, Math.max(0, disk.percent ?? 0))}%` }}
+          />
+        </div>
+        {diskDetail && <div className="disk-detail">{diskDetail}</div>}
+      </div>
 
       {host.error && (
-        <div className="text-[var(--color-error)] text-[12px] mt-[6px]">⚠ {host.error}</div>
+        <div className="text-[#e74c3c] text-[11px] mt-1">⚠ {host.error}</div>
       )}
 
-      <div className="mt-auto pt-[6px] border-t border-[var(--color-border)] flex gap-3 text-[10px] text-[var(--color-text-secondary)]">
-        <span>Load <b className="tabular-nums text-[var(--color-text-primary)] font-semibold">{loadLabel}</b></span>
-        <span>Up <b className="tabular-nums text-[var(--color-text-primary)] font-semibold">{host.uptime?.formatted || '—'}</b></span>
-        <span className="ml-auto tabular-nums">
-          ↓ {netLabel(host.network?.rxBps ?? null)}  ↑ {netLabel(host.network?.txBps ?? null)}
+      {/* Footer: Load · Uptime · Network */}
+      <div className="node-footer">
+        <span>
+          Load <b>{loadLabel}</b>
+        </span>
+        <span>
+          Up <b>{host.uptime?.formatted || '—'}</b>
+        </span>
+        <span>
+          ↓ {formatByteRate(network.rxBps ?? null)} ↑ {formatByteRate(network.txBps ?? null)}
         </span>
       </div>
-    </section>
+    </div>
   );
 }

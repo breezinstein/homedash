@@ -194,19 +194,51 @@ export interface MonitoredArr {
   apiKey: string;
 }
 
+export interface MonitoredSeerr {
+  id: string;
+  name: string;
+  type: 'seerr' | 'overseerr' | 'jellyseerr';
+  url: string;
+  apiKey: string;
+}
+
 export interface MonitoredOpnsense {
   id: string;
   name: string;
   url: string;
   apiKey: string;
   apiSecret: string;
+  insecureTls?: boolean;
+}
+
+// ntopng — network traffic analyser. Basic-auth (username/password) or an API
+// token as the password. `ifid` is optional; when omitted the first actively
+// monitored interface is used.
+export interface MonitoredNtopng {
+  id: string;
+  name: string;
+  url: string;
+  username?: string;
+  password?: string;
+  ifid?: number;
+  insecureTls?: boolean;
+}
+
+// Home Assistant — smart-home REST API. Auth via a long-lived access token
+// (Profile → Security → Long-lived access tokens).
+export interface MonitoredHomeAssistant {
+  id: string;
+  name: string;
+  url: string;
+  token: string;
+  insecureTls?: boolean;
 }
 
 export interface AlertRule {
   id: string;
   name: string;
   enabled: boolean;
-  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'reachability';
+  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'seerr' | 'homeassistant' | 'ntopng' | 'reachability';
   host?: string;
   metric: string;
   operator: '>' | '>=' | '<' | '<=' | '==' | '!=';
@@ -225,9 +257,15 @@ export interface MonitoringConfig {
   media: MonitoredMedia[];
   usenet: MonitoredUsenet[];
   arr: MonitoredArr[];
+  seerr: MonitoredSeerr[];
   opnsense: MonitoredOpnsense[];
+  ntopng: MonitoredNtopng[];
+  homeassistant: MonitoredHomeAssistant[];
   ui: { tabRotationSeconds: number };
   alerts: AlertRule[];
+  // Auto-created rule ids the user has explicitly deleted, so the backend
+  // doesn't re-create them on the next save.
+  suppressedAutoAlerts?: string[];
 }
 
 export interface ContainerHealth {
@@ -260,6 +298,56 @@ export interface SolarSnapshot {
   batterySocPercent: number | null;
   batteryPowerW: number | null;
   batteryRuntimeMins: number | null;
+  inverters: InverterDetail[];
+  batteries: BatteryDetail[];
+}
+
+/** Per-inverter metrics from Solar Assistant. */
+export interface InverterDetail {
+  id: string;
+  serialNumber: string | null;
+  deviceMode: string | null;       // e.g. "Solar/Grid"
+  temperature: number | null;
+  busVoltage: number | null;
+  systemPowerW: number | null;
+  loadPercent: number | null;
+  loadPowerW: number | null;
+  loadApparentPowerVa: number | null;
+  acOutputVoltage: number | null;
+  acOutputFrequency: number | null;
+  pvPowerW: number | null;
+  pvVoltage: number | null;
+  pvCurrent: number | null;
+  batteryVoltage: number | null;
+  batteryCurrent: number | null;
+  batteryPowerW: number | null;
+  batteryPowerFromAcW: number | null;
+  gridPowerW: number | null;
+  gridVoltage: number | null;
+  gridFrequency: number | null;
+  generatorPowerW: number | null;
+  generatorVoltage: number | null;
+}
+
+/** Per-battery (BMS) metrics from Solar Assistant. */
+export interface BatteryDetail {
+  id: string;
+  capacityAh: number | null;
+  stateOfChargePercent: number | null;
+  powerW: number | null;
+  currentA: number | null;
+  voltage: number | null;
+  temperature: number | null;
+  temperatureMos: number | null;
+  temperatureEnv: number | null;
+  cycles: number | null;
+  chargeCapacityAh: number | null;
+  cellVoltageHighest: number | null;
+  cellVoltageLowest: number | null;
+  cellVoltageImbalance: number | null;
+  cellTempHighest: number | null;
+  cellTempLowest: number | null;
+  cellTempAverage: number | null;
 }
 
 export interface DockerSummary {
@@ -277,6 +365,7 @@ export interface MediaStream {
   serverType: 'emby' | 'jellyfin';
   user: string;
   client: string;
+  device: string;
   title: string;
   subtitle?: string;
   progressPercent: number | null;
@@ -350,13 +439,53 @@ export interface ArrSnapshot {
   queue: ArrQueueItem[];        // merged queue across all instances
 }
 
+// Seerr / Overseerr / Jellyseerr — open media issues and unattended requests.
+export interface SeerrIssue {
+  id: number;
+  issueType: number;            // 1 video, 2 audio, 3 subtitles, 4 other
+  status: 'open' | 'resolved';
+  mediaTitle: string;
+  mediaType: 'movie' | 'tv';
+  createdBy: string;
+  createdAt: string | null;
+}
+
+export interface SeerrRequest {
+  id: number;
+  status: 'pending' | 'failed'; // pending approval, or failed processing
+  mediaTitle: string;
+  mediaType: 'movie' | 'tv';
+  is4k: boolean;
+  requestedBy: string;
+  createdAt: string | null;
+}
+
+export interface SeerrSnapshot {
+  status: SourceStatus;
+  error?: string;
+  version?: string;
+  issues: SeerrIssue[];
+  pending: SeerrRequest[];
+  failed: SeerrRequest[];
+}
+
 // OPNSense firewall/router
 export interface OpnsenseInterfaceStats {
   name: string;
   description: string;
   status: string;               // up / down / no carrier
-  inBps: number | null;
-  outBps: number | null;
+  active: boolean;              // this WAN is the current default gateway
+  inBps: number | null;         // live receive rate, bytes/sec
+  outBps: number | null;        // live transmit rate, bytes/sec
+  speedBps: number | null;      // negotiated link speed, bits/sec (OPNsense "line rate")
+}
+
+/** NetFlow / Insight top talker entry from OPNsense. */
+export interface NetFlowTalker {
+  address: string;
+  hostname: string | null;
+  bytes: number;
+  percentage: number;
 }
 
 export interface OpnsenseSnapshot {
@@ -369,8 +498,73 @@ export interface OpnsenseSnapshot {
   memPercent: number | null;
   diskPercent: number | null;
   wanInterfaces: OpnsenseInterfaceStats[];
+  lanInterfaces: OpnsenseInterfaceStats[];
+  netflowTalkers: NetFlowTalker[];
   firewallStates: number | null;
   dhcpLeases: number | null;
+  totalLinkCapacityBps: number | null; // sum of negotiated link speeds, bits/sec
+}
+
+/** Top talker entry from ntopng. */
+export interface NtopngTalker {
+  address: string;
+  name: string | null;
+  txBps: number | null;         // live upload rate (host sent)
+  rxBps: number | null;         // live download rate (host received)
+  throughputBps: number | null; // combined live rate (tx + rx); null if unknown
+  bytes: number;                // total cumulative traffic
+  bytesSent: number;            // cumulative bytes sent
+  bytesRcvd: number;            // cumulative bytes received
+  firstSeen: number | null;     // epoch seconds when ntopng started counting this host
+}
+
+export interface NtopngSnapshot {
+  status: SourceStatus;
+  error?: string;
+  ifid: number | null;
+  ifname: string | null;
+  source: 'pro' | 'community' | null; // which ntopng endpoint produced the data
+  topTalkers: NtopngTalker[];
+}
+
+/** One glance-able Home Assistant metric (auto-discovered). */
+export interface HomeAssistantMetric {
+  key: string;
+  label: string;
+  value: number | string | null;
+  unit: string | null;
+}
+
+export interface HomeAssistantUnavailableDevice {
+  entityId: string;
+  name: string;
+}
+
+/** Pressure pump status for the Home Status card hero. */
+export interface HomeAssistantPump {
+  present: boolean;   // a pump entity was found in Home Assistant
+  running: boolean;
+  name: string;
+  state: string;      // raw HA state, e.g. 'on' | 'off' | 'active' | 'idle'
+  since: number | null; // epoch ms of the last state change (when running)
+  timerRemaining: number | null; // seconds left on timer.pressure_pump_timer (when active)
+  timerDuration: number | null;  // total timer duration in seconds
+  label: string;      // display label, e.g. 'PRESSURE PUMP'
+}
+
+export interface HomeAssistantSnapshot {
+  status: SourceStatus;
+  error?: string;
+  version: string | null;
+  locationName: string | null;
+  entityCount: number;
+  onCount: number;
+  unavailable: {
+    count: number;
+    devices: HomeAssistantUnavailableDevice[];
+  };
+  metrics: HomeAssistantMetric[];
+  pump: HomeAssistantPump;
 }
 
 export interface AlertInstance {
@@ -396,7 +590,10 @@ export interface MonitorOverview {
   media: MediaSnapshot | null;
   usenet: UsenetSnapshot | null;
   arr: ArrSnapshot | null;
+  seerr: SeerrSnapshot | null;
   opnsense: OpnsenseSnapshot | null;
+  ntopng: NtopngSnapshot | null;
+  homeassistant: HomeAssistantSnapshot | null;
   alerts: { firing: AlertInstance[]; recentlyResolved: AlertInstance[] };
   pollIntervalMs: number;
   tabRotationSeconds: number;

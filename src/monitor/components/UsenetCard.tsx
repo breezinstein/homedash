@@ -1,25 +1,9 @@
 import type { UsenetSnapshot, UsenetInstance, UsenetSlot } from '../../types';
 import { SourceDot } from './SourceDot';
+import { formatByteRate, formatEta } from '../format';
 
 interface UsenetCardProps {
   usenet: UsenetSnapshot;
-}
-
-function formatSpeed(bps: number | null): string {
-  if (bps == null || !Number.isFinite(bps)) return '0 B/s';
-  if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)} GB/s`;
-  if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} MB/s`;
-  if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} KB/s`;
-  return `${Math.round(bps)} B/s`;
-}
-
-function formatEta(seconds: number | null): string {
-  if (seconds == null || !Number.isFinite(seconds)) return '';
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  if (h > 0) return `${h}h ${m}m left`;
-  if (m > 0) return `${m}m left`;
-  return '<1m left';
 }
 
 export function UsenetCard({ usenet }: UsenetCardProps) {
@@ -55,7 +39,7 @@ function InstanceCard({ inst }: { inst: UsenetInstance }) {
       ) : (
         <>
           <div className="flex items-baseline gap-[14px] mb-2">
-            <span className="text-[24px] font-[750] tabular-nums">{formatSpeed(inst.speedBps)}</span>
+            <span className="text-[24px] font-[750] tabular-nums">{formatByteRate(inst.speedBps, '0 B/s')}</span>
             <span className="text-[11px] text-[var(--color-text-secondary)]">
               {inst.paused ? `Paused · ${inst.queuedTotal} items queued` : `${formatEta(inst.etaSeconds)} · ${inst.queuedTotal} items queued`}
             </span>

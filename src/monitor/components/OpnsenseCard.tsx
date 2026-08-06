@@ -1,70 +1,102 @@
 import type { OpnsenseSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
+import { RingGauge } from './RingGauge';
+import { formatBitRate } from '../format';
+import { activeWanSaturation } from '../wan';
 
-interface OpnsenseCardProps { opnsense: OpnsenseSnapshot; }
-
-function formatBps(bps: number | null): string {
-  if (bps == null || !Number.isFinite(bps)) return '—';
-  if (bps >= 1e9) return `${(bps / 1e9).toFixed(1)} Gbps`;
-  if (bps >= 1e6) return `${(bps / 1e6).toFixed(1)} Mbps`;
-  if (bps >= 1e3) return `${(bps / 1e3).toFixed(1)} Kbps`;
-  return `${Math.round(bps)} bps`;
+interface OpnsenseCardProps {
+  opnsense: OpnsenseSnapshot;
 }
 
 export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
+  // Total throughput aggregates every interface (WAN + LAN), not just the WAN.
+  const allIfaces = [
+    ...(opnsense.wanInterfaces ?? []),
+    ...(opnsense.lanInterfaces ?? []),
+  ];
+  const totalIn = allIfaces.reduce((s, i) => s + (i.inBps ?? 0), 0);
+  const totalOut = allIfaces.reduce((s, i) => s + (i.outBps ?? 0), 0);
+  const totalBps = totalIn + totalOut;
+
+  const { wan: activeWan, wanInBps: wanIn, wanOutBps: wanOut, percent: throughputPct } =
+    activeWanSaturation(opnsense);
+  const standbyWans = opnsense.wanInterfaces.filter((i) => !i.active);
+
+  const memDetail = opnsense.memPercent != null
+    ? `${Math.round(opnsense.memPercent)}%`
+    : '—';
+
   return (
-    <section className="flex flex-col rounded-2xl border border-[var(--color-border)] p-[14px_16px] bg-[var(--color-surface)] min-h-0 overflow-hidden">
-      <div className="flex items-center gap-[9px] mb-[11px]">
-        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)]">🛡 OPNSense</h2>
-        <span className="text-[11px] text-[var(--color-text-secondary)]">{opnsense.hostname || '—'}</span>
-        <div className="ml-auto"><SourceDot status={opnsense.status as any} /></div>
+    <section className="card">
+      <div className="card-header">
+        <div className="card-title-row">
+          <span className="card-icon card-icon-orange">🛡️</span>
+          <div className="title-group">
+            <span className="title">OPNsense</span>
+            <span className="subtitle">Multi-WAN</span>
+          </div>
+        </div>
+        <SourceDot status={opnsense.status as any} />
       </div>
 
       {opnsense.status === 'down' ? (
-        <div className="text-[var(--color-error)] text-[12px]">{opnsense.error || 'Unreachable'}</div>
+        <div className="text-[#e74c3c] text-[12px]">{opnsense.error || 'Unreachable'}</div>
       ) : (
-        <div className="space-y-[6px] text-[12px]">
-          <div className="flex justify-between">
-            <span className="text-[var(--color-text-secondary)]">Version</span>
-            <span className="tabular-nums">{opnsense.version || '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-text-secondary)]">Uptime</span>
-            <span className="tabular-nums">{opnsense.uptime || '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-text-secondary)]">CPU</span>
-            <span className="tabular-nums font-semibold">{opnsense.cpuPercent != null ? `${opnsense.cpuPercent}%` : '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-text-secondary)]">Memory</span>
-            <span className="tabular-nums font-semibold">{opnsense.memPercent != null ? `${opnsense.memPercent}%` : '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-text-secondary)]">Firewall states</span>
-            <span className="tabular-nums">{opnsense.firewallStates != null ? opnsense.firewallStates.toLocaleString() : '—'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-text-secondary)]">DHCP leases</span>
-            <span className="tabular-nums">{opnsense.dhcpLeases != null ? opnsense.dhcpLeases : '—'}</span>
+        <div className="summary-body">
+          {/* Gauge + throughput headline */}
+          <div className="summary-gauge">
+            <div className="gauge-box" style={{ margin: '0 auto' }}>
+              <RingGauge percent={throughputPct} size={70} warnAt={50} criticalAt={80} />
+              <div className="gauge-val">{Math.round(throughputPct)}%</div>
+            </div>
+            <div className="summary-hero-value">{formatBitRate(activeWan ? (wanIn ?? 0) + (wanOut ?? 0) : totalBps)}</div>
+            <div className="summary-hero-label">WAN Throughput</div>
           </div>
 
-          {opnsense.wanInterfaces.length > 0 && (
-            <div className="border-t border-[var(--color-border)] pt-2 mt-2">
-              <div className="text-[11px] font-semibold text-[var(--color-text-secondary)] mb-1">WAN Interfaces</div>
-              {opnsense.wanInterfaces.map((iface, i) => (
-                <div key={i} className="flex items-center justify-between py-1">
-                  <div className="flex items-center gap-2">
-                    <span className={`w-2 h-2 rounded-full ${iface.status === 'up' ? 'bg-[var(--color-success)]' : 'bg-[var(--color-error)]'}`} />
-                    <span>{iface.description || iface.name}</span>
-                  </div>
-                  <span className="tabular-nums text-[11px] text-[var(--color-text-secondary)]">
-                    ↓ {formatBps(iface.inBps)}  ↑ {formatBps(iface.outBps)}
-                  </span>
-                </div>
-              ))}
+          {/* Interfaces + memory */}
+          <div className="summary-list">
+            <div className="summary-row">
+              <span className="summary-row-key">
+                <span className="summary-row-icon">🌐</span>
+                Active gateway
+              </span>
+              <span className="gateway-pill">
+                {activeWan?.description || activeWan?.name || 'WAN1 (Primary)'}
+              </span>
             </div>
-          )}
+
+            {activeWan && (
+              <div className="summary-row">
+                <span className="summary-row-key">
+                  <span className="summary-row-icon">📶</span>
+                  {activeWan.description || activeWan.name}
+                </span>
+                <span className="summary-row-value" style={{ color: '#2ecc71', fontSize: 11 }}>
+                  ↓ {formatBitRate(activeWan.inBps ?? 0)} · ↑ {formatBitRate(activeWan.outBps ?? 0)}
+                </span>
+              </div>
+            )}
+
+            {standbyWans.map((iface) => (
+              <div className="summary-row" key={iface.name}>
+                <span className="summary-row-key">
+                  <span className="summary-row-icon">⏸</span>
+                  {iface.description || iface.name}
+                </span>
+                <span className="summary-row-value" style={{ color: '#a0a0a0' }}>
+                  Standby
+                </span>
+              </div>
+            ))}
+
+            <div className="summary-row">
+              <span className="summary-row-key">
+                <span className="summary-row-icon">🧠</span>
+                Memory usage
+              </span>
+              <span className="summary-row-value">{memDetail}</span>
+            </div>
+          </div>
         </div>
       )}
     </section>

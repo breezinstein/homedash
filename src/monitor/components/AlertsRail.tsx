@@ -1,89 +1,88 @@
-import { Bell, CheckCircle } from 'lucide-react';
-import type { AlertInstance } from '../../types';
+import type { AlertInstance, Severity } from '../../types';
+import { SEVERITY_COLORS } from '../constants';
+import { formatAgo, stripHtml } from '../format';
 
 interface AlertsRailProps {
   firing: AlertInstance[];
   recentlyResolved: AlertInstance[];
-  onAck: (id: string) => void;
 }
 
-const sevStyle: Record<string, string> = {
-  critical: 'bg-[color-mix(in_srgb,var(--color-error)_18%,transparent)] text-[var(--color-error)]',
-  warning: 'bg-[color-mix(in_srgb,var(--color-warning)_15%,transparent)] text-[var(--color-warning)]',
-  info: 'bg-[color-mix(in_srgb,var(--color-primary)_15%,transparent)] text-[var(--color-primary)]',
-  resolved: 'bg-[color-mix(in_srgb,var(--color-success)_14%,transparent)] text-[var(--color-success)]',
-};
+const SEV_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
 
-function ago(ts: number): string {
-  const diff = Math.round((Date.now() - ts) / 1000);
-  if (diff < 60) return `${diff}s`;
-  if (diff < 3600) return `${Math.round(diff / 60)}m`;
-  if (diff < 86400) return `${Math.round(diff / 3600)}h`;
-  return `${Math.round(diff / 86400)}d`;
-}
+/**
+ * Right-hand alerts sidebar. Shows "FIRING" (severity-ordered and
+ * colour-coded) and "RECENTLY RESOLVED" sections.
+ */
+export function AlertsRail({ firing, recentlyResolved }: AlertsRailProps) {
+  const firingCount = firing.length;
 
-export function AlertsRail({ firing, recentlyResolved, onAck }: AlertsRailProps) {
   return (
-    <section className="flex flex-col rounded-2xl border border-[var(--color-border)] p-[14px_16px] bg-[var(--color-surface)] min-h-0 overflow-hidden col-span-1 row-span-3">
-      <div className="flex items-center gap-[9px] mb-[11px]">
-        <Bell className="w-4 h-4 text-[var(--color-text-secondary)]" />
-        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)]">Alerts</h2>
-        <span className="text-[11px] text-[var(--color-text-secondary)]">{firing.length} firing</span>
+    <section className="alerts-card">
+      {/* Header */}
+      <div className="alerts-header">
+        <span style={{ fontSize: 16 }}>🔔</span>
+        <span className="alerts-title">Alerts</span>
+        {firingCount > 0 && (
+          <span className="alerts-firing-badge">{firingCount} firing</span>
+        )}
       </div>
 
-      <div className="overflow-y-auto flex-1 -m-1 p-1 space-y-[6px]">
-        <AlertSection label="Firing" alerts={firing} onAck={onAck} />
-        <AlertSection label="Recently resolved" alerts={recentlyResolved} resolved />
-      </div>
+      {/* Firing — critical first, then by age */}
+      <AlertGroup
+        title="FIRING"
+        alerts={[...firing].sort(
+          (a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.since - a.since,
+        )}
+        variant="firing"
+      />
+      {/* Recently resolved */}
+      <AlertGroup
+        title="RECENTLY RESOLVED"
+        alerts={recentlyResolved}
+        variant="ok"
+      />
     </section>
   );
 }
 
-function AlertSection({ label, alerts, resolved, onAck }: {
-  label: string;
+function AlertGroup({
+  title,
+  alerts,
+  variant,
+}: {
+  title: string;
   alerts: AlertInstance[];
-  resolved?: boolean;
-  onAck?: (id: string) => void;
+  variant: 'firing' | 'ok';
 }) {
+  if (alerts.length === 0) return null;
+
   return (
-    <>
-      <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.8px] text-[var(--color-text-secondary)] my-[6px]">
-        {label}
-        <div className="flex-1 h-px bg-[var(--color-border)]" />
-      </div>
-
-      {alerts.length === 0 ? (
-        <div className={`rounded-lg border p-[9px_11px] bg-[var(--color-surface)] ${resolved ? 'border-[var(--color-success)] opacity-60' : 'border-[var(--color-success)]'}`}>
-          <div className="flex items-center gap-2">
-            <CheckCircle className="w-3.5 h-3.5 text-[var(--color-success)]" />
-            <span className="text-[12px] text-[var(--color-text-secondary)]">{resolved ? 'No recently resolved alerts' : 'No active alerts'}</span>
-          </div>
-        </div>
-      ) : (
-        alerts.map(a => (
-          <div key={a.id} className={`rounded-lg border border-l-[3px] p-[9px_11px] bg-[var(--color-surface)] ${resolved ? 'border-l-[var(--color-success)] opacity-60' : a.severity === 'critical' ? 'border-l-[var(--color-error)]' : 'border-l-[var(--color-warning)]'}`}>
-            <div className="flex items-center gap-[7px]">
-              <span className={`text-[9.5px] font-extrabold tracking-[.6px] uppercase px-[6px] py-[2px] rounded ${sevStyle[a.severity] || sevStyle.warning}`}>
-                {resolved ? 'resolved' : a.severity}
+    <div>
+      <div className="alert-group-title">{title}</div>
+      {alerts.map((a) => {
+        const isFiring = variant === 'firing';
+        const color = isFiring ? (SEVERITY_COLORS[a.severity] ?? '#e67e22') : '#2ecc71';
+        return (
+          <div
+            key={a.id}
+            className="alert-box"
+            style={{
+              border: `1px solid ${color}`,
+              background: `color-mix(in srgb, ${color} 10%, transparent)`,
+              color,
+            }}
+          >
+            <span>{isFiring ? '⚠️' : '✔'}</span>
+            <div className="alert-text">
+              <span>{stripHtml(a.message)}</span>
+              <span className="alert-ago">
+                {isFiring ? `${a.severity.toUpperCase()} · ` : ''}
+                {formatAgo(a.since)} ago
               </span>
-              <span className="ml-auto text-[10px] text-[var(--color-text-secondary)]">{ago(a.since)}</span>
             </div>
-            <div className="text-[12px] leading-snug mt-[5px]">{stripHtml(a.message)}</div>
-            {a.state === 'firing' && onAck && !a.acked && (
-              <button
-                onClick={() => onAck(a.id)}
-                className="mt-[7px] text-[11px] font-semibold text-[var(--color-text-secondary)] border border-[var(--color-border)] bg-transparent rounded-md px-[10px] py-[3px] hover:text-[var(--color-text-primary)] hover:border-[var(--color-text-secondary)] cursor-pointer"
-              >
-                Acknowledge
-              </button>
-            )}
           </div>
-        ))
-      )}
-    </>
+        );
+      })}
+    </div>
   );
-}
-
-function stripHtml(s: string): string {
-  return s.replace(/<[^>]+>/g, '');
 }
