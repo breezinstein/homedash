@@ -1161,11 +1161,31 @@ async function loadInverterStats(rawUrl, username, password) {
     }
     const data = await response.json();
     const stats = attachBatteryRuntime(normalizeInverter(data), base);
+    lastInverterStats.set(`${base}|${user}`, { stats, ts: Date.now() });
     return { ok: true, status: 200, stats };
   } catch (error) {
     clearTimeout(timeout);
     const message = error.name === 'AbortError' ? 'Request timed out' : 'Unable to reach the inverter';
     return { ok: false, status: 502, error: message };
+  }
+}
+
+// Last successfully normalized stats per inverter (keyed by resolved base URL
+// + username), refreshed by the background poller every INV_POLL_INTERVAL_MS.
+// Lets GET /api/inverter/metrics serve the warm snapshot instead of hitting
+// the device again for every panel poll.
+const lastInverterStats = new Map();
+const INVERTER_CACHE_TTL_MS = 2 * INV_POLL_INTERVAL_MS;
+
+// Cache key mirroring the credential resolution inside loadInverterStats.
+function inverterCacheKey(rawUrl, username) {
+  try {
+    const parsed = new URL(rawUrl);
+    const { base } = buildInverterTarget(parsed);
+    const user = (username || decodeURIComponent(parsed.username) || '').trim();
+    return `${base}|${user}`;
+  } catch {
+    return null;
   }
 }
 
@@ -1216,6 +1236,17 @@ app.get('/api/inverter/metrics', requireAuth, async (req, res) => {
   // (resolved inside loadInverterStats).
   const username = req.get('x-inverter-username') || undefined;
   const password = req.get('x-inverter-password') ?? undefined;
+
+  // Serve the background poller's warm snapshot when fresh, so an open panel
+  // doesn't double-fetch the device every poll interval; fall back to a live
+  // fetch only when the cache is cold or stale.
+  const cacheKey = inverterCacheKey(raw, username);
+  if (cacheKey) {
+    const cached = lastInverterStats.get(cacheKey);
+    if (cached && Date.now() - cached.ts < INVERTER_CACHE_TTL_MS) {
+      return res.json(cached.stats);
+    }
+  }
 
   const result = await loadInverterStats(raw, username, password);
   if (!result.ok) {

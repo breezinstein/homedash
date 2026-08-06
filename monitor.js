@@ -33,6 +33,7 @@ const NETWORK_PREV_PATH = join(MONITOR_CONFIG_DIR, 'monitor-net-prev.json');
 // used to estimate how long the battery will last under the average load.
 const solarLoadHistory = new Map();
 const opnsenseInterfaceSamples = new Map();
+const glancesApiMajor = new Map(); // `${host.url}|${user}` → 3 | 4 (last known working Glances API major)
 // ntopng credential scheme that authenticated successfully, keyed by
 // `url|username` so we don't re-probe every poll. Values: 'token' | 'basic'.
 const ntopngAuthSchemes = new Map();
@@ -237,13 +238,19 @@ function formatTime(seconds) {
 // ---------------------------------------------------------------------------
 
 async function fetchGlancesHost(host) {
-  const targets = [`${host.url}/api/4/all`, `${host.url}/api/3/all`];
+  // Prefer the last-known-working API major so hosts that only run Glances v3
+  // don't eat a guaranteed 404 probe on every poll; the other major stays as a
+  // fallback so a version change self-heals.
+  const cacheKey = `${host.url}|${host.username || ''}`;
+  const preferred = glancesApiMajor.get(cacheKey) === 3 ? '/api/3/all' : '/api/4/all';
+  const targets = [preferred, preferred === '/api/3/all' ? '/api/4/all' : '/api/3/all'];
   for (const t of targets) {
-    const r = await fetchJson(t, host.username, host.password);
+    const r = await fetchJson(`${host.url}${t}`, host.username, host.password);
     if (!r.ok) {
       if (r.error.includes('404')) continue;
       return { host: { id: host.id, name: host.name }, status: 'down', error: r.error };
     }
+    glancesApiMajor.set(cacheKey, t === '/api/3/all' ? 3 : 4);
     const all = r.data;
     const cpu = all.cpu || {};
     const core = all.core || {};
@@ -1021,6 +1028,13 @@ async function fetchOpnsense(opnConfigs) {
   const totalLinkCapacityBps = [...wanIfaces, ...lanIfaces]
     .reduce((s, i) => s + (i.speedBps ?? 0), 0) || null;
 
+  // Prune interface byte-counter samples so renamed/rotated devices don't
+  // accumulate in the map over long uptimes (mirrors the ntopng sample prune).
+  const sampleCutoff = Date.now() - 10 * 60_000;
+  for (const [k, v] of opnsenseInterfaceSamples) {
+    if (v.timestamp < sampleCutoff) opnsenseInterfaceSamples.delete(k);
+  }
+
   // Parse Insight NetFlow top talkers
   const netflowTalkers = [];
   if (insightTalkers && Array.isArray(insightTalkers.rows)) {
@@ -1283,6 +1297,7 @@ function buildHomeAssistantSnapshot(config, states) {
     return Number.isFinite(n) ? n : null;
   };
   const deviceClass = e => e.attributes?.device_class ?? null;
+  const unitOf = e => e.attributes?.unit_of_measurement ?? null;
 
   // Glances entities duplicate the server integration, and inverter/solar
   // power stats duplicate the solar integration — drop them from discovery.
@@ -1290,13 +1305,53 @@ function buildHomeAssistantSnapshot(config, states) {
   const isInverterStat = e => /inverter|solar|photovoltaic|\bpv\b|\bgrid\b/i.test(
     `${e.entity_id} ${friendlyName(e)}`);
 
-  const entities = Array.isArray(states)
-    ? states.filter(e => e && typeof e.entity_id === 'string' && !isGlancesEntity(e))
-    : [];
-  const unitOf = e => e.attributes?.unit_of_measurement ?? null;
+  // Single pass over the order-preserving state list, classifying each entity
+  // into buckets so we never re-scan the array once per metric.
+  const unavailableEntities = [];
+  let entityCount = 0;
+  let onCount = 0;
+  let lightsOn = 0;
+  let switchesOn = 0;
+  let openDoors = 0;
+  let powerBest = null;     // { e, v } — largest |reading|, earliest on ties
+  let batteryLowest = null; // entity with the smallest numeric state
+  let climateTemp = null;
+  let tempSensor = null;
+  let humidity = null;
+  let pumpTimer = null;
+  let pumpSwitch = null;
+  let pumpBinary = null;
 
-  const unavailableEntities = entities.filter(e => e.state === 'unavailable');
-  const onCount = entities.filter(e => e.state === 'on').length;
+  for (const e of Array.isArray(states) ? states : []) {
+    if (!e || typeof e.entity_id !== 'string' || isGlancesEntity(e)) continue;
+    entityCount++;
+    const state = e.state;
+    const cls = deviceClass(e);
+    const num = numState(e);
+
+    if (state === 'unavailable') {
+      unavailableEntities.push(e);
+    } else if (state === 'on') {
+      onCount++;
+      if (e.entity_id.startsWith('light.')) lightsOn++;
+      else if (e.entity_id.startsWith('switch.')) switchesOn++;
+      if (cls === 'door' || cls === 'opening' || cls === 'garage_door') openDoors++;
+    }
+
+    if (cls === 'power' && !isInverterStat(e)) {
+      const v = Math.abs(num ?? 0);
+      if (!powerBest || v > powerBest.v) powerBest = { e, v };
+    }
+    if (cls === 'battery' && num != null) {
+      if (!batteryLowest || num < (numState(batteryLowest) ?? 100)) batteryLowest = e;
+    }
+    if (cls === 'humidity' && num != null && !humidity) humidity = e;
+    if (cls === 'temperature' && num != null && !tempSensor) tempSensor = e;
+    if (e.entity_id.startsWith('climate.') && e.attributes?.current_temperature != null && !climateTemp) climateTemp = e;
+    if (/^timer\./.test(e.entity_id) && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`) && !pumpTimer) pumpTimer = e;
+    else if (e.entity_id.startsWith('switch.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`) && !pumpSwitch) pumpSwitch = e;
+    else if (e.entity_id.startsWith('binary_sensor.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`) && !pumpBinary) pumpBinary = e;
+  }
 
   const metrics = [];
   const addMetric = (key, label, value, unit) => {
@@ -1305,18 +1360,13 @@ function buildHomeAssistantSnapshot(config, states) {
 
   // Power — the sensor with the largest |reading| (usually the utility meter),
   // skipping inverter/solar power stats that the solar integration covers.
-  const powerSensors = entities
-    .filter(e => deviceClass(e) === 'power' && !isInverterStat(e))
-    .map(e => ({ e, v: Math.abs(numState(e) ?? 0) }))
-    .sort((a, b) => b.v - a.v);
-  if (powerSensors.length) {
-    const top = powerSensors[0].e;
+  if (powerBest) {
+    const top = powerBest.e;
     addMetric('power', friendlyName(top), numState(top), unitOf(top) || 'W');
   }
 
   // Temperature — prefer a climate's current temperature, else a temp sensor.
-  let tempEntity = entities.find(e => e.entity_id.startsWith('climate.') && e.attributes?.current_temperature != null);
-  if (!tempEntity) tempEntity = entities.find(e => deviceClass(e) === 'temperature' && numState(e) != null);
+  const tempEntity = climateTemp || tempSensor;
   if (tempEntity) {
     const temp = tempEntity.entity_id.startsWith('climate.')
       ? Number(tempEntity.attributes.current_temperature)
@@ -1325,26 +1375,19 @@ function buildHomeAssistantSnapshot(config, states) {
   }
 
   // Humidity.
-  const humidity = entities.find(e => deviceClass(e) === 'humidity' && numState(e) != null);
   if (humidity) addMetric('humidity', 'Humidity', numState(humidity), unitOf(humidity) || '%');
 
   // Battery — the lowest level currently reporting.
-  const batterySensors = entities.filter(e => deviceClass(e) === 'battery' && numState(e) != null);
-  if (batterySensors.length) {
-    const lowest = batterySensors.reduce((a, b) => (numState(a) ?? 100) <= (numState(b) ?? 100) ? a : b);
-    addMetric('battery', `${friendlyName(lowest)} battery`, numState(lowest), unitOf(lowest) || '%');
+  if (batteryLowest) {
+    addMetric('battery', `${friendlyName(batteryLowest)} battery`, numState(batteryLowest), unitOf(batteryLowest) || '%');
   }
 
   // On-counts.
-  const lightsOn = entities.filter(e => e.entity_id.startsWith('light.') && e.state === 'on').length;
   if (lightsOn > 0) addMetric('lights', 'Lights on', lightsOn);
-  const switchesOn = entities.filter(e => e.entity_id.startsWith('switch.') && e.state === 'on').length;
   if (switchesOn > 0) addMetric('switches', 'Switches on', switchesOn);
   if (unavailableEntities.length > 0) addMetric('unavailable', 'Unavailable devices', unavailableEntities.length);
 
   // Open doors / windows — always reported (0 is meaningful on a status card).
-  const openDoors = entities.filter(e =>
-    ['door', 'opening', 'garage_door'].includes(deviceClass(e)) && e.state === 'on').length;
   addMetric('doors', 'Doors open', openDoors);
 
   // Pressure pump — drives the Home Status card hero. The pump timer
@@ -1361,13 +1404,8 @@ function buildHomeAssistantSnapshot(config, states) {
     if (m) return (m[1] ? Number(m[1]) * 3600 : 0) + Number(m[2]) * 60 + Number(m[3]);
     return null;
   };
-  const pumpTimer = entities.find(e =>
-    /^timer\./.test(e.entity_id) && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`));
-  const switchPump = entities.find(e =>
-    e.entity_id.startsWith('switch.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`))
-    || entities.find(e =>
-      e.entity_id.startsWith('binary_sensor.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`));
-  const pumpEntity = pumpTimer || switchPump;
+  const pumpEntity = pumpTimer || pumpSwitch || pumpBinary;
+  const switchPump = pumpSwitch || pumpBinary;
   // Prefer the live finishes_at time; fall back to the remaining attribute.
   const finishesMs = pumpTimer?.attributes?.finishes_at ? Date.parse(pumpTimer.attributes.finishes_at) : NaN;
   const remainingFromFinish = Number.isFinite(finishesMs) ? Math.max(0, (finishesMs - Date.now()) / 1000) : null;
@@ -1394,7 +1432,7 @@ function buildHomeAssistantSnapshot(config, states) {
     status: 'ok',
     version: config?.version ?? null,
     locationName: config?.location_name ?? null,
-    entityCount: entities.length,
+    entityCount,
     onCount,
     unavailable: {
       count: unavailableEntities.length,
@@ -1561,12 +1599,17 @@ export function evaluateAlerts(rules, snapshot) {
     }
   }
 
-  // Removed/disabled rules must not remain firing after configuration changes.
+  // Removed/disabled rules must not remain firing after configuration changes,
+  // and their state is dropped entirely so long-running processes don't
+  // accumulate stale entries for rules that no longer exist.
   for (const [key, entry] of alertState) {
-    if (!evaluated.has(key) && entry.instance?.state === 'firing') {
-      entry.instance.state = 'resolved';
-      entry.instance.resolvedAt = now;
-      entry.consecutiveBreachMs = 0;
+    if (!evaluated.has(key)) {
+      if (entry.instance?.state === 'firing') {
+        entry.instance.state = 'resolved';
+        entry.instance.resolvedAt = now;
+        entry.consecutiveBreachMs = 0;
+      }
+      alertState.delete(key);
     }
   }
 }
@@ -1763,6 +1806,7 @@ export class MonitorManager {
     this._running = false;
     this._inFlight = false;
     this._lastCycleDurationMs = null;
+    this._lastAlertSerialized = null;
     this._waiters = new Set();
   }
 
@@ -1883,16 +1927,21 @@ export class MonitorManager {
     for (const waiter of this._waiters) waiter(snapshot);
     this._waiters.clear();
 
-    // Persist alerts
+    // Persist alerts — only when the set actually changed, so a quiet system
+    // doesn't churn the disk on every poll cycle.
     try {
       const allAlerts = [...alertState.values()]
         .filter(e => e.instance)
         .map(e => e.instance)
         .sort((a, b) => (b.resolvedAt || b.since) - (a.resolvedAt || a.since))
         .slice(0, MAX_ALERTS);
-      const tempPath = `${MONITOR_ALERTS_PATH}.tmp`;
-      await writeFile(tempPath, JSON.stringify(allAlerts, null, 2));
-      await rename(tempPath, MONITOR_ALERTS_PATH);
+      const serialized = JSON.stringify(allAlerts, null, 2);
+      if (serialized !== this._lastAlertSerialized) {
+        this._lastAlertSerialized = serialized;
+        const tempPath = `${MONITOR_ALERTS_PATH}.tmp`;
+        await writeFile(tempPath, serialized);
+        await rename(tempPath, MONITOR_ALERTS_PATH);
+      }
     } catch (err) {
       console.warn('Failed to persist alert history:', err?.message ?? err);
     }
