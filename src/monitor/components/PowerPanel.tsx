@@ -1,6 +1,6 @@
 import type { SolarSnapshot, InverterDetail, BatteryDetail } from '../../types';
 import { RingGauge } from './RingGauge';
-import { formatRuntime } from '../format';
+import { batteryCharging, formatRuntime, runtimeLabel } from '../format';
 
 interface PowerPanelProps {
   solar: SolarSnapshot;
@@ -29,6 +29,7 @@ export function PowerPanel({ solar }: PowerPanelProps) {
   const batteries = solar.batteries ?? [];
   const soc = solar.batterySocPercent;
   const runtime = formatRuntime(solar.batteryRuntimeMins);
+  const charging = batteryCharging(solar.batteryPowerW);
   const hasInv = inverters.length > 0;
   const hasBat = batteries.length > 0;
 
@@ -44,7 +45,7 @@ export function PowerPanel({ solar }: PowerPanelProps) {
     <div className="solar-detail">
       {/* Top: SOC gauge + inverters */}
       <div className={hasInv ? 'power-top-row' : 'power-top-row power-top-row-single'}>
-        <SocCard soc={soc} runtime={runtime} />
+        <SocCard soc={soc} runtime={runtime} charging={charging} />
         {hasInv && (
           <div className="solar-section">
             <div className="solar-section-title">Inverters</div>
@@ -68,7 +69,7 @@ export function PowerPanel({ solar }: PowerPanelProps) {
   );
 }
 
-function SocCard({ soc, runtime }: { soc: number | null; runtime: { text: string; color: string } }) {
+function SocCard({ soc, runtime, charging }: { soc: number | null; runtime: { text: string; color: string }; charging: boolean }) {
   // SOC is a "low is bad" gauge: green normal, amber ≤ 30%, red ≤ 15%.
   const socColor = soc == null ? '#2ecc71' : soc <= 15 ? '#e74c3c' : soc <= 30 ? '#e67e22' : '#2ecc71';
   return (
@@ -83,12 +84,14 @@ function SocCard({ soc, runtime }: { soc: number | null; runtime: { text: string
         </div>
       </div>
       <div className="solar-runtime" style={{ color: runtime.color }}>
-        <span className="solar-runtime-label">Est. Runtime</span>
+        <span className="solar-runtime-label">{runtimeLabel(charging)}</span>
         <span className="solar-runtime-value">{runtime.text}</span>
       </div>
       <div className="solar-runtime-hint">
         {runtime.text !== '—'
-          ? 'Charge: battery power · Discharge: 10-min average house load.'
+          ? charging
+            ? 'Time until fully charged at the current charge rate.'
+            : 'Charge: battery power · Discharge: 10-min average house load.'
           : 'Not enough load data to estimate runtime yet.'}
       </div>
     </div>
@@ -96,10 +99,16 @@ function SocCard({ soc, runtime }: { soc: number | null; runtime: { text: string
 }
 
 function InverterCard({ inv }: { inv: InverterDetail }) {
-  // Each inverter's load bar is relative to its own apparent-power capacity
-  const invCapacity = inv.loadApparentPowerVa ?? inv.loadPowerW ?? 5000;
-  const loadPct = Math.min(100, Math.abs(inv.loadPowerW ?? 0) / Math.max(1, invCapacity) * 100);
-  const pvMax = Math.max(1, Math.abs(inv.pvPowerW ?? 0), Math.abs(inv.loadPowerW ?? 0));
+  // Every bar is relative to the inverter's rated AC output capacity (its max
+  // apparent power, e.g. "Max AC output apparent power: 6.00 kVA"), so Load /
+  // PV / Grid / Battery all share one consistent scale. We use the rated max
+  // rather than the live load apparent power, which is just the current draw.
+  const invMax = inv.maxAcOutputApparentPowerVa
+    ?? inv.maxAcOutputPowerW
+    ?? inv.loadApparentPowerVa
+    ?? inv.loadPowerW
+    ?? 5000;
+  const loadPct = Math.min(100, Math.abs(inv.loadPowerW ?? 0) / Math.max(1, invMax) * 100);
 
   return (
     <div className="node-card">
@@ -114,12 +123,12 @@ function InverterCard({ inv }: { inv: InverterDetail }) {
       <BarMetric label="Load" value={fmtPower(inv.loadPowerW)}
         pct={loadPct} color={loadPct > 80 ? '#e67e22' : '#e0e0e0'} />
       <BarMetric label="PV" value={fmtPower(inv.pvPowerW)}
-        pct={Math.abs(inv.pvPowerW ?? 0) / pvMax * 100} color="#f1c40f" />
+        pct={Math.abs(inv.pvPowerW ?? 0) / Math.max(1, invMax) * 100} color="#f1c40f" />
       <BarMetric label="Grid" value={fmtPower(inv.gridPowerW)}
-        pct={Math.abs(inv.gridPowerW ?? 0) / Math.max(1, invCapacity) * 100}
+        pct={Math.abs(inv.gridPowerW ?? 0) / Math.max(1, invMax) * 100}
         color={inv.gridPowerW != null && inv.gridPowerW > 5 ? '#e67e22' : '#808080'} />
       <BarMetric label="Battery" value={fmtPower(inv.batteryPowerW)}
-        pct={Math.abs(inv.batteryPowerW ?? 0) / Math.max(1, pvMax) * 100}
+        pct={Math.abs(inv.batteryPowerW ?? 0) / Math.max(1, invMax) * 100}
         color={inv.batteryPowerW != null && inv.batteryPowerW > 5 ? '#2ecc71'
           : inv.batteryPowerW != null && inv.batteryPowerW < -5 ? '#e74c3c' : '#808080'} />
 

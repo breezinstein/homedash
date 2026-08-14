@@ -283,6 +283,13 @@ export interface HostSnapshot {
   cpu: { percent: number | null; cores: number | null; load: { '1m': number|null; '5m': number|null; '15m': number|null } };
   memory: { total: number|null; used: number|null; percent: number|null };
   disk: { total: number|null; used: number|null; percent: number|null };
+  temperature: {
+    value: number | null;
+    label: string | null;
+    warning: number | null;
+    critical: number | null;
+    max: number | null;
+  } | null;
   network: { rxBps: number|null; txBps: number|null };
   uptime: { seconds: number|null; formatted: string|null };
   system?: { hostname?: string; platform?: string; distro?: string; glancesVersion?: string };
@@ -294,6 +301,7 @@ export interface SolarSnapshot {
   error?: string;
   pvPowerW: number | null;
   loadPowerW: number | null;
+  loadPercent: number | null;
   gridPowerW: number | null;
   batterySocPercent: number | null;
   batteryPowerW: number | null;
@@ -313,6 +321,8 @@ export interface InverterDetail {
   loadPercent: number | null;
   loadPowerW: number | null;
   loadApparentPowerVa: number | null;
+  maxAcOutputPowerW: number | null;
+  maxAcOutputApparentPowerVa: number | null;
   acOutputVoltage: number | null;
   acOutputFrequency: number | null;
   pvPowerW: number | null;

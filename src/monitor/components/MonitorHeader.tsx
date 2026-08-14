@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
+import { Settings } from 'lucide-react';
 import type { MonitorOverview } from '../../types';
 
 interface MonitorHeaderProps {
   overview: MonitorOverview | null;
   isLoading: boolean;
   connectionError: string | null;
+  onSettings?: () => void;
 }
 
 function statusLabel(s: string): string {
@@ -24,6 +26,7 @@ export function MonitorHeader({
   overview,
   isLoading,
   connectionError,
+  onSettings,
 }: MonitorHeaderProps) {
   const gs = overview?.globalStatus ?? 'ok';
 
@@ -43,6 +46,18 @@ export function MonitorHeader({
       </div>
 
       <div style={{ flex: 1 }} />
+
+      {/* Settings */}
+      {onSettings && (
+        <button
+          className="monitor-settings-btn"
+          onClick={onSettings}
+          aria-label="Monitor settings"
+          title="Monitor settings"
+        >
+          <Settings className="w-4 h-4" />
+        </button>
+      )}
 
       {/* Global status pill */}
       {!isLoading && <StatusPill status={gs} label={statusLabel(gs)} />}

@@ -29,6 +29,14 @@ export function HostCard({ host }: HostCardProps) {
     host.system?.distro ||
     host.system?.platform ||
     '';
+  const temp = host.temperature;
+  let tempLabel = '—';
+  let tempColor: string | undefined;
+  if (temp?.value != null) {
+    tempLabel = `${Math.round(temp.value)}°`;
+    tempColor = temp.critical != null && temp.value >= temp.critical ? '#e74c3c'
+      : temp.warning != null && temp.value >= temp.warning ? '#e67e22' : '#2ecc71';
+  }
 
   return (
     <div className={`node-card ${down ? 'opacity-60' : ''}`}>
@@ -41,8 +49,8 @@ export function HostCard({ host }: HostCardProps) {
         <SourceDot status={host.status} />
       </div>
 
-      {/* CPU — just percentage */}
-      <div className="metric-row" style={{ marginBottom: 4 }}>
+      {/* CPU — percentage + progress bar */}
+      <div className="metric-row">
         <div className="metric-header">
           <span>CPU</span>
           <span
@@ -51,6 +59,12 @@ export function HostCard({ host }: HostCardProps) {
           >
             {cpu.percent != null ? `${Math.round(cpu.percent)}%` : '—'}
           </span>
+        </div>
+        <div className="progress-bg">
+          <div
+            className={`progress-fill ${(cpu.percent ?? 0) >= 90 ? 'critical' : (cpu.percent ?? 0) >= 75 ? 'high' : ''}`}
+            style={{ width: `${Math.min(100, Math.max(0, cpu.percent ?? 0))}%` }}
+          />
         </div>
       </div>
 
@@ -99,6 +113,9 @@ export function HostCard({ host }: HostCardProps) {
         </span>
         <span>
           Up <b>{host.uptime?.formatted || '—'}</b>
+        </span>
+        <span title={temp?.label ? `${temp.label} · max ${temp.max != null ? `${Math.round(temp.max)}°` : '—'}` : undefined}>
+          Temp <b style={tempColor ? { color: tempColor } : undefined}>{tempLabel}</b>
         </span>
         <span>
           ↓ {formatByteRate(network.rxBps ?? null)} ↑ {formatByteRate(network.txBps ?? null)}

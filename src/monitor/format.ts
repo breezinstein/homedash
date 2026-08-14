@@ -81,6 +81,16 @@ export function formatAgo(timestampMs: number): string {
   return `${Math.round(diff / 86400)}d`;
 }
 
+/** Solar Assistant convention: positive battery power = charging. */
+export function batteryCharging(powerW: number | null): boolean {
+  return powerW != null && powerW > 5;
+}
+
+/** Dynamic label for the battery time readout: "Time to full" while charging, "Time to depleted" otherwise. */
+export function runtimeLabel(charging: boolean): string {
+  return charging ? 'Time to full' : 'Time to depleted';
+}
+
 /** Solar "battery runtime" label plus its warning colour. */
 export function formatRuntime(mins: number | null): { text: string; color: string } {
   if (mins == null || !Number.isFinite(mins)) return { text: '—', color: '#808080' };

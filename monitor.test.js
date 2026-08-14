@@ -9,6 +9,7 @@ import {
   fetchSeerr,
   estimateBatteryRuntime,
   resolveMetric,
+  pickHostTemp,
   fetchNtopng,
   fetchHomeAssistant,
   buildAutoAlertRules,
@@ -265,8 +266,8 @@ test('ensureAutoAlertRules adds sensible rules for configured services and dedup
   const ids = config.monitoring.alerts.map(a => a.id);
   assert.ok(!ids.includes('auto-host-cpu'), 'existing cpu rule should suppress the auto one');
   for (const expected of [
-    'auto-host-down', 'auto-host-memory', 'auto-host-disk',
-    'auto-docker-unhealthy', 'auto-docker-restarting', 'auto-solar-battery-low',
+    'auto-host-down', 'auto-host-memory', 'auto-host-disk', 'auto-host-temperature',
+    'auto-docker-unhealthy', 'auto-docker-restarting', 'auto-solar-battery-low', 'auto-solar-load-high',
     'auto-media-transcoding', 'auto-usenet-paused', 'auto-seerr-issues', 'auto-seerr-failed',
     'auto-ha-unavailable', 'auto-ha-battery-low', 'auto-ntopng-busy',
   ]) {
@@ -290,13 +291,49 @@ test('ensureAutoAlertRules honours suppression of deleted auto rules', () => {
   assert.ok(ids.includes('auto-seerr-failed'));
 });
 
+test('pickHostTemp prefers the main thermal sensor with thresholds', () => {
+  const sensors = [
+    { label: 'Tctl', unit: 'C', value: 49, warning: null, critical: null, type: 'temperature_core' },
+    { label: 'Composite', unit: 'C', value: 60, warning: 84, critical: 87, type: 'temperature_core' },
+    { label: 'edge', unit: 'C', value: 49, warning: null, critical: null, type: 'temperature_core' },
+    { label: 'acpitz 0', unit: 'C', value: 30, warning: null, critical: null, type: 'temperature_core' },
+  ];
+  const t = pickHostTemp(sensors);
+  assert.equal(t.value, 60);
+  assert.equal(t.label, 'Composite');
+  assert.equal(t.warning, 84);
+  assert.equal(t.critical, 87);
+  assert.equal(t.max, 60);
+});
+
+test('pickHostTemp handles v3 dict form and non-temperature sensors', () => {
+  const t = pickHostTemp({
+    coretemp: [{ label: 'Core 0', unit: '°C', value: 41 }],
+    hddtemp: [{ label: 'sda', unit: '°C', value: 33 }],
+  });
+  assert.equal(t.value, 41);
+  assert.equal(pickHostTemp([{ label: 'x', unit: 'V', value: 12 }]), null);
+  assert.equal(pickHostTemp([]), null);
+  assert.equal(pickHostTemp(null), null);
+});
+
+test('resolveMetric resolves host temperature', () => {
+  const hostObj = { host: { id: 'h1', name: 'a' }, temperature: { value: 61, label: 'Composite', warning: 84, critical: 87, max: 61 } };
+  const snap = { hosts: [hostObj] };
+  assert.equal(resolveMetric({ source: 'glances', metric: 'temperature' }, snap, hostObj), 61);
+  assert.equal(resolveMetric({ source: 'glances', metric: 'temperature', host: 'h1' }, snap), 61);
+  assert.equal(resolveMetric({ source: 'glances', metric: 'temperature' }, { hosts: [{ host: { id: 'h1', name: 'a' }, temperature: null }] }, { host: { id: 'h1', name: 'a' }, temperature: null }), null);
+});
+
 test('resolveMetric supports solar battery power and seerr sources', () => {
   const snapshot = {
-    solar: { status: 'ok', batteryPowerW: 120, batterySocPercent: 80 },
+    solar: { status: 'ok', batteryPowerW: 120, batterySocPercent: 80, loadPercent: 24 },
     seerr: { status: 'degraded', issues: [1, 2], pending: [], failed: [1] },
   };
   assert.equal(resolveMetric({ source: 'solar', metric: 'battery.power' }, snapshot), 120);
   assert.equal(resolveMetric({ source: 'solar', metric: 'battery.soc' }, snapshot), 80);
+  assert.equal(resolveMetric({ source: 'solar', metric: 'load.percent' }, snapshot), 24);
+  assert.equal(resolveMetric({ source: 'solar', metric: 'load.percent' }, { solar: { status: 'down' } }), null);
   assert.equal(resolveMetric({ source: 'seerr', metric: 'seerr.issues' }, snapshot), 2);
   assert.equal(resolveMetric({ source: 'seerr', metric: 'seerr.failed' }, snapshot), 1);
   assert.equal(resolveMetric({ source: 'seerr', metric: 'seerr.pending' }, snapshot), 0);
@@ -435,7 +472,11 @@ test('fetchHomeAssistant surfaces glanceable metrics and unavailable devices', a
     } else if (req.url.startsWith('/api/states')) {
       res.end(JSON.stringify([
         { entity_id: 'sensor.power', state: '123.4', attributes: { friendly_name: 'Power', device_class: 'power', unit_of_measurement: 'W' } },
-        { entity_id: 'sensor.temp', state: '21.5', attributes: { friendly_name: 'Temp', device_class: 'temperature', unit_of_measurement: '°C' } },
+        // Server / hardware temperature — excluded from the Home panel even
+        // though it appears before any room sensor in the state list.
+        { entity_id: 'sensor.aegis_cpu_temperature', state: '66', attributes: { friendly_name: 'Aegis CPU temperature', device_class: 'temperature', unit_of_measurement: '°C' } },
+        // Room / climate temperature — the Home panel temperature metric.
+        { entity_id: 'sensor.living_room_temperature', state: '21.5', attributes: { friendly_name: 'Living Room Temp', device_class: 'temperature', unit_of_measurement: '°C' } },
         { entity_id: 'light.living', state: 'on', attributes: { friendly_name: 'Living Light' } },
         { entity_id: 'sensor.mqtt_bad', state: 'unavailable', attributes: { friendly_name: 'Bad MQTT' } },
         // Open door → surfaces as a doors metric.
@@ -459,8 +500,8 @@ test('fetchHomeAssistant surfaces glanceable metrics and unavailable devices', a
     assert.equal(out.status, 'ok');
     assert.equal(out.version, '2024.1.0');
     assert.equal(out.locationName, 'Home');
-    // 9 entities minus the excluded Glances one.
-    assert.equal(out.entityCount, 8);
+    // 10 entities minus the excluded Glances one (hardware temps still count).
+    assert.equal(out.entityCount, 9);
     assert.equal(out.onCount, 3); // light + open door + switch pump
     assert.equal(out.unavailable.count, 1); // Glances exclusion also applies here
     assert.equal(out.unavailable.devices[0].name, 'Bad MQTT');

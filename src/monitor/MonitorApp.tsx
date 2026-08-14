@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { LoginModal } from '../components/LoginModal';
 import { useMonitorOverview } from './useMonitorOverview';
 import { useTabRotation } from './useTabRotation';
@@ -14,6 +14,7 @@ import {
   ArrCard,
   OpnsenseCard,
 } from './components';
+import { MonitorSettingsPanel } from './components/MonitorSettingsPanel';
 import { HomeStatusCard } from './components/HomeStatusCard';
 import { HomePanel } from './components/HomePanel';
 import { NetworkPanel } from './components/NetworkPanel';
@@ -26,6 +27,7 @@ const MAX_VISIBLE_HOSTS = 9;
 
 export function MonitorApp() {
   const { overview, isLoading, error, authRequired } = useMonitorOverview();
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const tabRotationSeconds = overview?.tabRotationSeconds ?? 15;
   const { activeTab, switchTab, remainingSeconds, isPaused } = useTabRotation({
@@ -68,6 +70,7 @@ export function MonitorApp() {
         overview={overview}
         isLoading={isLoading}
         connectionError={error}
+        onSettings={() => setSettingsOpen(true)}
       />
       <AlertBanner alerts={bannerAlerts} />
 
@@ -209,6 +212,9 @@ export function MonitorApp() {
         remainingSeconds={remainingSeconds}
         paused={isPaused}
       />
+
+      {/* Full-screen monitor settings (admin) */}
+      {settingsOpen && <MonitorSettingsPanel onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

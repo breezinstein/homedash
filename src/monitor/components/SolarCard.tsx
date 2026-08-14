@@ -2,7 +2,7 @@ import type { SolarSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
 import { RingGauge } from './RingGauge';
 import { SummaryRow } from './SummaryRow';
-import { formatRuntime } from '../format';
+import { batteryCharging, formatRuntime, runtimeLabel } from '../format';
 
 interface PowerCardProps {
   solar: SolarSnapshot;
@@ -24,7 +24,7 @@ export function SolarCard({ solar }: PowerCardProps) {
   const socColor = soc == null ? '#2ecc71' : soc <= 15 ? '#e74c3c' : soc <= 30 ? '#e67e22' : '#2ecc71';
 
   const batt = solar.batteryPowerW;
-  const battCharging = batt != null && batt > 5;
+  const battCharging = batteryCharging(batt);
   const battDischarging = batt != null && batt < -5;
   const battSign = battCharging ? '+' : battDischarging ? '-' : '';
   const battVal = batt != null ? formatPower(Math.abs(batt)) : '—';
@@ -79,7 +79,7 @@ export function SolarCard({ solar }: PowerCardProps) {
             accent={gridExport ? '#2ecc71' : gridImport ? '#e67e22' : undefined}
           />
           <SummaryRow icon="🏠" label="House load" value={formatPower(solar.loadPowerW)} />
-          <SummaryRow icon="⏱" label="Battery runtime" value={runtime.text} accent={runtime.color} />
+          <SummaryRow icon="⏱" label={runtimeLabel(battCharging)} value={runtime.text} accent={runtime.color} />
         </div>
       </div>
     </section>

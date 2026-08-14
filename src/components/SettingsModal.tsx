@@ -23,7 +23,6 @@ import {
 import { CategoryModal } from './CategoryModal';
 import { BackupManager } from './BackupManager';
 import { NotificationsSettings } from './notifications/NotificationsSettings';
-import { MonitoringSettings } from './MonitoringSettings';
 import { themePresets } from '../themes';
 import type { ThemePreset } from '../themes';
 import type { Colors } from '../types';
@@ -36,7 +35,7 @@ interface SettingsModalProps {
 export function SettingsModal({ onClose }: SettingsModalProps) {
   const { config, setConfig, reorderCategories, addCategory, updateCategory, deleteCategory } = useDashboard();
   const confirm = useConfirm();
-  const [activeTab, setActiveTab] = useState<'categories' | 'appearance' | 'backups' | 'notifications' | 'monitoring'>('categories');
+  const [activeTab, setActiveTab] = useState<'categories' | 'appearance' | 'notifications' | 'backups'>('categories');
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showBackupManager, setShowBackupManager] = useState(false);
@@ -138,7 +137,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     { id: 'categories' as const, label: 'Categories', icon: Layout },
     { id: 'appearance' as const, label: 'Appearance', icon: Palette },
     { id: 'notifications' as const, label: 'Notifications', icon: Bell },
-    { id: 'monitoring' as const, label: 'Monitoring', icon: Gauge },
     { id: 'backups' as const, label: 'Backups', icon: Database },
   ];
 
@@ -192,6 +190,15 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 sm:p-4">
+            {/* Monitoring pointer — settings now live on the /monitor page */}
+            <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
+              <Gauge className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
+              <p className="text-xs text-[var(--color-text-secondary)]">
+                Monitor settings (hosts, solar, docker, media, alerts…) now live on the{' '}
+                <a href="/monitor" className="text-[var(--color-primary)] hover:underline">monitor page</a>.
+              </p>
+            </div>
+
             {/* Categories Tab */}
             {activeTab === 'categories' && (
               <div className="space-y-4">
@@ -539,9 +546,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
             {/* Notifications Tab */}
             {activeTab === 'notifications' && <NotificationsSettings />}
-
-            {/* Monitoring Tab */}
-            {activeTab === 'monitoring' && <MonitoringSettings />}
 
             {/* Backups Tab */}
             {activeTab === 'backups' && (

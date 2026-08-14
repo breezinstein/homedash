@@ -30,6 +30,7 @@ const METRICS: Record<SourceKey, { value: string; label: string }[]> = {
     { value: 'cpu.percent', label: 'CPU %' },
     { value: 'memory.percent', label: 'Memory %' },
     { value: 'disk.percent', label: 'Disk %' },
+    { value: 'temperature', label: 'Temperature °C' },
     { value: 'cpu.load.1m', label: 'Load average (1m)' },
     { value: 'network.rxBps', label: 'Network ↓ (B/s)' },
     { value: 'network.txBps', label: 'Network ↑ (B/s)' },
@@ -39,6 +40,7 @@ const METRICS: Record<SourceKey, { value: string; label: string }[]> = {
     { value: 'battery.power', label: 'Battery power (W)' },
     { value: 'pv.power', label: 'PV power (W)' },
     { value: 'grid.power', label: 'Grid power (W)' },
+    { value: 'load.percent', label: 'Load % of capacity' },
   ],
   docker: [
     { value: 'docker.unhealthy', label: 'Unhealthy containers' },

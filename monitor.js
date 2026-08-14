@@ -237,6 +237,40 @@ function formatTime(seconds) {
 // Source fetchers
 // ---------------------------------------------------------------------------
 
+// Distil a representative host temperature from a Glances `sensors` payload.
+// v4 returns an array of { label, unit, value, warning, critical, type }; v3
+// returns a dict of named sensor arrays. Prefer the "main" thermal sensor
+// (one that reports a warning/critical threshold — e.g. Package/Composite/CPU/
+// Tctl), falling back to the highest reading.
+export function pickHostTemp(sensors) {
+  const isTemp = s => s && Number.isFinite(Number(s.value)) && (
+    /^°?[CF]$/i.test(String(s.unit)) || String(s.type || '').toLowerCase().startsWith('temperature'));
+  const temps = [];
+  if (Array.isArray(sensors)) {
+    for (const s of sensors) if (isTemp(s)) temps.push(s);
+  } else if (sensors && typeof sensors === 'object') {
+    for (const group of Object.values(sensors)) {
+      if (Array.isArray(group)) for (const s of group) if (isTemp(s)) temps.push(s);
+    }
+  }
+  if (temps.length === 0) return null;
+  const withThreshold = temps.filter(s =>
+    (s.warning != null && Number(s.warning) > 0 && Number.isFinite(Number(s.warning))) ||
+    (s.critical != null && Number(s.critical) > 0 && Number.isFinite(Number(s.critical))));
+  const isMain = s => /package|composite|cpu|tctl|soc|\bpkg\b/i.test(String(s.label || ''));
+  const pool = withThreshold.length ? withThreshold : temps;
+  const chosen = pool.find(isMain) || pool.reduce((mx, s) => (Number(s.value) > Number(mx.value) ? s : mx), pool[0]);
+  const warn = chosen.warning != null && chosen.warning > 0 ? round1(Number(chosen.warning)) : null;
+  const crit = chosen.critical != null && chosen.critical > 0 ? round1(Number(chosen.critical)) : null;
+  return {
+    value: round1(Number(chosen.value)),
+    label: String(chosen.label || ''),
+    warning: warn,
+    critical: crit,
+    max: round1(Math.max(...temps.map(s => Number(s.value)))),
+  };
+}
+
 async function fetchGlancesHost(host) {
   // Prefer the last-known-working API major so hosts that only run Glances v3
   // don't eat a guaranteed 404 probe on every poll; the other major stays as a
@@ -299,14 +333,17 @@ async function fetchGlancesHost(host) {
     const cpuPct = round1(cpu.total);
     const memPct = round1(mem.percent);
     const diskPct = round1(fs.percent);
+    const temp = pickHostTemp(all.sensors);
     let hostStatus = 'ok';
     if (cpuPct !== null && cpuPct >= 95) hostStatus = 'degraded';
     if (memPct !== null && memPct >= 95) hostStatus = 'degraded';
     if (diskPct !== null && diskPct >= 95) hostStatus = 'degraded';
+    if (temp && temp.critical != null && temp.critical > 0 && temp.value >= temp.critical) hostStatus = 'degraded';
 
     return {
       host: { id: host.id, name: host.name },
       status: hostStatus,
+      temperature: temp,
       cpu: {
         percent: cpuPct,
         cores: cpu.cpucore ?? core.log ?? null,
@@ -398,6 +435,8 @@ async function fetchSolar(config) {
         loadPercent: pick(g, 'load_percent'),
         loadPowerW: pick(g, 'load_power'),
         loadApparentPowerVa: pick(g, 'load_apparent_power'),
+        maxAcOutputPowerW: pick(g, 'max_ac_output_power'),
+        maxAcOutputApparentPowerVa: pick(g, 'max_ac_output_apparent_power'),
         acOutputVoltage: pick(g, 'ac_output_voltage'),
         acOutputFrequency: pick(g, 'ac_output_frequency'),
         pvPowerW: pick(g, 'pv_power'),
@@ -443,6 +482,7 @@ async function fetchSolar(config) {
         status: 'ok',
         pvPowerW,
         loadPowerW,
+        loadPercent: pick(totals, 'load_percentage'),
         gridPowerW: pick(totals, 'grid_power'),
         batterySocPercent,
         batteryPowerW,
@@ -1305,6 +1345,17 @@ function buildHomeAssistantSnapshot(config, states) {
   const isInverterStat = e => /inverter|solar|photovoltaic|\bpv\b|\bgrid\b/i.test(
     `${e.entity_id} ${friendlyName(e)}`);
 
+  // Hardware / PC temperature entities (CPU, GPU, SSD, disk, etc.) are server
+  // stats — the Server tab covers them and they aren't a room/house
+  // temperature, so they must not feed the Home panel's temperature metric.
+  // Inverter/solar temperatures are covered by the Power tab instead.
+  const isHardwareTemp = e => /processor|cpu|core\b|die\b|package|socket|soc\b|gpu|vrm|nvme|ssd|disk|hdd|tctl|acpitz|composite|edge\b|chipset|pch\b|fan\b|mosfet|inductor|capacitor|battery|thermal|sensor\s*\d/i.test(
+    `${e.entity_id} ${friendlyName(e)}`);
+  // A genuine room/ambient sensor — preferred over generic sensors when
+  // several non-hardware temperatures are available.
+  const isRoomTemp = e => /climate|room|ambient|indoor|house|office|bedroom|parlour|living|sitting|bathroom|kitchen|hall|lounge|study|zone/i.test(
+    `${e.entity_id} ${friendlyName(e)}`);
+
   // Single pass over the order-preserving state list, classifying each entity
   // into buckets so we never re-scan the array once per metric.
   const unavailableEntities = [];
@@ -1317,6 +1368,7 @@ function buildHomeAssistantSnapshot(config, states) {
   let batteryLowest = null; // entity with the smallest numeric state
   let climateTemp = null;
   let tempSensor = null;
+  let roomTemp = null;
   let humidity = null;
   let pumpTimer = null;
   let pumpSwitch = null;
@@ -1346,7 +1398,10 @@ function buildHomeAssistantSnapshot(config, states) {
       if (!batteryLowest || num < (numState(batteryLowest) ?? 100)) batteryLowest = e;
     }
     if (cls === 'humidity' && num != null && !humidity) humidity = e;
-    if (cls === 'temperature' && num != null && !tempSensor) tempSensor = e;
+    if (cls === 'temperature' && num != null && !isHardwareTemp(e) && !isInverterStat(e)) {
+      if (!tempSensor) tempSensor = e;
+      if (isRoomTemp(e) && !roomTemp) roomTemp = e;
+    }
     if (e.entity_id.startsWith('climate.') && e.attributes?.current_temperature != null && !climateTemp) climateTemp = e;
     if (/^timer\./.test(e.entity_id) && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`) && !pumpTimer) pumpTimer = e;
     else if (e.entity_id.startsWith('switch.') && /pump/i.test(`${e.entity_id} ${friendlyName(e)}`) && !pumpSwitch) pumpSwitch = e;
@@ -1365,8 +1420,10 @@ function buildHomeAssistantSnapshot(config, states) {
     addMetric('power', friendlyName(top), numState(top), unitOf(top) || 'W');
   }
 
-  // Temperature — prefer a climate's current temperature, else a temp sensor.
-  const tempEntity = climateTemp || tempSensor;
+  // Temperature — prefer a climate's current temperature, then a room/ambient
+  // sensor, then any non-hardware sensor. Hardware/PC and inverter temps are
+  // skipped above because they duplicate the Server / Power tabs.
+  const tempEntity = climateTemp || roomTemp || tempSensor;
   if (tempEntity) {
     const temp = tempEntity.entity_id.startsWith('climate.')
       ? Number(tempEntity.attributes.current_temperature)
@@ -1633,11 +1690,13 @@ export function resolveMetric(rule, snapshot, targetHost = null) {
   if (source === 'solar' && metric === 'battery.power') return snapshot.solar?.status === 'ok' ? snapshot.solar.batteryPowerW : null;
   if (source === 'solar' && metric === 'pv.power') return snapshot.solar?.status === 'ok' ? snapshot.solar.pvPowerW : null;
   if (source === 'solar' && metric === 'grid.power') return snapshot.solar?.status === 'ok' ? snapshot.solar.gridPowerW : null;
+  if (source === 'solar' && metric === 'load.percent') return snapshot.solar?.status === 'ok' ? snapshot.solar.loadPercent : null;
 
   // Generic numeric metric resolution against hosts
   if (source === 'glances') {
     const h = targetHost || (host ? snapshot.hosts.find(x => x.host.id === host) : null);
     if (!h) return null;
+    if (metric === 'temperature') return h.temperature?.value ?? null;
     const parts = metric.split('.');
     let obj = h;
     for (const p of parts) { obj = obj?.[p]; if (obj === undefined || obj === null) return null; }
@@ -1740,6 +1799,7 @@ export function buildAutoAlertRules(mon) {
     add('auto-host-cpu', 'High CPU', 'glances', 'cpu.percent', '>=', 90, 'warning', 300);
     add('auto-host-memory', 'High memory', 'glances', 'memory.percent', '>=', 95, 'warning', 300);
     add('auto-host-disk', 'High disk usage', 'glances', 'disk.percent', '>=', 90, 'warning', 300);
+    add('auto-host-temperature', 'High temperature', 'glances', 'temperature', '>=', 80, 'warning', 300);
   }
   if (mon?.docker?.enabled !== false) {
     add('auto-docker-unhealthy', 'Unhealthy Docker container', 'docker', 'docker.unhealthy', '>=', 1, 'warning', 60);
@@ -1747,6 +1807,7 @@ export function buildAutoAlertRules(mon) {
   }
   if (mon?.solar?.enabled) {
     add('auto-solar-battery-low', 'Low battery', 'solar', 'battery.soc', '<=', 15, 'critical', 60, true);
+    add('auto-solar-load-high', 'High load', 'solar', 'load.percent', '>=', 75, 'warning', 300);
   }
   if (has(mon?.media)) {
     add('auto-media-transcoding', 'High transcode count', 'media', 'streams.transcoding', '>=', 4, 'warning', 60);
