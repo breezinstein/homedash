@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HomeLab Monitor — UI Mockup</title>
+<style>
+  :root {
+    --primary: #6366f1;
+    --background: #0a0a0a;
+    --surface: #1a1a1a;
+    --surface-2: #141414;
+    --text: #ffffff;
+    --text-2: #a1a1aa;
+    --border: #27272a;
+    --success: #22c55e;
+    --warning: #eab308;
+    --error: #f87171;
+    --critical: #ef4444;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--background);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-size: 14px;
+    overflow: hidden;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* ---------- header ---------- */
+  header {
+    height: 60px;
+    display: flex; align-items: center; gap: 16px;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .logo {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--primary), #8b5cf6);
+    display: grid; place-items: center; font-size: 17px;
+  }
+  .title h1 { font-size: 16px; font-weight: 700; letter-spacing: .2px; }
+  .title p { font-size: 11px; color: var(--text-2); margin-top: 1px; }
+  .spacer { flex: 1; }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 16px; border-radius: 999px;
+    font-weight: 700; font-size: 12.5px; letter-spacing: .6px; text-transform: uppercase;
+    border: 1px solid transparent;
+  }
+  .status-pill.ok       { color: var(--success); background: rgba(34,197,94,.10); border-color: rgba(34,197,94,.35); }
+  .status-pill.degraded { color: var(--warning); background: rgba(234,179,8,.10); border-color: rgba(234,179,8,.4); }
+  .status-pill.critical { color: #fff; background: rgba(239,68,68,.22); border-color: rgba(239,68,68,.6); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(239,68,68,.5);} 50% { box-shadow: 0 0 0 7px rgba(239,68,68,0);} }
+
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: currentColor; box-shadow: 0 0 8px currentColor; }
+
+  .bell { position: relative; width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--border);
+          display: grid; place-items: center; color: var(--text-2); background: var(--surface); font-size: 16px; }
+  .bell .badge {
+    position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; padding: 0 5px;
+    border-radius: 999px; background: var(--critical); color: #fff;
+    font-size: 10.5px; font-weight: 700; display: grid; place-items: center;
+  }
+  .bell .badge.zero { background: var(--border); color: var(--text-2); }
+  .clock { text-align: right; line-height: 1.25; }
+  .clock .time { font-size: 17px; font-weight: 700; }
+  .clock .updated { font-size: 10.5px; color: var(--text-2); }
+
+  /* ---------- alert banner ---------- */
+  #banner {
+    display: none;
+    padding: 9px 20px; gap: 18px; align-items: center;
+    background: linear-gradient(90deg, rgba(239,68,68,.16), rgba(234,179,8,.10));
+    border-bottom: 1px solid rgba(239,68,68,.4);
+    font-size: 13px; overflow: hidden; white-space: nowrap;
+  }
+  #banner.show { display: flex; }
+  #banner .crit { color: var(--critical); font-weight: 700; }
+  #banner .warn { color: var(--warning); font-weight: 700; }
+  #banner .sep { color: var(--text-2); }
+
+  /* ---------- tab strip ---------- */
+  #tabs {
+    height: 46px; display: flex; align-items: center; gap: 8px;
+    padding: 0 20px; background: var(--surface-2);
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid transparent; background: transparent; color: var(--text-2);
+    font-size: 13px; font-weight: 650; border-radius: 9px; padding: 6px 14px; cursor: pointer;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--surface); border-color: var(--border); color: var(--text); }
+  .tab-badge {
+    font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+    background: rgba(99,102,241,.16); color: var(--primary);
+  }
+  .rotate-info {
+    margin-left: auto; display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; color: var(--text-2);
+  }
+  .ring {
+    --p: 0;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: conic-gradient(var(--primary) calc(var(--p) * 1%), var(--surface) 0);
+    border: 1px solid var(--border);
+  }
+
+  /* ---------- main grid ---------- */
+  main {
+    height: calc(100dvh - 60px - 46px);
+    display: grid; gap: 14px; padding: 14px 20px 18px;
+    grid-template-columns: 1.25fr 1fr 0.95fr;
+    grid-template-rows: 1fr 1fr 1fr;
+  }
+  main.with-banner { height: calc(100dvh - 60px - 46px - 38px); }
+  main[hidden] { display: none; }
+  main#tab-media { grid-template-columns: 1.55fr 1fr; grid-template-rows: 1.35fr 1fr; }
+
+  /* streams card */
+  #streams-card { grid-row: 1 / span 2; }
+  #streamsList { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .stream {
+    display: flex; align-items: center; gap: 13px;
+    border: 1px solid var(--border); border-radius: 12px; padding: 11px 13px;
+    background: var(--surface-2);
+  }
+  .thumb {
+    width: 46px; height: 62px; border-radius: 8px; flex: none;
+    background: linear-gradient(160deg, #312e81, #1e1b4b);
+    display: grid; place-items: center; font-size: 20px;
+    border: 1px solid var(--border);
+  }
+  .s-main { flex: 1; min-width: 0; }
+  .s-title { font-size: 13.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .s-ep { color: var(--text-2); font-weight: 500; }
+  .s-meta { font-size: 11.5px; color: var(--text-2); margin-top: 2px; }
+  .s-prog { display: flex; align-items: center; gap: 10px; margin-top: 7px; }
+  .s-prog .bar { flex: 1; }
+  .s-prog .num { font-size: 11px; color: var(--text-2); flex: none; }
+  .play-badge {
+    flex: none; font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 6px;
+  }
+  .play-badge.direct    { background: rgba(34,197,94,.14); color: var(--success); }
+  .play-badge.transcode { background: rgba(234,179,8,.14); color: var(--warning); }
+  .streams-empty { color: var(--text-2); font-size: 12.5px; padding: 10px 2px; }
+
+  /* usenet cards */
+  .dl-hero { display: flex; align-items: baseline; gap: 14px; margin-bottom: 10px; }
+  .dl-hero .speed { font-size: 24px; font-weight: 750; }
+  .dl-hero .eta { font-size: 11.5px; color: var(--text-2); }
+  .state-chip {
+    font-size: 10px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase;
+    padding: 3px 8px; border-radius: 6px; margin-left: 8px;
+  }
+  .state-chip.downloading { background: rgba(34,197,94,.14); color: var(--success); }
+  .state-chip.paused      { background: rgba(234,179,8,.14); color: var(--warning); }
+  .state-chip.idle        { background: var(--surface-2); color: var(--text-2); }
+  .slot { margin-bottom: 9px; }
+  .slot .row { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; margin-bottom: 4px; }
+  .slot .name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 550; }
+  .slot .pct { color: var(--text-2); flex: none; }
+  .slot .detail { font-size: 10.5px; color: var(--text-2); margin-top: 3px; }
+  .more { font-size: 11px; color: var(--text-2); padding-top: 6px; border-top: 1px solid var(--border); }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 16px;
+    display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+  }
+  .card.down { opacity: .75; border-color: rgba(239,68,68,.5); }
+  .card-head { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; }
+  .card-head h2 { font-size: 14.5px; font-weight: 650; }
+  .card-head .sub { font-size: 11px; color: var(--text-2); }
+  .src { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; }
+  .src.ok       { color: var(--success); }
+  .src.degraded { color: var(--warning); }
+  .src.down     { color: var(--critical); }
+
+  /* host cards */
+  #hosts { display: contents; }
+  .host { grid-column: 1; }
+  .metric { margin-bottom: 9px; }
+  .metric .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 4px; }
+  .metric .row .lbl { color: var(--text-2); display: flex; gap: 6px; align-items: center; }
+  .bar { height: 7px; border-radius: 999px; background: var(--surface-2); overflow: hidden; }
+  .bar > div { height: 100%; border-radius: 999px; transition: width .5s ease; }
+  .host-foot {
+    margin-top: auto; padding-top: 9px; border-top: 1px solid var(--border);
+    display: flex; gap: 16px; font-size: 11.5px; color: var(--text-2);
+  }
+  .host-foot b { color: var(--text); font-weight: 600; }
+  .host-err { color: var(--critical); font-size: 12px; margin-top: 6px; display: none; }
+
+  /* middle column */
+  #middle { grid-column: 2; grid-row: 1 / span 3; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+  #solar-card { flex: 1.15; }
+  #docker-card { flex: 1; }
+
+  .solar-hero { display: flex; align-items: center; gap: 18px; margin-bottom: 12px; }
+  .soc-ring {
+    --pct: 78; --ring: var(--success);
+    width: 86px; height: 86px; border-radius: 50%; flex: none;
+    background: conic-gradient(var(--ring) calc(var(--pct) * 1%), var(--surface-2) 0);
+    display: grid; place-items: center;
+  }
+  .soc-ring::before { content: ""; position: absolute; width: 64px; height: 64px; border-radius: 50%; background: var(--surface); }
+  .soc-ring span { position: relative; font-weight: 700; font-size: 16px; }
+  .pv-big .val { font-size: 30px; font-weight: 750; }
+  .pv-big .lbl { font-size: 11.5px; color: var(--text-2); margin-top: 2px; }
+  .kv { display: flex; justify-content: space-between; padding: 7px 0; border-top: 1px solid var(--border); font-size: 12.5px; }
+  .kv .k { color: var(--text-2); display: flex; align-items: center; gap: 7px; }
+  .kv .v { font-weight: 650; }
+  .up { color: var(--success); } .down2 { color: var(--primary); } .bad { color: var(--critical); } .warn-t { color: var(--warning); }
+
+  /* docker card */
+  .docker-hero { display: flex; align-items: center; gap: 16px; margin-bottom: 10px; }
+  .donut {
+    --run: 100; --unh: 0; --rst: 0;
+    width: 78px; height: 78px; border-radius: 50%; flex: none; position: relative;
+    background: conic-gradient(
+      var(--success) 0 calc(var(--run) * 1%),
+      var(--critical) 0 calc((var(--run) + var(--unh)) * 1%),
+      var(--warning) 0 calc((var(--run) + var(--unh) + var(--rst)) * 1%),
+      var(--surface-2) 0);
+    display: grid; place-items: center;
+  }
+  .donut::before { content: ""; position: absolute; width: 56px; height: 56px; border-radius: 50%; background: var(--surface); }
+  .donut span { position: relative; font-weight: 750; font-size: 15px; }
+  .counts { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px; font-size: 12px; }
+  .counts div { display: flex; align-items: center; gap: 7px; color: var(--text-2); }
+  .counts b { color: var(--text); }
+  .swatch { width: 9px; height: 9px; border-radius: 3px; }
+  .problems { border-top: 1px solid var(--border); padding-top: 8px; font-size: 12px; overflow: auto; }
+  .problems .empty { color: var(--text-2); display: flex; gap: 7px; align-items: center; }
+  .prob { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .prob .name { font-weight: 600; }
+  .prob .state { margin-left: auto; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+
+  /* alerts rail */
+  #alerts-card { grid-column: 3; grid-row: 1 / span 3; }
+  #alerts-card .list { overflow-y: auto; margin: -4px; padding: 4px; }
+  .alert {
+    border: 1px solid var(--border); border-left-width: 3px; border-radius: 10px;
+    padding: 9px 11px; margin-bottom: 8px; background: var(--surface-2);
+  }
+  .alert.critical { border-left-color: var(--critical); }
+  .alert.warning  { border-left-color: var(--warning); }
+  .alert.resolved { border-left-color: var(--success); opacity: .62; }
+  .alert .top { display: flex; align-items: center; gap: 7px; }
+  .sev { font-size: 9.5px; font-weight: 800; letter-spacing: .6px; padding: 2px 6px; border-radius: 5px; text-transform: uppercase; }
+  .sev.critical { background: rgba(239,68,68,.18); color: var(--critical); }
+  .sev.warning  { background: rgba(234,179,8,.15); color: var(--warning); }
+  .sev.resolved { background: rgba(34,197,94,.14); color: var(--success); }
+  .alert .ago { margin-left: auto; font-size: 10.5px; color: var(--text-2); }
+  .alert .msg { font-size: 12px; margin-top: 5px; line-height: 1.45; }
+  .alert .ack {
+    margin-top: 7px; font-size: 11px; font-weight: 650; color: var(--text-2);
+    border: 1px solid var(--border); background: transparent; border-radius: 7px;
+    padding: 3px 10px; cursor: pointer;
+  }
+  .alert .ack:hover { color: var(--text); border-color: var(--text-2); }
+  .rail-sep { font-size: 10.5px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+              color: var(--text-2); margin: 12px 2px 8px; display: flex; align-items: center; gap: 8px; }
+  .rail-sep::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+  /* mockup state toggle */
+  #mock-toggle {
+    position: fixed; bottom: 14px; right: 16px; z-index: 50;
+    display: flex; gap: 6px; align-items: center;
+    background: rgba(20,20,20,.92); border: 1px dashed var(--text-2); border-radius: 999px; padding: 6px 8px 6px 12px;
+    font-size: 11px; color: var(--text-2); backdrop-filter: blur(4px);
+  }
+  #mock-toggle button {
+    border: 1px solid var(--border); background: var(--surface); color: var(--text-2);
+    font-size: 11px; font-weight: 650; border-radius: 999px; padding: 4px 12px; cursor: pointer;
+  }
+  #mock-toggle button.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">▣</div>
+  <div class="title">
+    <h1>HomeLab Monitor</h1>
+    <p>3 hosts · solar · docker — live overview</p>
+  </div>
+  <div class="spacer"></div>
+  <div id="globalStatus" class="status-pill ok"><span class="dot"></span><span id="globalStatusText">All systems normal</span></div>
+  <div class="bell">🔔<span id="bellBadge" class="badge zero">0</span></div>
+  <div class="clock">
+    <div class="time num" id="clock">14:32:08</div>
+    <div class="updated">updated <span id="updatedAgo">3s</span> ago · poll 5s</div>
+  </div>
+</header>
+
+<div id="banner">
+  <span class="crit" id="bannerCrit"></span>
+  <span class="sep">·</span>
+  <span class="warn" id="bannerWarn"></span>
+</div>
+
+<nav id="tabs">
+  <button class="tab active" id="tabBtnInfra" onclick="switchTab('infra', true)">⬡ Infrastructure</button>
+  <button class="tab" id="tabBtnMedia" onclick="switchTab('media', true)">🎬 Media &amp; Downloads <span class="tab-badge num" id="mediaBadge">3 · 2</span></button>
+  <span class="rotate-info"><span class="ring" id="rotateRing"></span><span id="rotateLabel">auto-rotate in 12s</span></span>
+</nav>
+
+<main id="main">
+  <!-- host cards -->
+  <section class="card host" id="host-pve-01" style="grid-row:1"></section>
+  <section class="card host" id="host-pve-02" style="grid-row:2"></section>
+  <section class="card host" id="host-nas-01" style="grid-row:3"></section>
+
+  <!-- middle column -->
+  <div id="middle">
+    <section class="card" id="solar-card">
+      <div class="card-head">
+        <h2>☀️ Solar</h2><span class="sub">Solar Assistant</span>
+        <span class="src ok" id="solarSrc"><span class="dot"></span>ok</span>
+      </div>
+      <div class="solar-hero">
+        <div class="soc-ring" id="socRing"><span class="num" id="socVal">78%</span></div>
+        <div class="pv-big">
+          <div class="val num" id="pvVal">3.42 kW</div>
+          <div class="lbl" id="pvLbl">PV generation</div>
+        </div>
+      </div>
+      <div class="kv"><span class="k">🔋 Battery</span><span class="v num" id="battLine">+1.21 kW charging</span></div>
+      <div class="kv"><span class="k">🔌 Grid</span><span class="v num" id="gridLine">−0.31 kW exporting</span></div>
+      <div class="kv"><span class="k">🏠 House load</span><span class="v num" id="loadLine">1.10 kW</span></div>
+      <div class="kv"><span class="k">⏱ Battery runtime</span><span class="v num" id="rtLine">6h 40m</span></div>
+    </section>
+
+    <section class="card" id="docker-card">
+      <div class="card-head">
+        <h2>🐳 Docker</h2><span class="sub">2 engines</span>
+        <span class="src ok" id="dockerSrc"><span class="dot"></span>ok</span>
+      </div>
+      <div class="docker-hero">
+        <div class="donut" id="donut"><span class="num" id="donutCenter">25/25</span></div>
+        <div class="counts">
+          <div><span class="swatch" style="background:var(--success)"></span>Running <b class="num" id="cRun">25</b></div>
+          <div><span class="swatch" style="background:var(--primary)"></span>Healthy <b class="num" id="cHealth">24</b></div>
+          <div><span class="swatch" style="background:var(--critical)"></span>Unhealthy <b class="num" id="cUnh">0</b></div>
+          <div><span class="swatch" style="background:var(--warning)"></span>Restarting <b class="num" id="cRst">0</b></div>
+        </div>
+      </div>
+      <div class="problems" id="problems"></div>
+    </section>
+  </div>
+
+  <!-- alerts rail -->
+  <section class="card" id="alerts-card">
+    <div class="card-head">
+      <h2>Alerts</h2><span class="sub" id="alertsSub">none firing</span>
+      <span class="src ok" id="alertsSrc"><span class="dot"></span>engine ok</span>
+    </div>
+    <div class="list" id="alertsList"></div>
+  </section>
+</main>
+
+<main id="tab-media" hidden>
+  <!-- active streams -->
+  <section class="card" id="streams-card">
+    <div class="card-head">
+      <h2>🎬 Active Streams</h2><span class="sub" id="streamsSub">3 playing · 1 transcoding</span>
+      <span class="src ok" id="mediaSrc"><span class="dot"></span>ok</span>
+    </div>
+    <div id="streamsList"></div>
+  </section>
+
+  <!-- SABnzbd -->
+  <section class="card" id="sab-card">
+    <div class="card-head">
+      <h2>📦 SABnzbd</h2><span class="state-chip downloading" id="sabState">Downloading</span>
+      <span class="src ok" id="sabSrc"><span class="dot"></span>ok</span>
+    </div>
+    <div class="dl-hero">
+      <span class="speed num" id="sabSpeed">38.4 MB/s</span>
+      <span class="eta num" id="sabEta">12:31 left · 1.8 TB free</span>
+    </div>
+    <div id="sabSlots"></div>
+  </section>
+
+  <!-- NZBGet -->
+  <section class="card" id="nzb-card">
+    <div class="card-head">
+      <h2>⬇ NZBGet</h2><span class="state-chip idle" id="nzbState">Idle</span>
+      <span class="src ok" id="nzbSrc"><span class="dot"></span>ok</span>
+    </div>
+    <div id="nzbBody"></div>
+  </section>
+</main>
+
+<div id="mock-toggle">
+  MOCKUP STATE
+  <button id="btnNormal" class="active" onclick="applyState('normal')">Normal</button>
+  <button id="btnAlert" onclick="applyState('alerting')">Alerting</button>
+</div>
+
+<script>
+/* ---------------- mock data ---------------- */
+const HOSTS = {
+  normal: [
+    { id: 'host-pve-01', name: 'pve-01', sub: 'Proxmox · Glances 4.1', status: 'ok',
+      cpu: 42, mem: 68, disk: 71, diskDetail: '4.2 / 6 TB',
+      load: '1.9 · 2.1 · 2.0', up: '12d 4h', net: '↓ 84 MB/s  ↑ 12 MB/s', err: null },
+    { id: 'host-pve-02', name: 'pve-02', sub: 'Proxmox · Glances 4.1', status: 'ok',
+      cpu: 23, mem: 41, disk: 55, diskDetail: '1.1 / 2 TB',
+      load: '0.8 · 0.7 · 0.7', up: '31d 9h', net: '↓ 12 MB/s  ↑ 3 MB/s', err: null },
+    { id: 'host-nas-01', name: 'nas-01', sub: 'TrueNAS · Glances 3.4', status: 'ok',
+      cpu: 8, mem: 33, disk: 82, diskDetail: '13.1 / 16 TB',
+      load: '0.3 · 0.4 · 0.4', up: '89d 2h', net: '↓ 210 MB/s  ↑ 6 MB/s', err: null },
+  ],
+  alerting: [
+    { id: 'host-pve-01', name: 'pve-01', sub: 'Proxmox · Glances 4.1', status: 'down',
+      cpu: null, mem: null, disk: null, diskDetail: '',
+      load: '—', up: '—', net: '—', err: '⚠ unreachable for 2m — request timed out' },
+    { id: 'host-pve-02', name: 'pve-02', sub: 'Proxmox · Glances 4.1', status: 'degraded',
+      cpu: 91, mem: 87, disk: 55, diskDetail: '1.1 / 2 TB',
+      load: '6.4 · 5.1 · 3.8', up: '31d 9h', net: '↓ 12 MB/s  ↑ 3 MB/s', err: null },
+    { id: 'host-nas-01', name: 'nas-01', sub: 'TrueNAS · Glances 3.4', status: 'degraded',
+      cpu: 8, mem: 33, disk: 92, diskDetail: '14.7 / 16 TB',
+      load: '0.3 · 0.4 · 0.4', up: '89d 2h', net: '↓ 210 MB/s  ↑ 6 MB/s', err: null },
+  ],
+};
+
+const SOLAR = {
+  normal:   { src: ['ok','ok'], soc: 78, socCls: 'var(--success)', pv: '3.42 kW', pvLbl: 'PV generation',
+              batt: ['+1.21 kW charging','up'], grid: ['−0.31 kW exporting','down2'], load: ['1.10 kW',''], rt: ['6h 40m',''] },
+  alerting: { src: ['ok','ok'], soc: 23, socCls: 'var(--critical)', pv: '0.00 kW', pvLbl: 'PV generation — night / fault',
+              batt: ['−1.84 kW discharging','bad'], grid: ['+1.79 kW importing','warn-t'], load: ['1.10 kW',''], rt: ['1h 12m','bad'] },
+};
+
+const DOCKER = {
+  normal:   { src: ['ok','ok'], center: '25/25', run: 100, unh: 0, rst: 0,
+              cRun: 25, cHealth: 24, cUnh: 0, cRst: 0, problems: [] },
+  alerting: { src: ['degraded','degraded'], center: '23/25', run: 88, unh: 4, rst: 4,
+              cRun: 23, cHealth: 21, cUnh: 1, cRst: 1,
+              problems: [
+                { name: 'nextcloud', state: 'unhealthy', cls: 'bad' },
+                { name: 'redis', state: 'restarting', cls: 'warn-t' },
+              ] },
+};
+
+const ALERTS = {
+  normal: {
+    sub: 'none firing', badge: 0,
+    firing: [],
+    resolved: [
+      { sev: 'resolved', ago: '2h ago', msg: 'High CPU on pve-01 resolved after 4m (94% → 38%)' },
+      { sev: 'resolved', ago: 'yesterday', msg: 'Disk latency on nas-01 resolved after 11m' },
+    ],
+  },
+  alerting: {
+    sub: '5 firing', badge: 5,
+    firing: [
+      { sev: 'critical', ago: '2m', msg: '<b>pve-01</b> unreachable — no Glances response for ≥ 60s', ack: true },
+      { sev: 'critical', ago: '6m', msg: 'Battery SOC <b>23%</b> ≤ 25% — runtime ≈ 1h 12m', ack: true },
+      { sev: 'warning', ago: '14m', msg: 'Container <b>nextcloud</b> unhealthy on pve-02 (healthcheck failing)', ack: true },
+      { sev: 'warning', ago: '3m', msg: '<b>pve-02</b> CPU 91% ≥ 90% for 120s', ack: true },
+      { sev: 'warning', ago: '30m', msg: '<b>SABnzbd</b> queue paused for ≥ 30m with 5 items queued', ack: true },
+    ],
+    resolved: [
+      { sev: 'resolved', ago: '38m ago', msg: 'Container redis restarted successfully on pve-02' },
+      { sev: 'resolved', ago: '2h ago', msg: 'High CPU on pve-01 resolved after 4m' },
+    ],
+  },
+};
+
+const BANNER = {
+  alerting: { crit: '▲ CRITICAL — pve-01 unreachable for 2m', warn: 'WARNING — battery SOC 23% · nextcloud unhealthy · pve-02 CPU 91% · SABnzbd paused 30m' },
+};
+
+const MEDIA = {
+  normal: {
+    sub: '3 playing · 1 transcoding', src: ['ok', 'ok'], badge: '3 · 2',
+    streams: [
+      { thumb: '🚀', title: 'The Expanse', ep: 'S04E03 · Cibola Burn', meta: 'adedeji · Firefox · Jellyfin', pct: 52, time: '24:01 / 46:12', badge: ['Direct Play', 'direct'] },
+      { thumb: '🏜️', title: 'Dune: Part Two', ep: '2024 · 4K HDR', meta: 'guest · Android TV · Jellyfin', pct: 31, time: '43:12 / 2:46:00', badge: ['Transcode 4K→1080p', 'transcode'] },
+      { thumb: '🌍', title: 'Planet Earth III', ep: 'S01E05 · Forests', meta: 'family · Roku · Emby', pct: 78, time: '39:22 / 50:44', badge: ['Direct Play', 'direct'] },
+    ],
+    sab: { src: ['ok', 'ok'], state: ['Downloading', 'downloading'], speed: '38.4 MB/s', eta: '12:31 left · 1.8 TB free',
+      slots: [
+        { name: 'Movie.Title.2024.1080p.BluRay.x264-GRP', pct: 64, detail: '2.6 / 4.0 GB' },
+        { name: 'Series.Name.S01E05.2160p.WEB-DL.HDR-GROUP', pct: 12, detail: '380 MB / 3.1 GB' },
+      ], more: '+ 3 more queued' },
+    nzb: { src: ['ok', 'ok'], state: ['Idle', 'idle'],
+      body: '<div class="streams-empty">Queue empty — 0 B/s</div><div class="more">Last: Ubuntu 24.04 LTS ISO · completed 2h ago</div>' },
+  },
+  alerting: {
+    sub: '3 playing · 2 transcoding', src: ['degraded', 'degraded'], badge: '3 · 0',
+    streams: [
+      { thumb: '🚀', title: 'The Expanse', ep: 'S04E03 · Cibola Burn', meta: 'adedeji · Firefox · Jellyfin', pct: 52, time: '24:01 / 46:12', badge: ['Transcode 1080p→720p', 'transcode'] },
+      { thumb: '🏜️', title: 'Dune: Part Two', ep: '2024 · 4K HDR', meta: 'guest · Android TV · Jellyfin', pct: 31, time: '43:12 / 2:46:00', badge: ['Transcode 4K→1080p', 'transcode'] },
+      { thumb: '🌍', title: 'Planet Earth III', ep: 'S01E05 · Forests', meta: 'family · Roku · Emby', pct: 78, time: '39:22 / 50:44', badge: ['Direct Play', 'direct'] },
+    ],
+    sab: { src: ['degraded', 'degraded'], state: ['Paused', 'paused'], speed: '0 B/s', eta: 'paused for 30m · 5 items queued',
+      slots: [
+        { name: 'Movie.Title.2024.1080p.BluRay.x264-GRP', pct: 64, detail: '2.6 / 4.0 GB · paused' },
+        { name: 'Series.Name.S01E05.2160p.WEB-DL.HDR-GROUP', pct: 12, detail: '380 MB / 3.1 GB · paused' },
+      ], more: '+ 3 more queued' },
+    nzb: { src: ['ok', 'ok'], state: ['Idle', 'idle'],
+      body: '<div class="streams-empty">Queue empty — 0 B/s</div><div class="more">Last: Ubuntu 24.04 LTS ISO · completed 2h ago</div>' },
+  },
+};
+
+/* ---------------- render helpers ---------------- */
+function barColor(v) {
+  if (v === null) return 'var(--border)';
+  if (v >= 90) return 'var(--error)';
+  if (v >= 75) return 'var(--warning)';
+  return 'var(--primary)';
+}
+function metricRow(lbl, icon, pct, detail) {
+  const val = pct === null ? '—' : pct.toFixed(0) + '%';
+  return `<div class="metric">
+    <div class="row"><span class="lbl">${icon} ${lbl}</span><span class="num" style="font-weight:650">${val}</span></div>
+    <div class="bar"><div style="width:${pct === null ? 0 : pct}%;background:${barColor(pct)}"></div></div>
+    ${detail ? `<div style="font-size:10.5px;color:var(--text-2);margin-top:3px">${detail}</div>` : ''}
+  </div>`;
+}
+function renderHost(h) {
+  const el = document.getElementById(h.id);
+  el.classList.toggle('down', h.status === 'down');
+  el.innerHTML = `
+    <div class="card-head">
+      <h2>${h.name}</h2><span class="sub">${h.sub}</span>
+      <span class="src ${h.status}"><span class="dot"></span>${h.status}</span>
+    </div>
+    ${metricRow('CPU', '🖥', h.cpu)}
+    ${metricRow('Memory', '🧠', h.mem)}
+    ${metricRow('Disk', '💾', h.disk, h.diskDetail)}
+    <div class="host-err" style="display:${h.err ? 'block' : 'none'}">${h.err || ''}</div>
+    <div class="host-foot">
+      <span>Load <b class="num">${h.load}</b></span>
+      <span>Up <b class="num">${h.up}</b></span>
+      <span style="margin-left:auto" class="num">${h.net}</span>
+    </div>`;
+}
+function sevChip(a) { return `<span class="sev ${a.sev}">${a.sev === 'resolved' ? 'resolved' : a.sev}</span>`; }
+function renderAlerts(a) {
+  document.getElementById('alertsSub').textContent = a.sub;
+  const badge = document.getElementById('bellBadge');
+  badge.textContent = a.badge;
+  badge.classList.toggle('zero', a.badge === 0);
+  const firing = a.firing.map(x => `
+    <div class="alert ${x.sev}">
+      <div class="top">${sevChip(x)}<span class="ago">${x.ago}</span></div>
+      <div class="msg">${x.msg}</div>
+      ${x.ack ? '<button class="ack">Acknowledge</button>' : ''}
+    </div>`).join('');
+  const resolved = a.resolved.map(x => `
+    <div class="alert resolved">
+      <div class="top">${sevChip(x)}<span class="ago">${x.ago}</span></div>
+      <div class="msg">${x.msg}</div>
+    </div>`).join('');
+  document.getElementById('alertsList').innerHTML =
+    (firing ? `<div class="rail-sep">Firing</div>${firing}` : `<div class="rail-sep">Firing</div>
+      <div class="alert resolved" style="opacity:1;border-left-color:var(--success)">
+      <div class="msg" style="color:var(--text-2)">✓ No active alerts</div></div>`) +
+    `<div class="rail-sep">Recently resolved</div>${resolved}`;
+}
+
+function renderMedia(s) {
+  const m = MEDIA[s];
+  document.getElementById('streamsSub').textContent = m.sub;
+  document.getElementById('mediaBadge').textContent = m.badge;
+  setSrc('mediaSrc', m.src);
+  document.getElementById('streamsList').innerHTML = m.streams.map(st => `
+    <div class="stream">
+      <div class="thumb">${st.thumb}</div>
+      <div class="s-main">
+        <div class="s-title">${st.title} <span class="s-ep">${st.ep}</span></div>
+        <div class="s-meta">${st.meta}</div>
+        <div class="s-prog">
+          <div class="bar"><div style="width:${st.pct}%;background:var(--primary)"></div></div>
+          <span class="num">${st.time}</span>
+        </div>
+      </div>
+      <span class="play-badge ${st.badge[1]}">${st.badge[0]}</span>
+    </div>`).join('') || '<div class="streams-empty">No active streams</div>';
+
+  const sabState = document.getElementById('sabState');
+  sabState.textContent = m.sab.state[0];
+  sabState.className = 'state-chip ' + m.sab.state[1];
+  setSrc('sabSrc', m.sab.src);
+  document.getElementById('sabSpeed').textContent = m.sab.speed;
+  document.getElementById('sabEta').textContent = m.sab.eta;
+  document.getElementById('sabSlots').innerHTML = m.sab.slots.map(sl => `
+    <div class="slot">
+      <div class="row"><span class="name">${sl.name}</span><span class="pct num">${sl.pct}%</span></div>
+      <div class="bar"><div style="width:${sl.pct}%;background:${sl.pct >= 90 ? 'var(--success)' : 'var(--primary)'}"></div></div>
+      <div class="detail">${sl.detail}</div>
+    </div>`).join('') + `<div class="more">${m.sab.more}</div>`;
+
+  const nzbState = document.getElementById('nzbState');
+  nzbState.textContent = m.nzb.state[0];
+  nzbState.className = 'state-chip ' + m.nzb.state[1];
+  setSrc('nzbSrc', m.nzb.src);
+  document.getElementById('nzbBody').innerHTML = m.nzb.body;
+}
+
+/* ---------------- tab rotation ---------------- */
+const ROTATE_SECONDS = 12;
+let activeTab = 'infra';
+let rotateRemaining = ROTATE_SECONDS;
+
+function switchTab(t, manual) {
+  activeTab = t;
+  document.getElementById('main').hidden = t !== 'infra';
+  document.getElementById('tab-media').hidden = t !== 'media';
+  document.getElementById('tabBtnInfra').classList.toggle('active', t === 'infra');
+  document.getElementById('tabBtnMedia').classList.toggle('active', t === 'media');
+  rotateRemaining = manual ? 60 : ROTATE_SECONDS;
+  updateRotateLabel();
+}
+function updateRotateLabel() {
+  const paused = rotateRemaining > ROTATE_SECONDS;
+  const window_ = paused ? 60 : ROTATE_SECONDS;
+  document.getElementById('rotateRing').style.setProperty('--p', Math.max(0, Math.min(100, (1 - rotateRemaining / window_) * 100)));
+  document.getElementById('rotateLabel').textContent = paused
+    ? `rotation paused · resumes ${rotateRemaining}s`
+    : `auto-rotate in ${rotateRemaining}s`;
+}
+setInterval(() => {
+  rotateRemaining--;
+  if (rotateRemaining <= 0) switchTab(activeTab === 'infra' ? 'media' : 'infra');
+  updateRotateLabel();
+}, 1000);
+
+/* ---------------- state application ---------------- */
+function applyState(s) {
+  document.getElementById('btnNormal').classList.toggle('active', s === 'normal');
+  document.getElementById('btnAlert').classList.toggle('active', s === 'alerting');
+
+  // global pill
+  const pill = document.getElementById('globalStatus');
+  const txt = document.getElementById('globalStatusText');
+  pill.className = 'status-pill ' + (s === 'normal' ? 'ok' : 'critical');
+  txt.textContent = s === 'normal' ? 'All systems normal' : 'Critical alert';
+
+  // banner
+  const banner = document.getElementById('banner');
+  banner.classList.toggle('show', s === 'alerting');
+  document.getElementById('main').classList.toggle('with-banner', s === 'alerting');
+  if (s === 'alerting') {
+    document.getElementById('bannerCrit').innerHTML = BANNER.alerting.crit;
+    document.getElementById('bannerWarn').innerHTML = BANNER.alerting.warn;
+  }
+
+  // hosts
+  HOSTS[s].forEach(renderHost);
+
+  // solar
+  const so = SOLAR[s];
+  const ring = document.getElementById('socRing');
+  ring.style.setProperty('--pct', so.soc);
+  ring.style.setProperty('--ring', so.socCls);
+  document.getElementById('socVal').textContent = so.soc + '%';
+  document.getElementById('pvVal').textContent = so.pv;
+  document.getElementById('pvLbl').textContent = so.pvLbl;
+  document.getElementById('battLine').innerHTML = `<span class="${so.batt[1]}">${so.batt[0]}</span>`;
+  document.getElementById('gridLine').innerHTML = `<span class="${so.grid[1]}">${so.grid[0]}</span>`;
+  document.getElementById('loadLine').textContent = so.load[0];
+  document.getElementById('rtLine').innerHTML = `<span class="${so.rt[1]}">${so.rt[0]}</span>`;
+  setSrc('solarSrc', so.src);
+
+  // docker
+  const d = DOCKER[s];
+  const donut = document.getElementById('donut');
+  donut.style.setProperty('--run', d.run);
+  donut.style.setProperty('--unh', d.unh);
+  donut.style.setProperty('--rst', d.rst);
+  document.getElementById('donutCenter').textContent = d.center;
+  document.getElementById('cRun').textContent = d.cRun;
+  document.getElementById('cHealth').textContent = d.cHealth;
+  document.getElementById('cUnh').textContent = d.cUnh;
+  document.getElementById('cRst').textContent = d.cRst;
+  setSrc('dockerSrc', d.src);
+  document.getElementById('problems').innerHTML = d.problems.length
+    ? d.problems.map(p => `<div class="prob"><span class="name">${p.name}</span><span class="state ${p.cls}">${p.state}</span></div>`).join('')
+    : '<div class="empty">✓ All containers healthy</div>';
+
+  // alerts
+  renderAlerts(ALERTS[s]);
+
+  // media & downloads tab
+  renderMedia(s);
+}
+function setSrc(id, [cls, label]) {
+  const el = document.getElementById(id);
+  el.className = 'src ' + cls;
+  el.innerHTML = `<span class="dot"></span>${label}`;
+}
+
+/* live clock + updated-ago */
+let lastUpdate = Date.now();
+setInterval(() => {
+  const now = new Date();
+  document.getElementById('clock').textContent = now.toTimeString().slice(0, 8);
+  const ago = Math.max(0, Math.round((Date.now() - lastUpdate) / 1000)) % 6;
+  document.getElementById('updatedAgo').textContent = (ago === 0 ? (lastUpdate = Date.now(), 'just now') : ago + 's');
+}, 1000);
+
+applyState('normal');
+</script>
+</body>
+</html>

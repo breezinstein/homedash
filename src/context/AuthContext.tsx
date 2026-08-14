@@ -34,8 +34,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const status = await authApi.status();
       setAuthEnabled(status.authEnabled);
       setAuthenticated(status.authenticated);
-    } catch {
+    } catch (err) {
       // Network failure: stay in last known state but mark ready so UI renders.
+      console.warn('Auth status check failed:', err instanceof Error ? err.message : err);
     } finally {
       setReady(true);
     }

@@ -1,0 +1,91 @@
+import { Package, Download } from 'lucide-react';
+import type { UsenetSnapshot, UsenetInstance, UsenetSlot } from '../../types';
+import { SourceDot } from './SourceDot';
+import { formatByteRate, formatEta } from '../format';
+
+interface UsenetCardProps {
+  usenet: UsenetSnapshot;
+}
+
+export function UsenetCard({ usenet }: UsenetCardProps) {
+  return (
+    <>
+      {usenet.instances.map(inst => (
+        <InstanceCard key={inst.name} inst={inst} />
+      ))}
+    </>
+  );
+}
+
+function InstanceCard({ inst }: { inst: UsenetInstance }) {
+  const stateLabel = inst.status === 'down' ? 'Error' :
+    inst.paused ? 'Paused' :
+    (inst.speedBps ?? 0) > 0 ? 'Downloading' : 'Idle';
+
+  const stateChipClass = inst.paused ? 'bg-[color-mix(in_srgb,var(--color-warning)_14%,transparent)] text-[var(--color-warning)]' :
+    (inst.speedBps ?? 0) > 0 ? 'bg-[color-mix(in_srgb,var(--color-success)_14%,transparent)] text-[var(--color-success)]' :
+    'bg-[var(--color-surface)] text-[var(--color-text-secondary)]';
+
+  return (
+    <section className="media-card">
+      <div className="flex items-center gap-[9px] mb-[11px]">
+        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)] flex items-center gap-1.5">
+          {inst.type === 'sabnzbd' ? <Package className="w-4 h-4 text-[#6366f1]" /> : <Download className="w-4 h-4 text-[#6366f1]" />}
+          {inst.type === 'sabnzbd' ? 'SABnzbd' : 'NZBGet'}
+        </h2>
+        <span className={`text-[10px] font-extrabold tracking-[.5px] uppercase px-[8px] py-[3px] rounded-md ml-2 ${stateChipClass}`}>{stateLabel}</span>
+        <div className="ml-auto"><SourceDot status={inst.status} /></div>
+        <span className="text-[11px] text-[var(--color-text-secondary)]">{inst.name}</span>
+      </div>
+
+      {inst.status === 'down' ? (
+        <div className="text-[var(--color-error)] text-[12px]">{inst.error || 'Unreachable'}</div>
+      ) : (
+        <>
+          <div className="flex items-baseline gap-[14px] mb-2">
+            <span className="text-[24px] font-[750] tabular-nums">{formatByteRate(inst.speedBps, '0 B/s')}</span>
+            <span className="text-[11px] text-[var(--color-text-secondary)]">
+              {inst.paused ? `Paused · ${inst.queuedTotal} items queued` : `${formatEta(inst.etaSeconds)} · ${inst.queuedTotal} items queued`}
+            </span>
+          </div>
+
+          {inst.slots.length === 0 ? (
+            <div className="text-[var(--color-text-secondary)] text-[12px]">
+              {inst.paused ? 'Queue paused — no active downloads' : 'Queue empty'}
+            </div>
+          ) : (
+            <>
+              {inst.slots.map((sl, i) => <SlotBar key={i} slot={sl} />)}
+              {inst.queuedTotal > inst.slots.length && (
+                <div className="text-[11px] text-[var(--color-text-secondary)] pt-1 border-t border-[var(--color-border)] mt-2">
+                  + {inst.queuedTotal - inst.slots.length} more queued
+                </div>
+              )}
+            </>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function SlotBar({ slot }: { slot: UsenetSlot }) {
+  const pct = Math.min(100, Math.max(0, slot.percent));
+  return (
+    <div className="mb-[9px]">
+      <div className="flex justify-between gap-[10px] text-[12px] mb-1">
+        <span className="truncate font-medium">{slot.name}</span>
+        <span className="text-[var(--color-text-secondary)] tabular-nums flex-shrink-0">{pct.toFixed(0)}%</span>
+      </div>
+      <div className="h-[7px] rounded-full bg-[var(--color-surface)] overflow-hidden">
+        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: pct >= 90 ? 'var(--color-success)' : 'var(--color-primary)' }} />
+      </div>
+      {(slot.sizeMb != null || slot.remainingMb != null || slot.status) && (
+        <div className="text-[10px] text-[var(--color-text-secondary)] mt-[3px] tabular-nums">
+          {slot.sizeMb != null && slot.remainingMb != null ? `${slot.remainingMb.toFixed(0)} / ${slot.sizeMb.toFixed(0)} MB` : ''}
+          {slot.status ? ` · ${slot.status}` : ''}
+        </div>
+      )}
+    </div>
+  );
+}

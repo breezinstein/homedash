@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
+import { newId } from '../../lib/id';
 
 type ToastTone = 'success' | 'error' | 'info';
 
@@ -74,10 +75,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 
   const show = useCallback(
     (input: ToastInput) => {
-      const id =
-        typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
-          ? crypto.randomUUID()
-          : `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const id = newId();
       const toast: Toast = {
         id,
         message: input.message,

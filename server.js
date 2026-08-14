@@ -8,6 +8,7 @@ import { dirname, join, basename, extname, resolve, sep } from 'path';
 import crypto from 'crypto';
 import os from 'os';
 import { NotificationManager } from './notifications.js';
+import { MonitorManager, ensureAutoAlertRules } from './monitor.js';
 import {
   authEnabled,
   optionalAuth,
@@ -41,6 +42,13 @@ const NOTIFICATIONS_PATH = join(__dirname, 'data', 'notifications.json');
 // Single server-side ntfy subscription shared by all dashboard clients.
 const notificationManager = new NotificationManager(NOTIFICATIONS_PATH);
 
+// Monitor module — aggregates Glances, solar, docker, media, usenet stats
+// into one cache and evaluates alert rules on a background cadence.
+const monitorManager = new MonitorManager(
+  () => configCache.config,
+  notificationManager,
+);
+
 // In-memory config cache. The config file is read once at startup, then
 // served from memory; PUT updates both the file and the cache atomically.
 // Polling clients (every syncInterval) compare against `cache.mtimeMs`
@@ -69,6 +77,17 @@ async function refreshConfigCache() {
 // Track file modification time for change detection (mirrors cache for
 // any code paths still using it directly).
 let lastModified = 0;
+
+/** Write the config to disk and refresh the in-memory cache atomically. */
+async function persistConfig(config) {
+  const serialized = JSON.stringify(config, null, 2);
+  await writeFile(CONFIG_PATH, serialized);
+  const stats = await stat(CONFIG_PATH);
+  lastModified = stats.mtimeMs;
+  configCache.config = config;
+  configCache.mtimeMs = stats.mtimeMs;
+  configCache.serialized = serialized;
+}
 
 app.use(cors());
 // gzip text-ish responses. The default filter skips images / already
@@ -169,6 +188,31 @@ const defaultConfig = {
   },
   categoryOrder: [],
   clips: [],
+  monitoring: {
+    enabled: false,
+    pollIntervalSeconds: 10,
+    glancesHosts: [],
+    solar: { enabled: false },
+    docker: { enabled: true },
+    media: [],
+    usenet: [],
+    arr: [],
+    seerr: [],
+    opnsense: [],
+    ntopng: [],
+    homeassistant: [],
+    ui: { tabRotationSeconds: 15 },
+    alerts: [
+      { id: 'host-cpu-high', name: 'High CPU', enabled: true, source: 'glances', metric: 'cpu.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 120, notify: false },
+      { id: 'host-memory-high', name: 'High memory', enabled: true, source: 'glances', metric: 'memory.percent', operator: '>=', threshold: 95, severity: 'warning', forSeconds: 120, notify: false },
+      { id: 'host-disk-high', name: 'High disk usage', enabled: true, source: 'glances', metric: 'disk.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 120, notify: false },
+      { id: 'host-unreachable', name: 'Host unreachable', enabled: true, source: 'reachability', metric: 'reachable', operator: '==', threshold: 0, severity: 'critical', forSeconds: 60, notify: true },
+      { id: 'docker-unhealthy', name: 'Unhealthy Docker container', enabled: true, source: 'docker', metric: 'docker.unhealthy', operator: '>=', threshold: 1, severity: 'warning', forSeconds: 60, notify: false },
+      { id: 'battery-low', name: 'Low battery', enabled: true, source: 'solar', metric: 'battery.soc', operator: '<=', threshold: 15, severity: 'critical', forSeconds: 60, notify: true },
+      { id: 'stream-transcoding', name: 'High transcode count', enabled: true, source: 'media', metric: 'streams.transcoding', operator: '>=', threshold: 4, severity: 'warning', forSeconds: 60, notify: false },
+      { id: 'downloads-paused', name: 'Downloads paused', enabled: true, source: 'usenet', metric: 'downloads.paused', operator: '==', threshold: 1, severity: 'info', forSeconds: 1800, notify: false },
+    ],
+  },
   colors: {
     primary: "#6366f1",
     secondary: "#475569",
@@ -211,7 +255,12 @@ refreshConfigCache();
 (async () => {
   await notificationManager.load();
   if (configCache.config === null) await refreshConfigCache();
+  // Auto-create sensible alert rules for whatever services are configured.
+  if (configCache.config && ensureAutoAlertRules(configCache.config)) {
+    await persistConfig(configCache.config);
+  }
   notificationManager.reconfigure(configCache.config?.notifications);
+  monitorManager.start();
 })();
 
 // GET /api/config - Read config (served from in-memory cache when fresh).
@@ -251,16 +300,14 @@ app.put('/api/config', requireAuth, async (req, res) => {
         lastModified: new Date().toISOString()
       }
     };
-    const serialized = JSON.stringify(config, null, 2);
-    await writeFile(CONFIG_PATH, serialized);
-    const stats = await stat(CONFIG_PATH);
-    lastModified = stats.mtimeMs;
-    configCache.config = config;
-    configCache.mtimeMs = stats.mtimeMs;
-    configCache.serialized = serialized;
+    // Auto-create sensible alert rules for newly configured services.
+    ensureAutoAlertRules(config);
+    await persistConfig(config);
     // Re-apply notifications config (no-op unless a connection-relevant field
     // actually changed, so routine saves don't drop the upstream stream).
     notificationManager.reconfigure(config.notifications);
+    // Reconfigure monitor poller (pick up new hosts, renamed sources, etc.).
+    monitorManager.reconfigure();
     res.json({ success: true, lastModified });
   } catch (error) {
     res.status(500).json({ error: 'Failed to write config' });
@@ -1114,11 +1161,31 @@ async function loadInverterStats(rawUrl, username, password) {
     }
     const data = await response.json();
     const stats = attachBatteryRuntime(normalizeInverter(data), base);
+    lastInverterStats.set(`${base}|${user}`, { stats, ts: Date.now() });
     return { ok: true, status: 200, stats };
   } catch (error) {
     clearTimeout(timeout);
     const message = error.name === 'AbortError' ? 'Request timed out' : 'Unable to reach the inverter';
     return { ok: false, status: 502, error: message };
+  }
+}
+
+// Last successfully normalized stats per inverter (keyed by resolved base URL
+// + username), refreshed by the background poller every INV_POLL_INTERVAL_MS.
+// Lets GET /api/inverter/metrics serve the warm snapshot instead of hitting
+// the device again for every panel poll.
+const lastInverterStats = new Map();
+const INVERTER_CACHE_TTL_MS = 2 * INV_POLL_INTERVAL_MS;
+
+// Cache key mirroring the credential resolution inside loadInverterStats.
+function inverterCacheKey(rawUrl, username) {
+  try {
+    const parsed = new URL(rawUrl);
+    const { base } = buildInverterTarget(parsed);
+    const user = (username || decodeURIComponent(parsed.username) || '').trim();
+    return `${base}|${user}`;
+  } catch {
+    return null;
   }
 }
 
@@ -1169,6 +1236,17 @@ app.get('/api/inverter/metrics', requireAuth, async (req, res) => {
   // (resolved inside loadInverterStats).
   const username = req.get('x-inverter-username') || undefined;
   const password = req.get('x-inverter-password') ?? undefined;
+
+  // Serve the background poller's warm snapshot when fresh, so an open panel
+  // doesn't double-fetch the device every poll interval; fall back to a live
+  // fetch only when the cache is cold or stale.
+  const cacheKey = inverterCacheKey(raw, username);
+  if (cacheKey) {
+    const cached = lastInverterStats.get(cacheKey);
+    if (cached && Date.now() - cached.ts < INVERTER_CACHE_TTL_MS) {
+      return res.json(cached.stats);
+    }
+  }
 
   const result = await loadInverterStats(raw, username, password);
   if (!result.ok) {
@@ -1490,6 +1568,36 @@ app.post('/api/notifications/dismiss', requireAuth, (req, res) => {
   if (!id) return res.status(400).json({ error: 'id required' });
   notificationManager.dismiss(id);
   res.json({ success: true });
+});
+
+// ---------------------------------------------------------------------------
+// Monitor — aggregated home-lab overview
+// ---------------------------------------------------------------------------
+
+// GET /api/monitor/overview - Latest snapshot from the background poller.
+// Admin only: contains hostnames, IPs, container lists, media details.
+app.get('/api/monitor/overview', requireAuth, async (req, res) => {
+  if (req.query.wait === '1') {
+    const interval = monitorManager.getOverview().pollIntervalMs;
+    return res.json(await monitorManager.waitForNextSnapshot(interval + 1000));
+  }
+  res.json(monitorManager.getOverview());
+});
+
+// GET /api/monitor/alerts - Active + recently resolved alert instances.
+app.get('/api/monitor/alerts', requireAuth, (req, res) => {
+  res.json(monitorManager.getAlerts());
+});
+
+// POST /api/monitor/alerts/:id/ack - Acknowledge a firing alert.
+app.post('/api/monitor/alerts/:id/ack', requireAuth, (req, res) => {
+  monitorManager.ackAlert(req.params.id);
+  res.json({ success: true });
+});
+
+// GET /api/monitor/healthz - Liveness check (anonymous-safe).
+app.get('/api/monitor/healthz', (req, res) => {
+  res.json(monitorManager.getHealth());
 });
 
 // Serve static files in production
