@@ -38,7 +38,7 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
           {ntopngTalkers.length > 0 ? (
             <NtopTalkersTable talkers={ntopngTalkers} />
           ) : (
-            <div className="text-[#a0a0a0] text-[12px] py-3 px-1">
+            <div className="text-[var(--mon-text-muted)] text-[12px] py-3 px-1">
               Configure ntopng in Monitor Settings for per-host top talkers.
             </div>
           )}
@@ -77,13 +77,13 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
         {/* Column 2: WAN Interfaces */}
         <div className="net-v2-card">
           <div className="net-section-title">WAN Interfaces</div>
-          <IfacesTable ifaces={opnsense.wanInterfaces} activeColor="#2ecc71" />
+          <IfacesTable ifaces={opnsense.wanInterfaces} activeColor="#34d399" />
         </div>
 
         {/* Column 3: LAN Interfaces */}
         <div className="net-v2-card">
           <div className="net-section-title">LAN Interfaces</div>
-          <IfacesTable ifaces={opnsense.lanInterfaces} activeColor="#6c5ce7" />
+          <IfacesTable ifaces={opnsense.lanInterfaces} activeColor="#6366f1" />
         </div>
       </div>
 
@@ -114,7 +114,7 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
                     <div className="net-talker-bar-bg">
                       <div
                         className="net-talker-bar-fill"
-                        style={{ width: `${Math.min(100, t.percentage)}%`, backgroundColor: '#6c5ce7' }}
+                        style={{ width: `${Math.min(100, t.percentage)}%`, backgroundColor: '#6366f1' }}
                       />
                     </div>
                   </div>
@@ -129,7 +129,7 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
       {ntopngTalkers.length === 0 && netflowTalkers.length === 0 && (
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
           <div className="net-section-title">Top Talkers</div>
-          <div className="text-[#a0a0a0] text-[12px] py-3 px-1">
+          <div className="text-[var(--mon-text-muted)] text-[12px] py-3 px-1">
             Configure ntopng in Monitor Settings for per-host top talkers, or enable the os-insight
             (NetFlow) plugin on OPNsense.
           </div>
@@ -168,7 +168,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"
-                  style={{ width: `${Math.min(100, ((t.txBps ?? 0) / maxTx) * 100)}%`, backgroundColor: '#6c5ce7' }}
+                  style={{ width: `${Math.min(100, ((t.txBps ?? 0) / maxTx) * 100)}%`, backgroundColor: '#6366f1' }}
                 />
               </div>
             </div>
@@ -177,7 +177,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"
-                  style={{ width: `${Math.min(100, ((t.rxBps ?? 0) / maxRx) * 100)}%`, backgroundColor: '#2ecc71' }}
+                  style={{ width: `${Math.min(100, ((t.rxBps ?? 0) / maxRx) * 100)}%`, backgroundColor: '#34d399' }}
                 />
               </div>
             </div>
@@ -191,7 +191,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"
-                  style={{ width: `${Math.min(100, (t.bytes / maxBytes) * 100)}%`, backgroundColor: '#e67e22' }}
+                  style={{ width: `${Math.min(100, (t.bytes / maxBytes) * 100)}%`, backgroundColor: '#f59e0b' }}
                 />
               </div>
             </div>
@@ -216,7 +216,7 @@ function IfacesTable({
   activeColor: string;
 }) {
   if (ifaces.length === 0) {
-    return <div className="text-[#a0a0a0] text-[11px] py-2">No interfaces</div>;
+    return <div className="text-[var(--mon-text-muted)] text-[11px] py-2">No interfaces</div>;
   }
 
   const maxIn = Math.max(1, ...ifaces.map((i) => i.inBps ?? 0));
@@ -226,8 +226,8 @@ function IfacesTable({
     <div className="net-ifaces-list">
       {ifaces.map((iface) => {
         const statusColor =
-          iface.status === 'up' ? '#2ecc71' : iface.status === 'degraded' ? '#e67e22' : '#e74c3c';
-        const barColor = iface.active ? '#2ecc71' : activeColor;
+          iface.status === 'up' ? '#34d399' : iface.status === 'degraded' ? '#f59e0b' : '#ef4444';
+        const barColor = iface.active ? '#34d399' : activeColor;
         return (
           <div className="net-iface-row" key={iface.name}>
             <div className="net-iface-name">
@@ -249,7 +249,7 @@ function IfacesTable({
               <span className="net-iface-bps">{formatBitRate(iface.outBps)}</span>
               <div className="progress-bg" style={{ height: 3, flex: 1 }}>
                 <div className="progress-fill"
-                  style={{ width: `${((iface.outBps ?? 0) / maxOut) * 100}%`, backgroundColor: '#6c5ce7' }} />
+                  style={{ width: `${((iface.outBps ?? 0) / maxOut) * 100}%`, backgroundColor: '#6366f1' }} />
               </div>
             </div>
           </div>

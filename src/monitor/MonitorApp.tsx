@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { Sun, Shield, Download, Film, Search } from 'lucide-react';
 import { LoginModal } from '../components/LoginModal';
 import { useMonitorOverview } from './useMonitorOverview';
 import { useTabRotation } from './useTabRotation';
@@ -50,7 +51,7 @@ export function MonitorApp() {
 
   if (authRequired) {
     return (
-      <div className="min-h-dvh bg-[#121213] flex items-center justify-center">
+      <div className="min-h-dvh bg-[#121215] flex items-center justify-center">
         <LoginModal forced />
       </div>
     );
@@ -78,7 +79,7 @@ export function MonitorApp() {
       <div className="top-grid">
         {overview?.solar && <SolarCard solar={overview.solar} />}
         {!overview?.solar && (
-          <CardPlaceholder title="Power" subtitle="Solar Assistant" message="No solar data source configured" />
+          <CardPlaceholder title="Power" subtitle="Solar Assistant" icon={<Sun className="w-4 h-4" />} iconClass="card-icon-green" message="No solar data source configured" />
         )}
 
         <DockerCard docker={overview?.docker ?? emptyDocker} />
@@ -86,7 +87,7 @@ export function MonitorApp() {
         {overview?.opnsense ? (
           <OpnsenseCard opnsense={overview.opnsense} />
         ) : (
-          <CardPlaceholder title="OPNsense" subtitle="Multi-WAN" message="No OPNsense data source configured" />
+          <CardPlaceholder title="OPNsense" subtitle="Multi-WAN" icon={<Shield className="w-4 h-4" />} iconClass="card-icon-orange" message="No OPNsense data source configured" />
         )}
 
         <HomeStatusCard homeAssistant={overview?.homeassistant ?? null} />
@@ -136,7 +137,7 @@ export function MonitorApp() {
                   {overview?.media ? (
                     <StreamsPanel media={overview.media} />
                   ) : (
-                    <div className="flex items-center justify-center h-full text-[#a0a0a0] text-[12px]">
+                    <div className="flex items-center justify-center h-full text-[var(--mon-text-muted)] text-[12px]">
                       No active streams
                     </div>
                   )}
@@ -147,7 +148,7 @@ export function MonitorApp() {
                   {overview?.usenet ? (
                     <UsenetCard usenet={overview.usenet} />
                   ) : (
-                    <CardPlaceholder title="Downloads" subtitle="Usenet" icon="⬇" message="Not configured" fillHeight bodyHeight={80} />
+                    <CardPlaceholder title="Downloads" subtitle="Usenet" icon={<Download className="w-4 h-4" />} message="Not configured" fillHeight bodyHeight={80} />
                   )}
                 </div>
 
@@ -156,7 +157,7 @@ export function MonitorApp() {
                   {overview?.arr ? (
                     <ArrCard arr={overview.arr} />
                   ) : (
-                    <CardPlaceholder title="Sonarr / Radarr" subtitle="Arr" icon="🎬" message="Not configured" fillHeight bodyHeight={80} />
+                    <CardPlaceholder title="Sonarr / Radarr" subtitle="Arr" icon={<Film className="w-4 h-4" />} message="Not configured" fillHeight bodyHeight={80} />
                   )}
                 </div>
 
@@ -165,7 +166,7 @@ export function MonitorApp() {
                   {overview?.seerr ? (
                     <SeerrCard seerr={overview.seerr} />
                   ) : (
-                    <CardPlaceholder title="Seerr" subtitle="Overseerr / Jellyseerr" icon="🔍" message="Not configured" fillHeight bodyHeight={80} />
+                    <CardPlaceholder title="Seerr" subtitle="Overseerr / Jellyseerr" icon={<Search className="w-4 h-4" />} message="Not configured" fillHeight bodyHeight={80} />
                   )}
                 </div>
               </div>
@@ -222,23 +223,26 @@ export function MonitorApp() {
 /* ── Placeholder cards (shown when data source is unavailable) ── */
 
 function CardPlaceholder({
-  title, subtitle, icon, message, fillHeight = false, bodyHeight = 100,
+  title, subtitle, icon, iconClass = 'card-icon-purple', message, fillHeight = false, bodyHeight = 100,
 }: {
-  title: string; subtitle: string; icon?: string; message: string;
+  title: string; subtitle: string; icon?: ReactNode; iconClass?: string; message: string;
   fillHeight?: boolean; bodyHeight?: number;
 }) {
   const Tag = fillHeight ? 'div' : 'section';
   return (
     <Tag className="card" style={fillHeight ? { height: '100%' } : undefined}>
       <div className="card-header">
-        <div className="title-group">
-          <span className="title">{icon ? `${icon} ${title}` : title}</span>
-          <span className="subtitle">{subtitle}</span>
+        <div className="card-title-row">
+          {icon && <span className={`card-icon ${iconClass}`}>{icon}</span>}
+          <div className="title-group">
+            <span className="title">{title}</span>
+            <span className="subtitle">{subtitle}</span>
+          </div>
         </div>
         <span className="status-ok" style={{ opacity: 0.4 }}>offline</span>
       </div>
       <div
-        className="flex items-center justify-center text-[#a0a0a0] text-[12px]"
+        className="flex items-center justify-center text-[var(--mon-text-muted)] text-[12px]"
         style={{ height: bodyHeight }}
       >
         {message}

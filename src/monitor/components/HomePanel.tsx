@@ -1,3 +1,15 @@
+import {
+  Zap,
+  Gauge,
+  Thermometer,
+  Droplets,
+  Battery,
+  DoorOpen,
+  Lightbulb,
+  ToggleRight,
+  AlertTriangle,
+  Activity,
+} from 'lucide-react';
 import type { HomeAssistantSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
 
@@ -5,18 +17,18 @@ interface HomePanelProps {
   homeAssistant: HomeAssistantSnapshot | null;
 }
 
-function metricIcon(key: string): string {
+function metricIcon(key: string): React.ComponentType<{ className?: string }> {
   switch (key) {
-    case 'power': return '⚡';
-    case 'energy': return '📊';
-    case 'temperature': return '🌡️';
-    case 'humidity': return '💧';
-    case 'battery': return '🔋';
-    case 'doors': return '🚪';
-    case 'lights': return '💡';
-    case 'switches': return '🔘';
-    case 'unavailable': return '⚠️';
-    default: return '📈';
+    case 'power': return Zap;
+    case 'energy': return Gauge;
+    case 'temperature': return Thermometer;
+    case 'humidity': return Droplets;
+    case 'battery': return Battery;
+    case 'doors': return DoorOpen;
+    case 'lights': return Lightbulb;
+    case 'switches': return ToggleRight;
+    case 'unavailable': return AlertTriangle;
+    default: return Activity;
   }
 }
 
@@ -30,7 +42,7 @@ export function HomePanel({ homeAssistant: ha }: HomePanelProps) {
       <div className="net-v2">
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
           <div className="net-section-title">Home Assistant</div>
-          <div className="text-[#a0a0a0] text-[12px] py-3 px-1">
+          <div className="text-[var(--mon-text-muted)] text-[12px] py-3 px-1">
             {ha?.error || 'Configure Home Assistant in Monitor Settings to see the overview.'}
           </div>
         </div>
@@ -53,7 +65,7 @@ export function HomePanel({ homeAssistant: ha }: HomePanelProps) {
           <span className="ha-summary-item">🧩 {ha.entityCount} entities</span>
           <span
             className="ha-summary-item"
-            style={unavailable.count > 0 ? { color: '#e74c3c' } : { color: '#2ecc71' }}
+            style={unavailable.count > 0 ? { color: '#ef4444' } : { color: '#34d399' }}
           >
             {unavailable.count > 0 ? `⚠ ${unavailable.count} unavailable` : '● all online'}
           </span>
@@ -64,27 +76,30 @@ export function HomePanel({ homeAssistant: ha }: HomePanelProps) {
       {/* Glanceable metrics */}
       {metrics.length > 0 && (
         <div className="ha-metrics">
-          {metrics.map((m) => (
-            <div
-              className="ha-metric"
-              key={m.key}
-              style={m.key === 'unavailable' && Number(m.value) > 0 ? { borderColor: 'rgba(231,76,60,0.4)' } : undefined}
-            >
-              <span className="ha-metric-icon">{metricIcon(m.key)}</span>
-              <span className="ha-metric-value" style={m.key === batteryLow?.key ? { color: '#e74c3c' } : undefined}>
-                {typeof m.value === 'number' && Number.isFinite(m.value) ? m.value : m.value}
-              </span>
-              {m.unit && <span className="ha-metric-unit">{m.unit}</span>}
-              <span className="ha-metric-label">{m.label}</span>
-            </div>
-          ))}
+          {metrics.map((m) => {
+            const Icon = metricIcon(m.key);
+            return (
+              <div
+                className="ha-metric"
+                key={m.key}
+                style={m.key === 'unavailable' && Number(m.value) > 0 ? { borderColor: 'rgba(239,68,68,0.4)' } : undefined}
+              >
+                <span className="ha-metric-icon"><Icon className="w-4 h-4" /></span>
+                <span className="ha-metric-value" style={m.key === batteryLow?.key ? { color: '#ef4444' } : undefined}>
+                  {typeof m.value === 'number' && Number.isFinite(m.value) ? m.value : m.value}
+                </span>
+                {m.unit && <span className="ha-metric-unit">{m.unit}</span>}
+                <span className="ha-metric-label">{m.label}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Unavailable devices */}
       {unavailable.count > 0 && (
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
-          <div className="net-section-title" style={{ color: '#e74c3c' }}>
+          <div className="net-section-title" style={{ color: '#ef4444' }}>
             Unavailable devices · {unavailable.count}
           </div>
           <div className="ha-unavailable">

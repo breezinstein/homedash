@@ -7,6 +7,7 @@
  * power, and the lowest battery level.
  */
 
+import { House, Lightbulb, DoorOpen, AlertTriangle, Plug, Battery } from 'lucide-react';
 import type { HomeAssistantSnapshot, HomeAssistantMetric, HomeAssistantPump } from '../../types';
 import { SourceDot } from './SourceDot';
 import { SummaryRow } from './SummaryRow';
@@ -46,7 +47,9 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
     <section className="card">
       <div className="card-header">
         <div className="card-title-row">
-          <span className="card-icon card-icon-blue">🏠</span>
+          <span className="card-icon card-icon-blue">
+            <House className="w-4 h-4" />
+          </span>
           <div className="title-group">
             <span className="title">Home Status</span>
             <span className="subtitle">{ha?.locationName || 'Home Assistant'}</span>
@@ -56,7 +59,7 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
       </div>
 
       {down ? (
-        <div className="text-[#e74c3c] text-[12px]">{ha?.error || 'Home Assistant unreachable'}</div>
+        <div className="text-[var(--mon-danger)] text-[12px]">{ha?.error || 'Home Assistant unreachable'}</div>
       ) : (
         <div className="summary-body">
           {/* Hero: pressure pump */}
@@ -64,11 +67,11 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
             <div className="pump-box">
               <div
                 className="pump-dot"
-                style={{ color: ha.pump.running ? '#00aaff' : '#a0a0a0' }}
+                style={{ color: ha.pump.running ? '#38bdf8' : 'var(--mon-text-muted)' }}
               >
                 ● PUMP {ha.pump.running ? 'RUNNING' : 'OFF'}
               </div>
-              <div className="infinity-symbol" style={{ color: ha.pump.running ? '#ffffff' : '#707070' }}>
+              <div className="infinity-symbol" style={{ color: ha.pump.running ? '#ffffff' : 'var(--mon-text-faint)' }}>
                 {ha.pump.running
                   ? (ha.pump.timerRemaining != null ? '⏳' : '∞')
                   : '■'}
@@ -80,28 +83,28 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
 
           {/* Metrics */}
           <div className="summary-list">
-            <SummaryRow icon="💡" label="Lights on" value={lights ? `${lights.value} lights` : '—'} />
+            <SummaryRow icon={<Lightbulb className="w-3.5 h-3.5" />} label="Lights on" value={lights ? `${lights.value} lights` : '—'} />
             <SummaryRow
-              icon="🚪"
+              icon={<DoorOpen className="w-3.5 h-3.5" />}
               label="Doors open"
               value={doors ? `${doors.value} open` : '—'}
-              accent={Number(doors?.value) > 0 ? '#e74c3c' : undefined}
+              accent={Number(doors?.value) > 0 ? '#ef4444' : undefined}
             />
             <SummaryRow
-              icon="⚠️"
+              icon={<AlertTriangle className="w-3.5 h-3.5" />}
               label="Unavailable devices"
               value={`${unavailableCount} unavailable`}
-              accent={unavailableCount > 0 ? '#e74c3c' : undefined}
+              accent={unavailableCount > 0 ? '#ef4444' : undefined}
             />
             {power && (
-              <SummaryRow icon="🔌" label={power.label} value={`${power.value} ${power.unit ?? ''}`} />
+              <SummaryRow icon={<Plug className="w-3.5 h-3.5" />} label={power.label} value={`${power.value} ${power.unit ?? ''}`} />
             )}
             {battery && (
               <SummaryRow
-                icon="🔋"
+                icon={<Battery className="w-3.5 h-3.5" />}
                 label={battery.label}
                 value={`${battery.value} ${battery.unit ?? ''}`}
-                accent={Number(battery.value) <= 20 ? '#e74c3c' : undefined}
+                accent={Number(battery.value) <= 20 ? '#ef4444' : undefined}
               />
             )}
           </div>

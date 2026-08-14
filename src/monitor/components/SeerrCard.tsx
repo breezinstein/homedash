@@ -1,3 +1,4 @@
+import { Search } from 'lucide-react';
 import type { SeerrSnapshot, SeerrIssue, SeerrRequest } from '../../types';
 import { SourceDot } from './SourceDot';
 
@@ -7,10 +8,10 @@ interface SeerrCardProps {
 
 // Overseerr / Seerr issue types: 1 video, 2 audio, 3 subtitles, 4 other.
 const ISSUE_TYPE: Record<number, { label: string; color: string }> = {
-  1: { label: 'Video', color: '#e67e22' },
-  2: { label: 'Audio', color: '#e67e22' },
-  3: { label: 'Subtitles', color: '#6c5ce7' },
-  4: { label: 'Other', color: '#a0a0a0' },
+  1: { label: 'Video', color: '#f59e0b' },
+  2: { label: 'Audio', color: '#f59e0b' },
+  3: { label: 'Subtitles', color: '#6366f1' },
+  4: { label: 'Other', color: '#888894' },
 };
 
 // Kiosk: cap rows per section so the card always fits without scrolling.
@@ -34,10 +35,13 @@ export function SeerrCard({ seerr }: SeerrCardProps) {
   const unattendedCount = unattended.length;
 
   return (
-    <section className="flex flex-col rounded-2xl border border-[var(--color-border)] p-[14px_16px] bg-[var(--color-surface)] min-h-0 overflow-hidden">
+    <section className="media-card">
       {/* Header */}
       <div className="flex items-center gap-[9px] mb-[11px]">
-        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)]">🔍 Seerr</h2>
+        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)] flex items-center gap-1.5">
+          <Search className="w-4 h-4 text-[#6366f1]" />
+          Seerr
+        </h2>
         <span className="text-[11px] text-[var(--color-text-secondary)]">
           {seerr.version ? `v${seerr.version}` : 'Overseerr / Jellyseerr'}
         </span>
@@ -94,7 +98,7 @@ export function SeerrCard({ seerr }: SeerrCardProps) {
 }
 
 function IssueRow({ iss }: { iss: SeerrIssue }) {
-  const t = ISSUE_TYPE[iss.issueType] ?? { label: 'Issue', color: '#a0a0a0' };
+  const t = ISSUE_TYPE[iss.issueType] ?? { label: 'Issue', color: '#888894' };
   return (
     <div
       className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] px-[8px] py-[5px] bg-[var(--color-background)] text-[12px] mb-[4px]"
@@ -114,7 +118,7 @@ function IssueRow({ iss }: { iss: SeerrIssue }) {
 
 function RequestRow({ req }: { req: SeerrRequest }) {
   const failed = req.status === 'failed';
-  const color = failed ? '#e74c3c' : '#f1c40f';
+  const color = failed ? '#ef4444' : '#f59e0b';
   const label = failed ? 'Failed' : 'Pending';
   const title = `${req.mediaTitle}${req.is4k ? ' (4K)' : ''} — ${label} request by ${req.requestedBy}${req.createdAt ? ` ${timeAgo(req.createdAt)}` : ''}`;
   return (

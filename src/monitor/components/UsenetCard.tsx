@@ -1,3 +1,4 @@
+import { Package, Download } from 'lucide-react';
 import type { UsenetSnapshot, UsenetInstance, UsenetSlot } from '../../types';
 import { SourceDot } from './SourceDot';
 import { formatByteRate, formatEta } from '../format';
@@ -26,9 +27,12 @@ function InstanceCard({ inst }: { inst: UsenetInstance }) {
     'bg-[var(--color-surface)] text-[var(--color-text-secondary)]';
 
   return (
-    <section className="flex flex-col rounded-2xl border border-[var(--color-border)] p-[14px_16px] bg-[var(--color-surface)] min-h-0">
+    <section className="media-card">
       <div className="flex items-center gap-[9px] mb-[11px]">
-        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)]">{inst.type === 'sabnzbd' ? '📦 SABnzbd' : '⬇ NZBGet'}</h2>
+        <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)] flex items-center gap-1.5">
+          {inst.type === 'sabnzbd' ? <Package className="w-4 h-4 text-[#6366f1]" /> : <Download className="w-4 h-4 text-[#6366f1]" />}
+          {inst.type === 'sabnzbd' ? 'SABnzbd' : 'NZBGet'}
+        </h2>
         <span className={`text-[10px] font-extrabold tracking-[.5px] uppercase px-[8px] py-[3px] rounded-md ml-2 ${stateChipClass}`}>{stateLabel}</span>
         <div className="ml-auto"><SourceDot status={inst.status} /></div>
         <span className="text-[11px] text-[var(--color-text-secondary)]">{inst.name}</span>

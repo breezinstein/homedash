@@ -71,7 +71,7 @@ function CompactStreamRow({ stream: s }: { stream: MediaStream }) {
                 className="progress-fill"
                 style={{
                   width: `${Math.min(100, s.progressPercent)}%`,
-                  background: isTranscode ? '#e67e22' : '#6c5ce7',
+                  background: isTranscode ? '#f59e0b' : '#6366f1',
                 }}
               />
             </div>

@@ -1,3 +1,4 @@
+import { Container } from 'lucide-react';
 import type { DockerSummary } from '../../types';
 import { SourceDot } from './SourceDot';
 import { RingGauge } from './RingGauge';
@@ -15,7 +16,9 @@ export function DockerCard({ docker }: DockerCardProps) {
     <section className="card">
       <div className="card-header">
         <div className="card-title-row">
-          <span className="card-icon card-icon-purple">🐳</span>
+          <span className="card-icon card-icon-purple">
+            <Container className="w-4 h-4" />
+          </span>
           <div className="title-group">
             <span className="title">Docker</span>
             <span className="subtitle">
@@ -35,7 +38,7 @@ export function DockerCard({ docker }: DockerCardProps) {
           {/* Gauge */}
           <div className="summary-gauge">
             <div className="gauge-box" style={{ margin: '0 auto' }}>
-              <RingGauge percent={runPct} size={70} color="#6c5ce7" />
+              <RingGauge percent={runPct} size={70} color="#6366f1" />
               <div className="gauge-val">{docker.running}/{total}</div>
             </div>
           </div>
@@ -43,10 +46,10 @@ export function DockerCard({ docker }: DockerCardProps) {
           {/* Counts + problems */}
           <div className="summary-list">
             <div className="docker-counts">
-              <DockerCount color="#2ecc71" label="Running" value={docker.running} />
-              <DockerCount color="#6c5ce7" label="Healthy" value={docker.healthy} />
-              <DockerCount color="#e74c3c" label="Unhealthy" value={docker.unhealthy} />
-              <DockerCount color="#f1c40f" label="Restarting" value={docker.restarting} />
+              <DockerCount color="#34d399" label="Running" value={docker.running} />
+              <DockerCount color="#6366f1" label="Healthy" value={docker.healthy} />
+              <DockerCount color="#ef4444" label="Unhealthy" value={docker.unhealthy} />
+              <DockerCount color="#f59e0b" label="Restarting" value={docker.restarting} />
             </div>
 
             {docker.problems.length > 0 && (
@@ -69,7 +72,7 @@ export function DockerCard({ docker }: DockerCardProps) {
       )}
 
       {total === 0 && (
-        <div className="text-[#a0a0a0] text-[12px]">No container data available</div>
+        <div className="text-[var(--mon-text-muted)] text-[12px]">No container data available</div>
       )}
     </section>
   );

@@ -71,7 +71,7 @@ export function PowerPanel({ solar }: PowerPanelProps) {
 
 function SocCard({ soc, runtime, charging }: { soc: number | null; runtime: { text: string; color: string }; charging: boolean }) {
   // SOC is a "low is bad" gauge: green normal, amber ≤ 30%, red ≤ 15%.
-  const socColor = soc == null ? '#2ecc71' : soc <= 15 ? '#e74c3c' : soc <= 30 ? '#e67e22' : '#2ecc71';
+  const socColor = soc == null ? '#34d399' : soc <= 15 ? '#ef4444' : soc <= 30 ? '#f59e0b' : '#34d399';
   return (
     <div className="solar-summary-card">
       <div className="solar-summary-label">Battery SOC</div>
@@ -117,25 +117,25 @@ function InverterCard({ inv }: { inv: InverterDetail }) {
           Inverter {inv.id}
           {inv.serialNumber && <span className="node-os">{inv.serialNumber}</span>}
         </span>
-        <span style={{ fontSize: 10, color: '#808080' }}>{inv.deviceMode || ''}</span>
+        <span style={{ fontSize: 10, color: '#636372' }}>{inv.deviceMode || ''}</span>
       </div>
 
       <BarMetric label="Load" value={fmtPower(inv.loadPowerW)}
-        pct={loadPct} color={loadPct > 80 ? '#e67e22' : '#e0e0e0'} />
+        pct={loadPct} color={loadPct > 80 ? '#f59e0b' : '#c7c7d0'} />
       <BarMetric label="PV" value={fmtPower(inv.pvPowerW)}
-        pct={Math.abs(inv.pvPowerW ?? 0) / Math.max(1, invMax) * 100} color="#f1c40f" />
+        pct={Math.abs(inv.pvPowerW ?? 0) / Math.max(1, invMax) * 100} color="#fbbf24" />
       <BarMetric label="Grid" value={fmtPower(inv.gridPowerW)}
         pct={Math.abs(inv.gridPowerW ?? 0) / Math.max(1, invMax) * 100}
-        color={inv.gridPowerW != null && inv.gridPowerW > 5 ? '#e67e22' : '#808080'} />
+        color={inv.gridPowerW != null && inv.gridPowerW > 5 ? '#f59e0b' : '#636372'} />
       <BarMetric label="Battery" value={fmtPower(inv.batteryPowerW)}
         pct={Math.abs(inv.batteryPowerW ?? 0) / Math.max(1, invMax) * 100}
-        color={inv.batteryPowerW != null && inv.batteryPowerW > 5 ? '#2ecc71'
-          : inv.batteryPowerW != null && inv.batteryPowerW < -5 ? '#e74c3c' : '#808080'} />
+        color={inv.batteryPowerW != null && inv.batteryPowerW > 5 ? '#34d399'
+          : inv.batteryPowerW != null && inv.batteryPowerW < -5 ? '#ef4444' : '#636372'} />
 
       <div className="node-footer">
         <span>Batt <b>{fmt(inv.batteryVoltage, 'V')}</b></span>
         <span>AC <b>{fmt(inv.acOutputVoltage, 'V', 0)} · {fmt(inv.acOutputFrequency, 'Hz')}</b></span>
-        <span>Temp <b style={{ color: (inv.temperature ?? 0) > 50 ? '#e74c3c' : (inv.temperature ?? 0) > 40 ? '#e67e22' : '#e0e0e0' }}>{fmt(inv.temperature, '°C')}</b></span>
+        <span>Temp <b style={{ color: (inv.temperature ?? 0) > 50 ? '#ef4444' : (inv.temperature ?? 0) > 40 ? '#f59e0b' : '#c7c7d0' }}>{fmt(inv.temperature, '°C')}</b></span>
       </div>
     </div>
   );
@@ -144,8 +144,8 @@ function InverterCard({ inv }: { inv: InverterDetail }) {
 function BatteryCard({ b }: { b: BatteryDetail }) {
   const batSoc = b.stateOfChargePercent;
   const socColor = batSoc != null
-    ? batSoc <= 20 ? '#e74c3c' : batSoc <= 50 ? '#e67e22' : '#2ecc71'
-    : '#808080';
+    ? batSoc <= 20 ? '#ef4444' : batSoc <= 50 ? '#f59e0b' : '#34d399'
+    : '#636372';
   const batCap = b.capacityAh ?? 200;
   const curPct = Math.abs(b.currentA ?? 0) / Math.max(1, batCap * 0.5) * 100;
   const pwrPct = Math.abs(b.powerW ?? 0) / Math.max(1, batCap * 50) * 100;
@@ -161,12 +161,12 @@ function BatteryCard({ b }: { b: BatteryDetail }) {
 
       <BarMetric label="Power" value={fmtPower(b.powerW)}
         pct={pwrPct}
-        color={b.powerW != null && b.powerW > 5 ? '#2ecc71'
-          : b.powerW != null && b.powerW < -5 ? '#e74c3c' : '#808080'} />
+        color={b.powerW != null && b.powerW > 5 ? '#34d399'
+          : b.powerW != null && b.powerW < -5 ? '#ef4444' : '#636372'} />
       <BarMetric label="Current" value={fmt(b.currentA, 'A')}
-        pct={curPct} color="#6c5ce7" />
+        pct={curPct} color="#6366f1" />
       <BarMetric label="Voltage" value={fmt(b.voltage, 'V')}
-        pct={Math.abs(b.voltage ?? 0) / 60 * 100} color="#808080" />
+        pct={Math.abs(b.voltage ?? 0) / 60 * 100} color="#636372" />
 
       <div className="node-footer">
         <span>Temp <b>{fmt(b.temperature, '°C')}</b></span>

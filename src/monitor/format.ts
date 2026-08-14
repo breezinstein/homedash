@@ -93,9 +93,9 @@ export function runtimeLabel(charging: boolean): string {
 
 /** Solar "battery runtime" label plus its warning colour. */
 export function formatRuntime(mins: number | null): { text: string; color: string } {
-  if (mins == null || !Number.isFinite(mins)) return { text: '—', color: '#808080' };
+  if (mins == null || !Number.isFinite(mins)) return { text: '—', color: '#636372' };
   const total = Math.max(0, Math.round(mins));
-  if (total < 1) return { text: '<1m', color: '#e74c3c' };
+  if (total < 1) return { text: '<1m', color: '#ef4444' };
   const d = Math.floor(total / 1440);
   const h = Math.floor((total % 1440) / 60);
   const m = total % 60;
@@ -103,7 +103,7 @@ export function formatRuntime(mins: number | null): { text: string; color: strin
   if (d > 0) text = `${d}d ${h}h`;
   else if (h > 0) text = `${h}h ${m}m`;
   else text = `${m}m`;
-  const color = total < 120 ? '#e74c3c' : total < 240 ? '#e67e22' : '#2ecc71';
+  const color = total < 120 ? '#ef4444' : total < 240 ? '#f59e0b' : '#34d399';
   return { text, color };
 }
 

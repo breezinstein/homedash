@@ -1,3 +1,4 @@
+import { Shield, Globe, Signal, Pause, Cpu } from 'lucide-react';
 import type { OpnsenseSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
 import { RingGauge } from './RingGauge';
@@ -30,7 +31,9 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
     <section className="card">
       <div className="card-header">
         <div className="card-title-row">
-          <span className="card-icon card-icon-orange">🛡️</span>
+          <span className="card-icon card-icon-orange">
+            <Shield className="w-4 h-4" />
+          </span>
           <div className="title-group">
             <span className="title">OPNsense</span>
             <span className="subtitle">Multi-WAN</span>
@@ -40,7 +43,7 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
       </div>
 
       {opnsense.status === 'down' ? (
-        <div className="text-[#e74c3c] text-[12px]">{opnsense.error || 'Unreachable'}</div>
+        <div className="text-[var(--mon-danger)] text-[12px]">{opnsense.error || 'Unreachable'}</div>
       ) : (
         <div className="summary-body">
           {/* Gauge + throughput headline */}
@@ -57,7 +60,7 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
           <div className="summary-list">
             <div className="summary-row">
               <span className="summary-row-key">
-                <span className="summary-row-icon">🌐</span>
+                <span className="summary-row-icon"><Globe className="w-3.5 h-3.5" /></span>
                 Active gateway
               </span>
               <span className="gateway-pill">
@@ -68,10 +71,10 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
             {activeWan && (
               <div className="summary-row">
                 <span className="summary-row-key">
-                  <span className="summary-row-icon">📶</span>
+                  <span className="summary-row-icon"><Signal className="w-3.5 h-3.5" /></span>
                   {activeWan.description || activeWan.name}
                 </span>
-                <span className="summary-row-value" style={{ color: '#2ecc71', fontSize: 11 }}>
+                <span className="summary-row-value" style={{ color: '#34d399', fontSize: 11 }}>
                   ↓ {formatBitRate(activeWan.inBps ?? 0)} · ↑ {formatBitRate(activeWan.outBps ?? 0)}
                 </span>
               </div>
@@ -80,10 +83,10 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
             {standbyWans.map((iface) => (
               <div className="summary-row" key={iface.name}>
                 <span className="summary-row-key">
-                  <span className="summary-row-icon">⏸</span>
+                  <span className="summary-row-icon"><Pause className="w-3.5 h-3.5" /></span>
                   {iface.description || iface.name}
                 </span>
-                <span className="summary-row-value" style={{ color: '#a0a0a0' }}>
+                <span className="summary-row-value" style={{ color: 'var(--mon-text-muted)' }}>
                   Standby
                 </span>
               </div>
@@ -91,7 +94,7 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
 
             <div className="summary-row">
               <span className="summary-row-key">
-                <span className="summary-row-icon">🧠</span>
+                <span className="summary-row-icon"><Cpu className="w-3.5 h-3.5" /></span>
                 Memory usage
               </span>
               <span className="summary-row-value">{memDetail}</span>

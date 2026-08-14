@@ -1,3 +1,4 @@
+import { Bell, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import type { AlertInstance, Severity } from '../../types';
 import { SEVERITY_COLORS } from '../constants';
 import { formatAgo, stripHtml } from '../format';
@@ -20,7 +21,9 @@ export function AlertsRail({ firing, recentlyResolved }: AlertsRailProps) {
     <section className="alerts-card">
       {/* Header */}
       <div className="alerts-header">
-        <span style={{ fontSize: 16 }}>🔔</span>
+        <span className="alerts-header-icon">
+          <Bell className="w-4 h-4" />
+        </span>
         <span className="alerts-title">Alerts</span>
         {firingCount > 0 && (
           <span className="alerts-firing-badge">{firingCount} firing</span>
@@ -29,7 +32,7 @@ export function AlertsRail({ firing, recentlyResolved }: AlertsRailProps) {
 
       {/* Firing — critical first, then by age */}
       <AlertGroup
-        title="FIRING"
+        title="Firing"
         alerts={[...firing].sort(
           (a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.since - a.since,
         )}
@@ -37,7 +40,7 @@ export function AlertsRail({ firing, recentlyResolved }: AlertsRailProps) {
       />
       {/* Recently resolved */}
       <AlertGroup
-        title="RECENTLY RESOLVED"
+        title="Recently Resolved"
         alerts={recentlyResolved}
         variant="ok"
       />
@@ -61,7 +64,8 @@ function AlertGroup({
       <div className="alert-group-title">{title}</div>
       {alerts.map((a) => {
         const isFiring = variant === 'firing';
-        const color = isFiring ? (SEVERITY_COLORS[a.severity] ?? '#e67e22') : '#2ecc71';
+        const color = isFiring ? (SEVERITY_COLORS[a.severity] ?? '#f59e0b') : '#34d399';
+        const Icon = isFiring ? AlertTriangle : CheckCircle2;
         return (
           <div
             key={a.id}
@@ -72,7 +76,7 @@ function AlertGroup({
               color,
             }}
           >
-            <span>{isFiring ? '⚠️' : '✔'}</span>
+            <Icon className="w-4 h-4 flex-shrink-0" />
             <div className="alert-text">
               <span>{stripHtml(a.message)}</span>
               <span className="alert-ago">

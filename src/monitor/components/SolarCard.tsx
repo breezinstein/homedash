@@ -1,3 +1,4 @@
+import { Sun, Battery, Plug, House, Clock } from 'lucide-react';
 import type { SolarSnapshot } from '../../types';
 import { SourceDot } from './SourceDot';
 import { RingGauge } from './RingGauge';
@@ -21,7 +22,7 @@ function formatPower(w: number | null): string {
  */
 export function SolarCard({ solar }: PowerCardProps) {
   const soc = solar.batterySocPercent;
-  const socColor = soc == null ? '#2ecc71' : soc <= 15 ? '#e74c3c' : soc <= 30 ? '#e67e22' : '#2ecc71';
+  const socColor = soc == null ? '#34d399' : soc <= 15 ? '#ef4444' : soc <= 30 ? '#f59e0b' : '#34d399';
 
   const batt = solar.batteryPowerW;
   const battCharging = batteryCharging(batt);
@@ -44,7 +45,9 @@ export function SolarCard({ solar }: PowerCardProps) {
     <section className="card">
       <div className="card-header">
         <div className="card-title-row">
-          <span className="card-icon card-icon-green">☀️</span>
+          <span className="card-icon card-icon-green">
+            <Sun className="w-4 h-4" />
+          </span>
           <div className="title-group">
             <span className="title">Power</span>
             <span className="subtitle">Solar Assistant</span>
@@ -67,19 +70,19 @@ export function SolarCard({ solar }: PowerCardProps) {
         {/* Metrics */}
         <div className="summary-list">
           <SummaryRow
-            icon="🔋"
+            icon={<Battery className="w-3.5 h-3.5" />}
             label="Battery"
             value={`${battSign} ${battVal}`.trim()}
-            accent={battCharging ? '#2ecc71' : battDischarging ? '#e74c3c' : undefined}
+            accent={battCharging ? '#34d399' : battDischarging ? '#ef4444' : undefined}
           />
           <SummaryRow
-            icon="🔌"
+            icon={<Plug className="w-3.5 h-3.5" />}
             label="Grid"
             value={gridVal}
-            accent={gridExport ? '#2ecc71' : gridImport ? '#e67e22' : undefined}
+            accent={gridExport ? '#34d399' : gridImport ? '#f59e0b' : undefined}
           />
-          <SummaryRow icon="🏠" label="House load" value={formatPower(solar.loadPowerW)} />
-          <SummaryRow icon="⏱" label={runtimeLabel(battCharging)} value={runtime.text} accent={runtime.color} />
+          <SummaryRow icon={<House className="w-3.5 h-3.5" />} label="House load" value={formatPower(solar.loadPowerW)} />
+          <SummaryRow icon={<Clock className="w-3.5 h-3.5" />} label={runtimeLabel(battCharging)} value={runtime.text} accent={runtime.color} />
         </div>
       </div>
     </section>

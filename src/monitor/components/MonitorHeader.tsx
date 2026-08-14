@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Settings } from 'lucide-react';
+import { Activity, Settings } from 'lucide-react';
 import type { MonitorOverview } from '../../types';
 
 interface MonitorHeaderProps {
@@ -33,7 +33,9 @@ export function MonitorHeader({
   return (
     <header className="monitor-header">
       {/* Logo */}
-      <div className="monitor-logo">▣</div>
+      <div className="monitor-logo">
+        <Activity className="w-5 h-5" strokeWidth={2.25} />
+      </div>
       <div className="monitor-title-group">
         <h1 className="monitor-title">Homelab Dashboard</h1>
         <p className="monitor-subtitle">
@@ -78,43 +80,16 @@ export function MonitorHeader({
 }
 
 function StatusPill({ status, label }: { status: string; label: string }) {
-  const dotColor =
+  const variant =
     status === 'ok'
-      ? '#2ecc71'
+      ? 'status-pill--ok'
       : status === 'degraded'
-        ? '#e67e22'
-        : '#e74c3c';
-  const borderColor =
-    status === 'ok'
-      ? 'rgba(46,204,113,.35)'
-      : status === 'degraded'
-        ? 'rgba(230,126,34,.4)'
-        : 'rgba(231,76,60,.6)';
-  const bgColor =
-    status === 'ok'
-      ? 'rgba(46,204,113,.1)'
-      : status === 'degraded'
-        ? 'rgba(230,126,34,.1)'
-        : 'rgba(231,76,60,.22)';
+        ? 'status-pill--degraded'
+        : 'status-pill--critical';
 
   return (
-    <div
-      className="status-pill"
-      style={{
-        color: dotColor,
-        backgroundColor: bgColor,
-        borderColor: borderColor,
-        animation: status === 'critical' ? 'pulse 1.6s infinite' : undefined,
-        boxShadow:
-          status === 'critical'
-            ? '0 0 0 0 rgba(239,68,68,.5)'
-            : undefined,
-      }}
-    >
-      <span
-        className="status-pill-dot"
-        style={{ backgroundColor: dotColor, boxShadow: `0 0 8px ${dotColor}` }}
-      />
+    <div className={`status-pill ${variant}`}>
+      <span className="status-pill-dot" />
       {label}
     </div>
   );

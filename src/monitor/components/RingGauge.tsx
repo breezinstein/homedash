@@ -18,10 +18,10 @@ interface RingGaugeProps {
   className?: string;
 }
 
-const bgColor = '#2a2a2c';
-const defaultColor = '#2ecc71';
-const defaultWarn = '#e67e22';
-const defaultCritical = '#e74c3c';
+const bgColor = '#2b2b36';
+const defaultColor = '#34d399';
+const defaultWarn = '#f59e0b';
+const defaultCritical = '#ef4444';
 
 /**
  * Minimal SVG ring gauge. Renders a background track and a foreground arc
