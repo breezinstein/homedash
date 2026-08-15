@@ -419,6 +419,20 @@ app.use('/uploads', express.static(join(__dirname, 'data', 'uploads')));
 // Serve cached icons
 app.use('/icons', express.static(ICONS_CACHE_DIR));
 
+// Find a cached icon file for a URL hash regardless of extension. The stored
+// file's extension depends on what the upstream returned at fetch time
+// (webp/svg/jpg/...), not on the URL's own extension, so a plain
+// `${hash}.png` lookup misses whenever the upstream served anything other than
+// a PNG. Scanning by hash prefix makes the cache actually hit.
+function findCachedIcon(urlHash) {
+  try {
+    const files = readdirSync(ICONS_CACHE_DIR);
+    return files.find((file) => file.startsWith(`${urlHash}.`)) || null;
+  } catch {
+    return null;
+  }
+}
+
 // GET /api/icons/proxy - Proxy and cache external icon (admin: outbound
 // fetcher = SSRF vector, so it must not be reachable anonymously)
 // Public: icons are part of the read-only dashboard view, so anonymous
@@ -441,22 +455,25 @@ app.get('/api/icons/proxy', async (req, res) => {
 
     // Create a hash of the URL for the filename
     const urlHash = crypto.createHash('md5').update(iconUrl).digest('hex');
-    
-    // Try to determine extension from URL
+
+    // The cached file's extension reflects what the upstream returned at
+    // fetch time, not the URL's own extension. Look the hash up by prefix so
+    // extensionless URLs (e.g. `.../home-assistant` -> cached as `<hash>.webp`)
+    // still hit their previously cached icon instead of re-fetching and
+    // falling back to a now-404ing upstream.
+    const cachedFilename = findCachedIcon(urlHash);
+    if (cachedFilename) {
+      return res.json({
+        cached: true,
+        url: `/icons/${cachedFilename}`
+      });
+    }
+
+    // Try to determine extension from URL (used as the fallback filename when
+    // the upstream content-type is unknown).
     let ext = extname(parsedUrl.pathname).toLowerCase();
     if (!ext || !['.png', '.jpg', '.jpeg', '.gif', '.svg', '.ico', '.webp'].includes(ext)) {
       ext = '.png'; // Default to png
-    }
-    
-    const cachedFilename = `${urlHash}${ext}`;
-    const cachedPath = join(ICONS_CACHE_DIR, cachedFilename);
-
-    // Check if already cached
-    if (existsSync(cachedPath)) {
-      return res.json({ 
-        cached: true, 
-        url: `/icons/${cachedFilename}` 
-      });
     }
 
     // Fetch the icon with timeout
