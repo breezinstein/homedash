@@ -65,7 +65,7 @@ export function HomePanel({ homeAssistant: ha }: HomePanelProps) {
           <span className="ha-summary-item">🧩 {ha.entityCount} entities</span>
           <span
             className="ha-summary-item"
-            style={unavailable.count > 0 ? { color: '#ef4444' } : { color: '#34d399' }}
+            style={unavailable.count > 0 ? { color: 'var(--mon-danger)' } : { color: 'var(--mon-ok)' }}
           >
             {unavailable.count > 0 ? `⚠ ${unavailable.count} unavailable` : '● all online'}
           </span>
@@ -85,7 +85,7 @@ export function HomePanel({ homeAssistant: ha }: HomePanelProps) {
                 style={m.key === 'unavailable' && Number(m.value) > 0 ? { borderColor: 'rgba(239,68,68,0.4)' } : undefined}
               >
                 <span className="ha-metric-icon"><Icon className="w-4 h-4" /></span>
-                <span className="ha-metric-value" style={m.key === batteryLow?.key ? { color: '#ef4444' } : undefined}>
+                <span className="ha-metric-value" style={m.key === batteryLow?.key ? { color: 'var(--mon-danger)' } : undefined}>
                   {typeof m.value === 'number' && Number.isFinite(m.value) ? m.value : m.value}
                 </span>
                 {m.unit && <span className="ha-metric-unit">{m.unit}</span>}
@@ -99,7 +99,7 @@ export function HomePanel({ homeAssistant: ha }: HomePanelProps) {
       {/* Unavailable devices */}
       {unavailable.count > 0 && (
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
-          <div className="net-section-title" style={{ color: '#ef4444' }}>
+          <div className="net-section-title" style={{ color: 'var(--mon-danger)' }}>
             Unavailable devices · {unavailable.count}
           </div>
           <div className="ha-unavailable">

@@ -1,6 +1,8 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Sun, Shield, Download, Film, Search } from 'lucide-react';
 import { LoginModal } from '../components/LoginModal';
+import { useAuth } from '../context/AuthContext';
+import { useMonitorTheme } from './useMonitorTheme';
 import { useMonitorOverview } from './useMonitorOverview';
 import { useTabRotation } from './useTabRotation';
 import {
@@ -27,13 +29,40 @@ import { MonitorProgress } from './components/MonitorProgress';
 const MAX_VISIBLE_HOSTS = 9;
 
 export function MonitorApp() {
-  const { overview, isLoading, error, authRequired } = useMonitorOverview();
+  useMonitorTheme();
+  const { overview, isLoading, error } = useMonitorOverview();
+  const { authEnabled, authenticated } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [pendingSettings, setPendingSettings] = useState(false);
 
   const tabRotationSeconds = overview?.tabRotationSeconds ?? 15;
   const { activeTab, switchTab, remainingSeconds, isPaused } = useTabRotation({
     rotationSeconds: tabRotationSeconds,
   });
+
+  // Settings are admin-only. Anonymous viewers (when auth is enabled) get a
+  // login modal instead; once signed in, open the settings panel.
+  const handleSettings = () => {
+    if (authEnabled && !authenticated) {
+      setPendingSettings(true);
+      setShowLogin(true);
+    } else {
+      setSettingsOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    if (pendingSettings && authenticated) {
+      setPendingSettings(false);
+      setShowLogin(false);
+      setSettingsOpen(true);
+    }
+  }, [pendingSettings, authenticated]);
+
+  const handleLoginClose = () => {
+    setShowLogin(false);
+  };
 
   const hosts = overview?.hosts ?? [];
   const visibleHosts = hosts.slice(0, MAX_VISIBLE_HOSTS);
@@ -49,14 +78,6 @@ export function MonitorApp() {
     return `${m.activeStreams} streams · ${dlCount} downloading`;
   }, [overview]);
 
-  if (authRequired) {
-    return (
-      <div className="min-h-dvh bg-[#121215] flex items-center justify-center">
-        <LoginModal forced />
-      </div>
-    );
-  }
-
   const bannerAlerts = overview?.alerts?.firing ?? [];
 
   return (
@@ -71,7 +92,7 @@ export function MonitorApp() {
         overview={overview}
         isLoading={isLoading}
         connectionError={error}
-        onSettings={() => setSettingsOpen(true)}
+        onSettings={handleSettings}
       />
       <AlertBanner alerts={bannerAlerts} />
 
@@ -216,6 +237,9 @@ export function MonitorApp() {
 
       {/* Full-screen monitor settings (admin) */}
       {settingsOpen && <MonitorSettingsPanel onClose={() => setSettingsOpen(false)} />}
+
+      {/* Login modal for anonymous viewers who click Settings */}
+      {showLogin && <LoginModal onClose={handleLoginClose} />}
     </div>
   );
 }

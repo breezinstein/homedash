@@ -74,7 +74,7 @@ export function OpnsenseCard({ opnsense }: OpnsenseCardProps) {
                   <span className="summary-row-icon"><Signal className="w-3.5 h-3.5" /></span>
                   {activeWan.description || activeWan.name}
                 </span>
-                <span className="summary-row-value" style={{ color: '#34d399', fontSize: 11 }}>
+                <span className="summary-row-value" style={{ color: 'var(--mon-ok)', fontSize: 11 }}>
                   ↓ {formatBitRate(activeWan.inBps ?? 0)} · ↑ {formatBitRate(activeWan.outBps ?? 0)}
                 </span>
               </div>

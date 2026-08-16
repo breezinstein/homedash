@@ -64,7 +64,7 @@ function AlertGroup({
       <div className="alert-group-title">{title}</div>
       {alerts.map((a) => {
         const isFiring = variant === 'firing';
-        const color = isFiring ? (SEVERITY_COLORS[a.severity] ?? '#f59e0b') : '#34d399';
+        const color = isFiring ? (SEVERITY_COLORS[a.severity] ?? 'var(--mon-warn)') : 'var(--mon-ok)';
         const Icon = isFiring ? AlertTriangle : CheckCircle2;
         return (
           <div

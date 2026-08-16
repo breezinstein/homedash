@@ -34,8 +34,8 @@ export function HostCard({ host }: HostCardProps) {
   let tempColor: string | undefined;
   if (temp?.value != null) {
     tempLabel = `${Math.round(temp.value)}°`;
-    tempColor = temp.critical != null && temp.value >= temp.critical ? '#ef4444'
-      : temp.warning != null && temp.value >= temp.warning ? '#f59e0b' : '#34d399';
+    tempColor = temp.critical != null && temp.value >= temp.critical ? 'var(--mon-danger)'
+      : temp.warning != null && temp.value >= temp.warning ? 'var(--mon-warn)' : 'var(--mon-ok)';
   }
 
   return (
@@ -55,7 +55,7 @@ export function HostCard({ host }: HostCardProps) {
           <span>CPU</span>
           <span
             className="metric-val"
-            style={cpu.percent != null && cpu.percent >= 75 ? { color: '#f59e0b' } : undefined}
+            style={cpu.percent != null && cpu.percent >= 75 ? { color: 'var(--mon-warn)' } : undefined}
           >
             {cpu.percent != null ? `${Math.round(cpu.percent)}%` : '—'}
           </span>
@@ -88,7 +88,7 @@ export function HostCard({ host }: HostCardProps) {
           <span>Disk</span>
           <span
             className="metric-val"
-            style={(disk.percent ?? 0) >= 90 ? { color: '#ef4444' } : (disk.percent ?? 0) >= 75 ? { color: '#f59e0b' } : undefined}
+            style={(disk.percent ?? 0) >= 90 ? { color: 'var(--mon-danger)' } : (disk.percent ?? 0) >= 75 ? { color: 'var(--mon-warn)' } : undefined}
           >
             {disk.percent != null ? `${Math.round(disk.percent)}%` : '—'}
           </span>

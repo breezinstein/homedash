@@ -38,7 +38,7 @@ export function DockerCard({ docker }: DockerCardProps) {
           {/* Gauge */}
           <div className="summary-gauge">
             <div className="gauge-box" style={{ margin: '0 auto' }}>
-              <RingGauge percent={runPct} size={70} color="#6366f1" />
+              <RingGauge percent={runPct} size={70} color="var(--mon-accent)" />
               <div className="gauge-val">{docker.running}/{total}</div>
             </div>
           </div>
@@ -46,10 +46,10 @@ export function DockerCard({ docker }: DockerCardProps) {
           {/* Counts + problems */}
           <div className="summary-list">
             <div className="docker-counts">
-              <DockerCount color="#34d399" label="Running" value={docker.running} />
-              <DockerCount color="#6366f1" label="Healthy" value={docker.healthy} />
-              <DockerCount color="#ef4444" label="Unhealthy" value={docker.unhealthy} />
-              <DockerCount color="#f59e0b" label="Restarting" value={docker.restarting} />
+              <DockerCount color="var(--mon-ok)" label="Running" value={docker.running} />
+              <DockerCount color="var(--mon-accent)" label="Healthy" value={docker.healthy} />
+              <DockerCount color="var(--mon-danger)" label="Unhealthy" value={docker.unhealthy} />
+              <DockerCount color="var(--mon-warn)" label="Restarting" value={docker.restarting} />
             </div>
 
             {docker.problems.length > 0 && (

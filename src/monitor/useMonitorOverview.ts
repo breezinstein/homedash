@@ -1,22 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { MonitorOverview } from '../types';
-import { fetchOverview, AuthRequiredError } from './monitorApi';
+import { fetchOverview } from './monitorApi';
 
 interface UseMonitorOverviewResult {
   overview: MonitorOverview | null;
   isLoading: boolean;
   error: string | null;
-  authRequired: boolean;
 }
 
 // Poll /api/monitor/overview at half the server poll interval (minimum 2 s,
 // maximum 30 s). Pauses when the document is hidden, and applies a gentle
 // backoff after consecutive failures so a downed server doesn't hammer.
+// The overview endpoint is public, so there is no auth gating here.
 export function useMonitorOverview(): UseMonitorOverviewResult {
   const [overview, setOverview] = useState<MonitorOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [authRequired, setAuthRequired] = useState(false);
 
   const failCount = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -31,10 +30,6 @@ export function useMonitorOverview(): UseMonitorOverviewResult {
       setError(null);
       failCount.current = 0;
     } catch (err) {
-      if (err instanceof AuthRequiredError) {
-        setAuthRequired(true);
-        return;
-      }
       failCount.current++;
       setError(err instanceof Error ? err.message : 'Connection failed');
     } finally {
@@ -74,5 +69,5 @@ export function useMonitorOverview(): UseMonitorOverviewResult {
     };
   }, [poll]);
 
-  return { overview, isLoading, error, authRequired };
+  return { overview, isLoading, error };
 }

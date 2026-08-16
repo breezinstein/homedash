@@ -77,13 +77,13 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
         {/* Column 2: WAN Interfaces */}
         <div className="net-v2-card">
           <div className="net-section-title">WAN Interfaces</div>
-          <IfacesTable ifaces={opnsense.wanInterfaces} activeColor="#34d399" />
+          <IfacesTable ifaces={opnsense.wanInterfaces} activeColor="var(--mon-ok)" />
         </div>
 
         {/* Column 3: LAN Interfaces */}
         <div className="net-v2-card">
           <div className="net-section-title">LAN Interfaces</div>
-          <IfacesTable ifaces={opnsense.lanInterfaces} activeColor="#6366f1" />
+          <IfacesTable ifaces={opnsense.lanInterfaces} activeColor="var(--mon-accent)" />
         </div>
       </div>
 
@@ -114,7 +114,7 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
                     <div className="net-talker-bar-bg">
                       <div
                         className="net-talker-bar-fill"
-                        style={{ width: `${Math.min(100, t.percentage)}%`, backgroundColor: '#6366f1' }}
+                        style={{ width: `${Math.min(100, t.percentage)}%`, backgroundColor: 'var(--mon-accent)' }}
                       />
                     </div>
                   </div>
@@ -168,7 +168,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"
-                  style={{ width: `${Math.min(100, ((t.txBps ?? 0) / maxTx) * 100)}%`, backgroundColor: '#6366f1' }}
+                  style={{ width: `${Math.min(100, ((t.txBps ?? 0) / maxTx) * 100)}%`, backgroundColor: 'var(--mon-accent)' }}
                 />
               </div>
             </div>
@@ -177,7 +177,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"
-                  style={{ width: `${Math.min(100, ((t.rxBps ?? 0) / maxRx) * 100)}%`, backgroundColor: '#34d399' }}
+                  style={{ width: `${Math.min(100, ((t.rxBps ?? 0) / maxRx) * 100)}%`, backgroundColor: 'var(--mon-ok)' }}
                 />
               </div>
             </div>
@@ -191,7 +191,7 @@ function NtopTalkersTable({ talkers }: { talkers: NtopngTalker[] }) {
               <div className="net-talker-bar-bg">
                 <div
                   className="net-talker-bar-fill"
-                  style={{ width: `${Math.min(100, (t.bytes / maxBytes) * 100)}%`, backgroundColor: '#f59e0b' }}
+                  style={{ width: `${Math.min(100, (t.bytes / maxBytes) * 100)}%`, backgroundColor: 'var(--mon-warn)' }}
                 />
               </div>
             </div>
@@ -226,8 +226,8 @@ function IfacesTable({
     <div className="net-ifaces-list">
       {ifaces.map((iface) => {
         const statusColor =
-          iface.status === 'up' ? '#34d399' : iface.status === 'degraded' ? '#f59e0b' : '#ef4444';
-        const barColor = iface.active ? '#34d399' : activeColor;
+          iface.status === 'up' ? 'var(--mon-ok)' : iface.status === 'degraded' ? 'var(--mon-warn)' : 'var(--mon-danger)';
+        const barColor = iface.active ? 'var(--mon-ok)' : activeColor;
         return (
           <div className="net-iface-row" key={iface.name}>
             <div className="net-iface-name">
@@ -249,7 +249,7 @@ function IfacesTable({
               <span className="net-iface-bps">{formatBitRate(iface.outBps)}</span>
               <div className="progress-bg" style={{ height: 3, flex: 1 }}>
                 <div className="progress-fill"
-                  style={{ width: `${((iface.outBps ?? 0) / maxOut) * 100}%`, backgroundColor: '#6366f1' }} />
+                  style={{ width: `${((iface.outBps ?? 0) / maxOut) * 100}%`, backgroundColor: 'var(--mon-accent)' }} />
               </div>
             </div>
           </div>
