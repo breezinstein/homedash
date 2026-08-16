@@ -72,15 +72,15 @@ interface NavSectionItem {
 }
 
 const NAV_SECTIONS: NavSectionItem[] = [
-  { key: 'general', label: 'General Engine', group: 'Core', icon: Activity, accentColor: '#6366f1', description: 'Master switch, poll intervals and kiosk tab rotation' },
+  { key: 'general', label: 'General Engine', group: 'Core', icon: Activity, accentColor: 'var(--mon-accent)', description: 'Master switch, poll intervals and kiosk tab rotation' },
   { key: 'hosts', label: 'Glances Hosts', group: 'Core', icon: Server, accentColor: '#3b82f6', description: 'Server metrics (CPU, RAM, load, temperatures & disks)' },
-  { key: 'solar', label: 'Solar & Energy', group: 'Core', icon: Sun, accentColor: '#eab308', description: 'Solar Assistant battery, solar PV, grid and house load' },
+  { key: 'solar', label: 'Solar & Energy', group: 'Core', icon: Sun, accentColor: 'var(--mon-warn)', description: 'Solar Assistant battery, solar PV, grid and house load' },
   { key: 'docker', label: 'Docker Engine', group: 'Core', icon: HardDrive, accentColor: '#06b6d4', description: 'Container health, restarting/unhealthy state monitoring' },
   { key: 'media', label: 'Media Streams', group: 'Media', icon: Tv, accentColor: '#a855f7', description: 'Jellyfin and Emby active playback sessions & transcoding' },
-  { key: 'usenet', label: 'Usenet Queues', group: 'Media', icon: Download, accentColor: '#10b981', description: 'SABnzbd & NZBGet queue progress, speed & ETA' },
+  { key: 'usenet', label: 'Usenet Queues', group: 'Media', icon: Download, accentColor: 'var(--mon-ok)', description: 'SABnzbd & NZBGet queue progress, speed & ETA' },
   { key: 'arr', label: 'Sonarr / Radarr', group: 'Media', icon: Film, accentColor: '#0ea5e9', description: 'Active downloads, queue pipelines & disk health warnings' },
   { key: 'seerr', label: 'Media Requests', group: 'Media', icon: Clapperboard, accentColor: '#f97316', description: 'Overseerr & Jellyseerr pending requests and media issues' },
-  { key: 'network', label: 'Network Appliances', group: 'Infra', icon: Shield, accentColor: '#ef4444', description: 'OPNsense multi-WAN firewall & ntopng traffic analytics' },
+  { key: 'network', label: 'Network Appliances', group: 'Infra', icon: Shield, accentColor: 'var(--mon-danger)', description: 'OPNsense multi-WAN firewall & ntopng traffic analytics' },
   { key: 'home', label: 'Home Assistant', group: 'Infra', icon: House, accentColor: '#14b8a6', description: 'Smart-home device reachability, battery and sensors' },
   { key: 'alerts', label: 'Alert Rules', group: 'Automation', icon: Bell, accentColor: '#ec4899', description: 'Real-time telemetry thresholds and firing notifications' },
 ];
@@ -152,9 +152,9 @@ const METRICS: Record<AlertRule['source'], { value: string; label: string }[]> =
 const OPERATORS = ['>', '>=', '<', '<=', '==', '!='] as const;
 
 const SEVERITIES: { value: Severity; label: string; color: string; bg: string }[] = [
-  { value: 'critical', label: 'Critical', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.16)' },
-  { value: 'warning', label: 'Warning', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.16)' },
-  { value: 'info', label: 'Info', color: '#6366f1', bg: 'rgba(99, 102, 241, 0.16)' },
+  { value: 'critical', label: 'Critical', color: 'var(--mon-danger)', bg: 'rgba(239, 68, 68, 0.16)' },
+  { value: 'warning', label: 'Warning', color: 'var(--mon-warn)', bg: 'rgba(245, 158, 11, 0.16)' },
+  { value: 'info', label: 'Info', color: 'var(--mon-accent)', bg: 'rgba(99, 102, 241, 0.16)' },
 ];
 
 export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
@@ -290,13 +290,13 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
   const getBadgeForSection = (key: SectionKey): { count?: number; dot?: string } => {
     switch (key) {
       case 'general':
-        return { dot: mon.enabled ? '#10b981' : '#6b7280' };
+        return { dot: mon.enabled ? 'var(--mon-ok)' : 'var(--mon-text-faint)' };
       case 'hosts':
         return { count: mon.glancesHosts?.length ?? 0 };
       case 'solar':
-        return { dot: mon.solar?.enabled ? '#10b981' : '#6b7280' };
+        return { dot: mon.solar?.enabled ? 'var(--mon-ok)' : 'var(--mon-text-faint)' };
       case 'docker':
-        return { dot: mon.docker?.enabled !== false ? '#10b981' : '#6b7280' };
+        return { dot: mon.docker?.enabled !== false ? 'var(--mon-ok)' : 'var(--mon-text-faint)' };
       case 'media':
         return { count: mon.media?.length ?? 0 };
       case 'usenet':
@@ -436,7 +436,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
         <div className="ms-dialog items-center justify-center p-8">
           <div className="ms-loading">
             <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin" />
-            <span className="text-sm text-neutral-300 font-medium">Loading monitor configuration…</span>
+            <span className="text-sm text-[var(--mon-text-dim)] font-medium">Loading monitor configuration…</span>
           </div>
         </div>
       </div>
@@ -458,12 +458,12 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold tracking-wide uppercase ${
                   mon.enabled
                     ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
-                    : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                    : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)] border border-[var(--mon-border)]'
                 }`}
               >
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
-                    mon.enabled ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'
+                    mon.enabled ? 'bg-emerald-400 animate-pulse' : 'bg-[var(--mon-border)]'
                   }`}
                 />
                 {mon.enabled ? `Live · ${mon.pollIntervalSeconds || 10}s` : 'Paused'}
@@ -483,20 +483,20 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
           <div className="ms-spacer" />
 
           {/* Quick Stats Pill */}
-          <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 bg-[#1a1a20] border border-[#292934] rounded-lg text-[11px] text-neutral-400">
+          <div className="hidden lg:flex items-center gap-3 px-3 py-1.5 bg-[var(--mon-surface-2)] border border-[var(--mon-border)] rounded-lg text-[11px] text-[var(--mon-text-muted)]">
             <span>
-              <strong className="text-neutral-200">{mon.glancesHosts?.length ?? 0}</strong> hosts
+              <strong className="text-[var(--mon-text-dim)]">{mon.glancesHosts?.length ?? 0}</strong> hosts
             </span>
-            <span className="w-1 h-1 rounded-full bg-neutral-600" />
+            <span className="w-1 h-1 rounded-full bg-[var(--mon-border)]" />
             <span>
-              <strong className="text-neutral-200">
+              <strong className="text-[var(--mon-text-dim)]">
                 {(mon.media?.length ?? 0) + (mon.usenet?.length ?? 0) + (mon.arr?.length ?? 0)}
               </strong>{' '}
               media sources
             </span>
-            <span className="w-1 h-1 rounded-full bg-neutral-600" />
+            <span className="w-1 h-1 rounded-full bg-[var(--mon-border)]" />
             <span>
-              <strong className="text-neutral-200">
+              <strong className="text-[var(--mon-text-dim)]">
                 {(mon.alerts ?? []).filter((a) => a.enabled).length}
               </strong>{' '}
               alert rules
@@ -539,7 +539,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
 
         {/* Global Toast */}
         {toastMsg && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-lg shadow-lg shadow-black/50 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-indigo-600 text-[var(--mon-text)] text-xs font-semibold rounded-lg shadow-lg shadow-black/50 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
             <CheckCircle2 className="w-4 h-4 text-indigo-200" />
             {toastMsg}
           </div>
@@ -551,14 +551,14 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
           <nav className="ms-nav">
             {/* Search Input */}
             <div className="relative mb-2 px-1">
-              <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-neutral-500 pointer-events-none" />
+              <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--mon-text-faint)] pointer-events-none" />
               <input
                 type="text"
                 placeholder="Filter settings…"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ paddingLeft: '32px' }}
-                className="w-full bg-[#18181f] border border-[#272732] rounded-lg pr-2.5 py-1.5 text-xs text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:border-indigo-500"
+                className="w-full bg-[var(--mon-surface-2)] border border-[var(--mon-border)] rounded-lg pr-2.5 py-1.5 text-xs text-[var(--mon-text-dim)] placeholder:text-[var(--mon-text-faint)] focus:outline-none focus:border-indigo-500"
               />
             </div>
 
@@ -604,10 +604,10 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
             })}
 
             {/* Engine status footer */}
-            <div className="mt-auto pt-3 border-t border-[#23232c] px-2 flex flex-col gap-2">
-              <div className="flex items-center justify-between text-[11px] text-neutral-400">
+            <div className="mt-auto pt-3 border-t border-[var(--mon-border-soft)] px-2 flex flex-col gap-2">
+              <div className="flex items-center justify-between text-[11px] text-[var(--mon-text-muted)]">
                 <span>Telemetry Engine</span>
-                <span className={mon.enabled ? 'text-emerald-400 font-semibold' : 'text-neutral-500'}>
+                <span className={mon.enabled ? 'text-emerald-400 font-semibold' : 'text-[var(--mon-text-faint)]'}>
                   {mon.enabled ? 'Enabled' : 'Disabled'}
                 </span>
               </div>
@@ -617,7 +617,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                 className={`w-full py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all flex items-center justify-center gap-2 ${
                   mon.enabled
                     ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/20'
-                    : 'bg-neutral-800/80 border-neutral-700 text-neutral-300 hover:bg-neutral-700'
+                    : 'bg-[var(--mon-surface-2)]/80 border-[var(--mon-border)] text-[var(--mon-text-dim)] hover:bg-[var(--mon-surface-2)]'
                 }`}
               >
                 <Zap className="w-3.5 h-3.5" />
@@ -756,25 +756,25 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
               {active === 'general' && (
                 <div className="space-y-4">
                   {/* Hero Switch Card */}
-                  <div className="p-5 rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/30 via-[#181820] to-[#16161b] flex items-center justify-between gap-4">
+                  <div className="p-5 rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/30 via-[var(--mon-surface-2)] to-[var(--mon-surface)] flex items-center justify-between gap-4">
                     <div className="flex items-start gap-3.5">
                       <div className="p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400">
                         <Zap className="w-6 h-6" />
                       </div>
                       <div>
-                        <div className="text-sm font-bold text-white flex items-center gap-2">
+                        <div className="text-sm font-bold text-[var(--mon-text)] flex items-center gap-2">
                           Master Telemetry Engine
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                               mon.enabled
                                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                                : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                                : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)] border border-[var(--mon-border)]'
                             }`}
                           >
                             {mon.enabled ? 'ACTIVE' : 'IDLE'}
                           </span>
                         </div>
-                        <p className="text-xs text-neutral-400 mt-1 max-w-lg leading-relaxed">
+                        <p className="text-xs text-[var(--mon-text-muted)] mt-1 max-w-lg leading-relaxed">
                           Continuously collects data across all configured hosts, power inverters, media servers,
                           download queues, and evaluates alert rules.
                         </p>
@@ -812,7 +812,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                         onChange={(v) => updateMonitoring({ pollIntervalSeconds: v })}
                       />
 
-                      <div className="border-t border-[#23232c]" />
+                      <div className="border-t border-[var(--mon-border-soft)]" />
 
                       <PresetSlider
                         label="Kiosk Tab Auto-Rotation"
@@ -918,10 +918,10 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                   </div>
 
                   {servers.length === 0 ? (
-                    <div className="p-8 text-center bg-[#16161c] border border-[#282834] rounded-xl">
-                      <Server className="w-10 h-10 text-neutral-500 mx-auto mb-3 opacity-60" />
-                      <h4 className="text-sm font-semibold text-neutral-200">No servers configured in Homedash</h4>
-                      <p className="text-xs text-neutral-400 mt-1 max-w-md mx-auto">
+                    <div className="p-8 text-center bg-[var(--mon-surface)] border border-[var(--mon-border)] rounded-xl">
+                      <Server className="w-10 h-10 text-[var(--mon-text-faint)] mx-auto mb-3 opacity-60" />
+                      <h4 className="text-sm font-semibold text-[var(--mon-text-dim)]">No servers configured in Homedash</h4>
+                      <p className="text-xs text-[var(--mon-text-muted)] mt-1 max-w-md mx-auto">
                         Add your Glances instances in the dashboard settings first. They will automatically appear here for monitoring.
                       </p>
                     </div>
@@ -936,7 +936,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                             className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                               isChecked
                                 ? 'bg-indigo-950/20 border-indigo-500/40 shadow-sm shadow-indigo-950/50'
-                                : 'bg-[#16161b] border-[#262632] hover:border-[#383848]'
+                                : 'bg-[var(--mon-surface)] border-[var(--mon-border)] hover:border-[var(--mon-border)]'
                             }`}
                           >
                             <div className="flex items-start gap-3 min-w-0">
@@ -944,13 +944,13 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                                 className={`p-2.5 rounded-lg flex-shrink-0 ${
                                   isChecked
                                     ? 'bg-indigo-500/20 text-indigo-300'
-                                    : 'bg-neutral-800 text-neutral-500'
+                                    : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-faint)]'
                                 }`}
                               >
                                 <Server className="w-4 h-4" />
                               </div>
                               <div className="min-w-0">
-                                <div className="text-xs font-semibold text-white truncate flex items-center gap-2">
+                                <div className="text-xs font-semibold text-[var(--mon-text)] truncate flex items-center gap-2">
                                   {srv.name}
                                   {isChecked && (
                                     <span className="text-[9px] font-bold px-1.5 py-0.2 bg-indigo-500/20 text-indigo-300 rounded">
@@ -958,7 +958,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                                     </span>
                                   )}
                                 </div>
-                                <div className="text-[11px] text-neutral-400 truncate mt-0.5 font-mono">
+                                <div className="text-[11px] text-[var(--mon-text-muted)] truncate mt-0.5 font-mono">
                                   {srv.url}
                                 </div>
                               </div>
@@ -986,8 +986,8 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                           <Sun className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="text-sm font-bold text-white">Solar & Inverter Monitoring</div>
-                          <p className="text-xs text-neutral-400 mt-1 max-w-lg">
+                          <div className="text-sm font-bold text-[var(--mon-text)]">Solar & Inverter Monitoring</div>
+                          <p className="text-xs text-[var(--mon-text-muted)] mt-1 max-w-lg">
                             Polls battery state-of-charge (SOC %), solar PV generation, load, grid import/export, and runtime estimates.
                           </p>
                         </div>
@@ -1013,12 +1013,12 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                         {inverters.map((inv: any) => (
                           <div
                             key={inv.id}
-                            className="p-3 rounded-lg bg-[#141419] border border-[#262630] flex items-center justify-between text-xs"
+                            className="p-3 rounded-lg bg-[var(--mon-panel)] border border-[var(--mon-border)] flex items-center justify-between text-xs"
                           >
                             <div className="flex items-center gap-2.5">
                               <Zap className="w-4 h-4 text-amber-400" />
-                              <span className="font-semibold text-white">{inv.name}</span>
-                              <span className="text-neutral-500 font-mono">({inv.url})</span>
+                              <span className="font-semibold text-[var(--mon-text)]">{inv.name}</span>
+                              <span className="text-[var(--mon-text-faint)] font-mono">({inv.url})</span>
                             </div>
                             <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[10px] font-bold uppercase">
                               Linked
@@ -1041,8 +1041,8 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                           <HardDrive className="w-5 h-5" />
                         </div>
                         <div>
-                          <div className="text-sm font-bold text-white">Docker Container Aggregation</div>
-                          <p className="text-xs text-neutral-400 mt-1 max-w-lg">
+                          <div className="text-sm font-bold text-[var(--mon-text)]">Docker Container Aggregation</div>
+                          <p className="text-xs text-[var(--mon-text-muted)] mt-1 max-w-lg">
                             Collects container health metrics across all monitored Glances hosts and surfaces unhealthy, restarting, or dead containers.
                           </p>
                         </div>
@@ -1090,7 +1090,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                           name={item.name}
                           type={item.type}
                           url={item.url}
-                          typeColor={item.type === 'jellyfin' ? '#a855f7' : '#22c55e'}
+                          typeColor={item.type === 'jellyfin' ? '#a855f7' : 'var(--mon-ok)'}
                           badgeLabel={item.type === 'jellyfin' ? 'Jellyfin' : 'Emby'}
                           details={item.apiKey ? 'API Key Configured' : 'No Key'}
                           onCopy={() => copyToClipboard(item.url, 'Media server URL')}
@@ -1144,7 +1144,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                           name={item.name}
                           type={item.type}
                           url={item.url}
-                          typeColor={item.type === 'sabnzbd' ? '#eab308' : '#3b82f6'}
+                          typeColor={item.type === 'sabnzbd' ? 'var(--mon-warn)' : '#3b82f6'}
                           badgeLabel={item.type === 'sabnzbd' ? 'SABnzbd' : 'NZBGet'}
                           details={item.apiKey ? 'API Key Auth' : item.username ? 'Basic Auth' : 'No Auth'}
                           onCopy={() => copyToClipboard(item.url, 'Usenet URL')}
@@ -1313,7 +1313,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                     </div>
 
                     {(mon.opnsense ?? []).length === 0 ? (
-                      <div className="p-4 text-center rounded-lg bg-[#141418] border border-[#24242e] text-xs text-neutral-400">
+                      <div className="p-4 text-center rounded-lg bg-[var(--mon-panel)] border border-[var(--mon-border-soft)] text-xs text-[var(--mon-text-muted)]">
                         No OPNsense firewalls configured. Click "+ Add OPNsense" above.
                       </div>
                     ) : (
@@ -1325,7 +1325,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                             name={item.name}
                             type="OPNsense"
                             url={item.url}
-                            typeColor="#ef4444"
+                            typeColor="var(--mon-danger)"
                             badgeLabel="OPNsense"
                             details={item.insecureTls ? 'TLS Insecure Allowed' : 'Strict TLS'}
                             onCopy={() => copyToClipboard(item.url, 'OPNsense URL')}
@@ -1386,7 +1386,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                     </div>
 
                     {(mon.ntopng ?? []).length === 0 ? (
-                      <div className="p-4 text-center rounded-lg bg-[#141418] border border-[#24242e] text-xs text-neutral-400">
+                      <div className="p-4 text-center rounded-lg bg-[var(--mon-panel)] border border-[var(--mon-border-soft)] text-xs text-[var(--mon-text-muted)]">
                         No ntopng traffic analysers configured. Click "+ Add ntopng" above.
                       </div>
                     ) : (
@@ -1530,9 +1530,9 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
             <div className="p-5">
               <div className="flex items-center gap-3 text-red-400 mb-2">
                 <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                <h3 className="text-sm font-bold text-white">{confirmDialog.title}</h3>
+                <h3 className="text-sm font-bold text-[var(--mon-text)]">{confirmDialog.title}</h3>
               </div>
-              <p className="text-xs text-neutral-300 leading-relaxed pl-8">
+              <p className="text-xs text-[var(--mon-text-dim)] leading-relaxed pl-8">
                 {confirmDialog.message}
               </p>
             </div>
@@ -1625,7 +1625,7 @@ function PresetSlider({
           <div className="ms-row-label">{label}</div>
           {detail && <div className="ms-row-detail">{detail}</div>}
         </div>
-        <div className="flex items-baseline gap-1 bg-[#141419] px-3 py-1 rounded-lg border border-[#272732]">
+        <div className="flex items-baseline gap-1 bg-[var(--mon-panel)] px-3 py-1 rounded-lg border border-[var(--mon-border)]">
           <span className="ms-slider-val text-indigo-400">{value}</span>
           <span className="ms-slider-unit">{unit}</span>
         </div>
@@ -1654,8 +1654,8 @@ function PresetSlider({
                 onClick={() => onChange(p.value)}
                 className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition-all ${
                   isSelected
-                    ? 'bg-indigo-600 text-white border-indigo-500 shadow-sm'
-                    : 'bg-[#18181f] text-neutral-400 border-[#262632] hover:bg-[#202029] hover:text-neutral-200'
+                    ? 'bg-indigo-600 text-[var(--mon-text)] border-indigo-500 shadow-sm'
+                    : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)] border-[var(--mon-border)] hover:bg-[var(--mon-surface-2)] hover:text-[var(--mon-text-dim)]'
                 }`}
               >
                 {p.label}
@@ -1688,20 +1688,20 @@ function SourceMatrixChip({
       className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
         active
           ? 'bg-indigo-950/20 border-indigo-500/30 hover:border-indigo-500/50'
-          : 'bg-[#141419] border-[#252530] hover:border-[#333342] opacity-75'
+          : 'bg-[var(--mon-panel)] border-[var(--mon-border)] hover:border-[var(--mon-border)] opacity-75'
       }`}
     >
       <div className="flex items-center justify-between w-full mb-2">
-        <Icon className={`w-4 h-4 ${active ? 'text-indigo-400' : 'text-neutral-500'}`} />
+        <Icon className={`w-4 h-4 ${active ? 'text-indigo-400' : 'text-[var(--mon-text-faint)]'}`} />
         <span
           className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-            active ? 'bg-indigo-500/25 text-indigo-300' : 'bg-neutral-800 text-neutral-500'
+            active ? 'bg-indigo-500/25 text-indigo-300' : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-faint)]'
           }`}
         >
           {count}
         </span>
       </div>
-      <div className="text-xs font-semibold text-neutral-200">{label}</div>
+      <div className="text-xs font-semibold text-[var(--mon-text-dim)]">{label}</div>
     </button>
   );
 }
@@ -1720,12 +1720,12 @@ function EmptyState({
   onAction: () => void;
 }) {
   return (
-    <div className="p-8 text-center bg-[#15151b] border border-[#242430] rounded-xl flex flex-col items-center justify-center">
+    <div className="p-8 text-center bg-[var(--mon-panel)] border border-[var(--mon-border-soft)] rounded-xl flex flex-col items-center justify-center">
       <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mb-3.5">
         <Icon className="w-6 h-6" />
       </div>
-      <h4 className="text-sm font-bold text-white mb-1">{title}</h4>
-      <p className="text-xs text-neutral-400 max-w-sm mb-4 leading-relaxed">{desc}</p>
+      <h4 className="text-sm font-bold text-[var(--mon-text)] mb-1">{title}</h4>
+      <p className="text-xs text-[var(--mon-text-muted)] max-w-sm mb-4 leading-relaxed">{desc}</p>
       <button type="button" onClick={onAction} className="ms-btn ms-btn-primary text-xs">
         <Plus className="w-3.5 h-3.5" /> {actionLabel}
       </button>
@@ -1737,7 +1737,7 @@ function EntityCard({
   icon: Icon,
   name,
   url,
-  typeColor = '#6366f1',
+  typeColor = 'var(--mon-accent)',
   badgeLabel,
   details,
   onCopy,
@@ -1781,13 +1781,13 @@ function EntityCard({
             <button
               type="button"
               onClick={onCopy}
-              className="text-neutral-500 hover:text-neutral-300 p-0.5"
+              className="text-[var(--mon-text-faint)] hover:text-[var(--mon-text-dim)] p-0.5"
               title="Copy URL"
             >
               <Copy className="w-3 h-3" />
             </button>
           </div>
-          {details && <div className="text-[10px] text-neutral-500 mt-0.5">{details}</div>}
+          {details && <div className="text-[10px] text-[var(--mon-text-faint)] mt-0.5">{details}</div>}
         </div>
       </div>
 
@@ -1863,9 +1863,9 @@ function EntityModalDialog({
         {/* Header */}
         <div className="ms-submodal-header">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-white">{getTitle()}</span>
+            <span className="text-sm font-bold text-[var(--mon-text)]">{getTitle()}</span>
           </div>
-          <button type="button" onClick={onClose} className="text-neutral-400 hover:text-white p-1">
+          <button type="button" onClick={onClose} className="text-[var(--mon-text-muted)] hover:text-[var(--mon-text)] p-1">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -1879,7 +1879,7 @@ function EntityModalDialog({
               value={form.type || 'jellyfin'}
               options={[
                 { value: 'jellyfin', label: 'Jellyfin', color: '#a855f7' },
-                { value: 'emby', label: 'Emby', color: '#22c55e' },
+                { value: 'emby', label: 'Emby', color: 'var(--mon-ok)' },
               ]}
               onChange={(v) => setField('type', v)}
             />
@@ -1890,7 +1890,7 @@ function EntityModalDialog({
               label="Downloader Type"
               value={form.type || 'sabnzbd'}
               options={[
-                { value: 'sabnzbd', label: 'SABnzbd', color: '#eab308' },
+                { value: 'sabnzbd', label: 'SABnzbd', color: 'var(--mon-warn)' },
                 { value: 'nzbget', label: 'NZBGet', color: '#3b82f6' },
               ]}
               onChange={(v) => setField('type', v)}
@@ -2086,16 +2086,16 @@ function EntityModalDialog({
 
           {/* TLS Insecure Checkbox */}
           {(section === 'network' || section === 'home') && (
-            <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[#181820] border border-[#282834] cursor-pointer text-xs text-neutral-300">
+            <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[var(--mon-surface-2)] border border-[var(--mon-border)] cursor-pointer text-xs text-[var(--mon-text-dim)]">
               <input
                 type="checkbox"
                 checked={form.insecureTls === true}
                 onChange={(e) => setField('insecureTls', e.target.checked)}
-                className="w-4 h-4 rounded bg-[#141418] border-neutral-700 text-indigo-600 focus:ring-0"
+                className="w-4 h-4 rounded bg-[var(--mon-panel)] border-[var(--mon-border)] text-indigo-600 focus:ring-0"
               />
               <div>
-                <span className="font-semibold text-neutral-200">Allow Self-Signed TLS Certificates</span>
-                <p className="text-[11px] text-neutral-500">
+                <span className="font-semibold text-[var(--mon-text-dim)]">Allow Self-Signed TLS Certificates</span>
+                <p className="text-[11px] text-[var(--mon-text-faint)]">
                   Bypasses TLS verification if using a local HTTPS certificate.
                 </p>
               </div>
@@ -2134,11 +2134,11 @@ function FormField({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[11px] font-bold text-neutral-300 uppercase tracking-wider block">
+      <label className="text-[11px] font-bold text-[var(--mon-text-dim)] uppercase tracking-wider block">
         {label}
       </label>
       {children}
-      {helpText && <p className="text-[11px] text-neutral-500 leading-normal">{helpText}</p>}
+      {helpText && <p className="text-[11px] text-[var(--mon-text-faint)] leading-normal">{helpText}</p>}
     </div>
   );
 }
@@ -2156,7 +2156,7 @@ function TypePicker({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-[11px] font-bold text-neutral-300 uppercase tracking-wider block">
+      <label className="text-[11px] font-bold text-[var(--mon-text-dim)] uppercase tracking-wider block">
         {label}
       </label>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -2169,8 +2169,8 @@ function TypePicker({
               onClick={() => onChange(opt.value)}
               className={`p-2.5 rounded-lg border text-xs font-semibold transition-all text-center ${
                 isSelected
-                  ? 'bg-indigo-950/40 border-indigo-500 text-white shadow-sm'
-                  : 'bg-[#181820] border-[#282834] text-neutral-400 hover:text-neutral-200'
+                  ? 'bg-indigo-950/40 border-indigo-500 text-[var(--mon-text)] shadow-sm'
+                  : 'bg-[var(--mon-surface-2)] border-[var(--mon-border)] text-[var(--mon-text-muted)] hover:text-[var(--mon-text-dim)]'
               }`}
             >
               <div className="flex items-center justify-center gap-1.5">
@@ -2244,14 +2244,14 @@ function AlertsSection({
                 onClick={() => setFilter(sev)}
                 className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 ${
                   isSelected
-                    ? 'bg-indigo-600 border-indigo-500 text-white'
-                    : 'bg-[#181820] border-[#282834] text-neutral-400 hover:text-neutral-200'
+                    ? 'bg-indigo-600 border-indigo-500 text-[var(--mon-text)]'
+                    : 'bg-[var(--mon-surface-2)] border-[var(--mon-border)] text-[var(--mon-text-muted)] hover:text-[var(--mon-text-dim)]'
                 }`}
               >
                 <span className="capitalize">{sev}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isSelected ? 'bg-indigo-800 text-indigo-200' : 'bg-neutral-800 text-neutral-400'
+                    isSelected ? 'bg-indigo-800 text-indigo-200' : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)]'
                   }`}
                 >
                   {count}
@@ -2275,7 +2275,7 @@ function AlertsSection({
 
       {/* Rules list */}
       {filteredRules.length === 0 ? (
-        <div className="p-8 text-center bg-[#16161c] border border-[#282834] rounded-xl text-neutral-400 text-xs">
+        <div className="p-8 text-center bg-[var(--mon-surface)] border border-[var(--mon-border)] rounded-xl text-[var(--mon-text-muted)] text-xs">
           No alert rules matching this filter.
         </div>
       ) : (
@@ -2290,8 +2290,8 @@ function AlertsSection({
                 key={rule.id}
                 className={`p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${
                   rule.enabled
-                    ? 'bg-[#16161b] border-[#282834] hover:border-[#383848]'
-                    : 'bg-[#131316] border-[#202028] opacity-60'
+                    ? 'bg-[var(--mon-surface)] border-[var(--mon-border)] hover:border-[var(--mon-border)]'
+                    : 'bg-[var(--mon-bg)] border-[var(--mon-border)] opacity-60'
                 }`}
               >
                 <div className="flex items-start gap-3 min-w-0">
@@ -2305,7 +2305,7 @@ function AlertsSection({
                     <div className="flex items-center gap-2">
                       <span
                         className={`text-xs font-bold truncate ${
-                          rule.enabled ? 'text-white' : 'text-neutral-500 line-through'
+                          rule.enabled ? 'text-[var(--mon-text)]' : 'text-[var(--mon-text-faint)] line-through'
                         }`}
                       >
                         {rule.name}
@@ -2317,13 +2317,13 @@ function AlertsSection({
                         {sev.label}
                       </span>
                       {rule.notify && (
-                        <span className="text-[10px] text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded flex items-center gap-1">
+                        <span className="text-[10px] text-[var(--mon-text-muted)] bg-[var(--mon-surface-2)] px-1.5 py-0.5 rounded flex items-center gap-1">
                           <Bell className="w-2.5 h-2.5" /> Push
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-neutral-400 mt-1 truncate">
-                      <strong className="text-neutral-300">{SOURCE_LABELS[rule.source]}</strong> ·{' '}
+                    <p className="text-[11px] text-[var(--mon-text-muted)] mt-1 truncate">
+                      <strong className="text-[var(--mon-text-dim)]">{SOURCE_LABELS[rule.source]}</strong> ·{' '}
                       {metricLabel}{' '}
                       <span className="font-mono text-indigo-400 font-bold">
                         {rule.operator} {rule.threshold}
@@ -2412,11 +2412,11 @@ function AlertRuleEditModal({
         <div className="ms-submodal-header">
           <div className="flex items-center gap-2">
             <Bell className="w-4 h-4 text-indigo-400" />
-            <span className="text-sm font-bold text-white">
+            <span className="text-sm font-bold text-[var(--mon-text)]">
               {isNew ? 'Create Alert Rule' : 'Edit Alert Rule'}
             </span>
           </div>
-          <button type="button" onClick={onClose} className="text-neutral-400 hover:text-white p-1">
+          <button type="button" onClick={onClose} className="text-[var(--mon-text-muted)] hover:text-[var(--mon-text)] p-1">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -2531,16 +2531,16 @@ function AlertRuleEditModal({
             </FormField>
           </div>
 
-          <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[#181820] border border-[#282834] cursor-pointer text-xs text-neutral-300">
+          <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[var(--mon-surface-2)] border border-[var(--mon-border)] cursor-pointer text-xs text-[var(--mon-text-dim)]">
             <input
               type="checkbox"
               checked={form.notify}
               onChange={(e) => set({ notify: e.target.checked })}
-              className="w-4 h-4 rounded bg-[#141418] border-neutral-700 text-indigo-600 focus:ring-0"
+              className="w-4 h-4 rounded bg-[var(--mon-panel)] border-[var(--mon-border)] text-indigo-600 focus:ring-0"
             />
             <div>
-              <span className="font-semibold text-neutral-200">Push Browser / Webhook Notifications</span>
-              <p className="text-[11px] text-neutral-500">
+              <span className="font-semibold text-[var(--mon-text-dim)]">Push Browser / Webhook Notifications</span>
+              <p className="text-[11px] text-[var(--mon-text-faint)]">
                 Dispatches a notification when this alert rule starts firing.
               </p>
             </div>

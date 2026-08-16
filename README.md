@@ -283,6 +283,12 @@ GET  /api/notifications/stream         # SSE: live messages + status (admin)
 POST /api/notifications/dismiss        # Dismiss one / topic / all (admin)
 POST /api/notifications/test           # Server-side ntfy connectivity probe (admin)
 
+# Monitor (homelab overview kiosk)
+GET  /api/monitor/overview             # Latest aggregated snapshot (public — viewable without sign-in)
+GET  /api/monitor/alerts               # Active + recently resolved alerts (public)
+GET  /api/monitor/healthz              # Liveness check (public)
+POST /api/monitor/alerts/:id/ack       # Acknowledge a firing alert (admin)
+
 # File sharing (Phase 3)
 GET    /api/files/public{/*path}       # List / download from the public area (public)
 GET    /api/files/private{/*path}      # List / download from the private area (admin)

@@ -71,7 +71,7 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
               >
                 ● PUMP {ha.pump.running ? 'RUNNING' : 'OFF'}
               </div>
-              <div className="infinity-symbol" style={{ color: ha.pump.running ? '#ffffff' : 'var(--mon-text-faint)' }}>
+              <div className="infinity-symbol" style={{ color: ha.pump.running ? 'var(--mon-text)' : 'var(--mon-text-faint)' }}>
                 {ha.pump.running
                   ? (ha.pump.timerRemaining != null ? '⏳' : '∞')
                   : '■'}
@@ -88,13 +88,13 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
               icon={<DoorOpen className="w-3.5 h-3.5" />}
               label="Doors open"
               value={doors ? `${doors.value} open` : '—'}
-              accent={Number(doors?.value) > 0 ? '#ef4444' : undefined}
+              accent={Number(doors?.value) > 0 ? 'var(--mon-danger)' : undefined}
             />
             <SummaryRow
               icon={<AlertTriangle className="w-3.5 h-3.5" />}
               label="Unavailable devices"
               value={`${unavailableCount} unavailable`}
-              accent={unavailableCount > 0 ? '#ef4444' : undefined}
+              accent={unavailableCount > 0 ? 'var(--mon-danger)' : undefined}
             />
             {power && (
               <SummaryRow icon={<Plug className="w-3.5 h-3.5" />} label={power.label} value={`${power.value} ${power.unit ?? ''}`} />
@@ -104,7 +104,7 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
                 icon={<Battery className="w-3.5 h-3.5" />}
                 label={battery.label}
                 value={`${battery.value} ${battery.unit ?? ''}`}
-                accent={Number(battery.value) <= 20 ? '#ef4444' : undefined}
+                accent={Number(battery.value) <= 20 ? 'var(--mon-danger)' : undefined}
               />
             )}
           </div>

@@ -30,7 +30,7 @@ function InstanceCard({ inst }: { inst: UsenetInstance }) {
     <section className="media-card">
       <div className="flex items-center gap-[9px] mb-[11px]">
         <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)] flex items-center gap-1.5">
-          {inst.type === 'sabnzbd' ? <Package className="w-4 h-4 text-[#6366f1]" /> : <Download className="w-4 h-4 text-[#6366f1]" />}
+          {inst.type === 'sabnzbd' ? <Package className="w-4 h-4 text-[var(--mon-accent)]" /> : <Download className="w-4 h-4 text-[var(--mon-accent)]" />}
           {inst.type === 'sabnzbd' ? 'SABnzbd' : 'NZBGet'}
         </h2>
         <span className={`text-[10px] font-extrabold tracking-[.5px] uppercase px-[8px] py-[3px] rounded-md ml-2 ${stateChipClass}`}>{stateLabel}</span>

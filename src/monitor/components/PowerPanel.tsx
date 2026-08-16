@@ -71,7 +71,7 @@ export function PowerPanel({ solar }: PowerPanelProps) {
 
 function SocCard({ soc, runtime, charging }: { soc: number | null; runtime: { text: string; color: string }; charging: boolean }) {
   // SOC is a "low is bad" gauge: green normal, amber ≤ 30%, red ≤ 15%.
-  const socColor = soc == null ? '#34d399' : soc <= 15 ? '#ef4444' : soc <= 30 ? '#f59e0b' : '#34d399';
+  const socColor = soc == null ? 'var(--mon-ok)' : soc <= 15 ? 'var(--mon-danger)' : soc <= 30 ? 'var(--mon-warn)' : 'var(--mon-ok)';
   return (
     <div className="solar-summary-card">
       <div className="solar-summary-label">Battery SOC</div>
@@ -117,25 +117,25 @@ function InverterCard({ inv }: { inv: InverterDetail }) {
           Inverter {inv.id}
           {inv.serialNumber && <span className="node-os">{inv.serialNumber}</span>}
         </span>
-        <span style={{ fontSize: 10, color: '#636372' }}>{inv.deviceMode || ''}</span>
+        <span style={{ fontSize: 10, color: 'var(--mon-text-faint)' }}>{inv.deviceMode || ''}</span>
       </div>
 
       <BarMetric label="Load" value={fmtPower(inv.loadPowerW)}
-        pct={loadPct} color={loadPct > 80 ? '#f59e0b' : '#c7c7d0'} />
+        pct={loadPct} color={loadPct > 80 ? 'var(--mon-warn)' : 'var(--mon-text-dim)'} />
       <BarMetric label="PV" value={fmtPower(inv.pvPowerW)}
-        pct={Math.abs(inv.pvPowerW ?? 0) / Math.max(1, invMax) * 100} color="#fbbf24" />
+        pct={Math.abs(inv.pvPowerW ?? 0) / Math.max(1, invMax) * 100} color="var(--mon-warn)" />
       <BarMetric label="Grid" value={fmtPower(inv.gridPowerW)}
         pct={Math.abs(inv.gridPowerW ?? 0) / Math.max(1, invMax) * 100}
-        color={inv.gridPowerW != null && inv.gridPowerW > 5 ? '#f59e0b' : '#636372'} />
+        color={inv.gridPowerW != null && inv.gridPowerW > 5 ? 'var(--mon-warn)' : 'var(--mon-text-faint)'} />
       <BarMetric label="Battery" value={fmtPower(inv.batteryPowerW)}
         pct={Math.abs(inv.batteryPowerW ?? 0) / Math.max(1, invMax) * 100}
-        color={inv.batteryPowerW != null && inv.batteryPowerW > 5 ? '#34d399'
-          : inv.batteryPowerW != null && inv.batteryPowerW < -5 ? '#ef4444' : '#636372'} />
+        color={inv.batteryPowerW != null && inv.batteryPowerW > 5 ? 'var(--mon-ok)'
+          : inv.batteryPowerW != null && inv.batteryPowerW < -5 ? 'var(--mon-danger)' : 'var(--mon-text-faint)'} />
 
       <div className="node-footer">
         <span>Batt <b>{fmt(inv.batteryVoltage, 'V')}</b></span>
         <span>AC <b>{fmt(inv.acOutputVoltage, 'V', 0)} · {fmt(inv.acOutputFrequency, 'Hz')}</b></span>
-        <span>Temp <b style={{ color: (inv.temperature ?? 0) > 50 ? '#ef4444' : (inv.temperature ?? 0) > 40 ? '#f59e0b' : '#c7c7d0' }}>{fmt(inv.temperature, '°C')}</b></span>
+        <span>Temp <b style={{ color: (inv.temperature ?? 0) > 50 ? 'var(--mon-danger)' : (inv.temperature ?? 0) > 40 ? 'var(--mon-warn)' : 'var(--mon-text-dim)' }}>{fmt(inv.temperature, '°C')}</b></span>
       </div>
     </div>
   );
@@ -144,8 +144,8 @@ function InverterCard({ inv }: { inv: InverterDetail }) {
 function BatteryCard({ b }: { b: BatteryDetail }) {
   const batSoc = b.stateOfChargePercent;
   const socColor = batSoc != null
-    ? batSoc <= 20 ? '#ef4444' : batSoc <= 50 ? '#f59e0b' : '#34d399'
-    : '#636372';
+    ? batSoc <= 20 ? 'var(--mon-danger)' : batSoc <= 50 ? 'var(--mon-warn)' : 'var(--mon-ok)'
+    : 'var(--mon-text-faint)';
   const batCap = b.capacityAh ?? 200;
   const curPct = Math.abs(b.currentA ?? 0) / Math.max(1, batCap * 0.5) * 100;
   const pwrPct = Math.abs(b.powerW ?? 0) / Math.max(1, batCap * 50) * 100;
@@ -161,12 +161,12 @@ function BatteryCard({ b }: { b: BatteryDetail }) {
 
       <BarMetric label="Power" value={fmtPower(b.powerW)}
         pct={pwrPct}
-        color={b.powerW != null && b.powerW > 5 ? '#34d399'
-          : b.powerW != null && b.powerW < -5 ? '#ef4444' : '#636372'} />
+        color={b.powerW != null && b.powerW > 5 ? 'var(--mon-ok)'
+          : b.powerW != null && b.powerW < -5 ? 'var(--mon-danger)' : 'var(--mon-text-faint)'} />
       <BarMetric label="Current" value={fmt(b.currentA, 'A')}
-        pct={curPct} color="#6366f1" />
+        pct={curPct} color="var(--mon-accent)" />
       <BarMetric label="Voltage" value={fmt(b.voltage, 'V')}
-        pct={Math.abs(b.voltage ?? 0) / 60 * 100} color="#636372" />
+        pct={Math.abs(b.voltage ?? 0) / 60 * 100} color="var(--mon-text-faint)" />
 
       <div className="node-footer">
         <span>Temp <b>{fmt(b.temperature, '°C')}</b></span>

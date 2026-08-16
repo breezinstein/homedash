@@ -55,7 +55,7 @@ function StreamRow({ stream: s }: { stream: MediaStream }) {
       ? 'stream-badge-info'
       : 'stream-badge-ok';
 
-  const dotColor = s.paused ? '#fbbf24' : isTranscode ? '#f59e0b' : '#34d399';
+  const dotColor = s.paused ? 'var(--mon-warn)' : isTranscode ? 'var(--mon-warn)' : 'var(--mon-ok)';
 
   // Build subtitle: "user on device via app · server"
   const parts: string[] = [];
@@ -85,7 +85,7 @@ function StreamRow({ stream: s }: { stream: MediaStream }) {
                 className="stream-progress-fill"
                 style={{
                   width: `${Math.min(100, s.progressPercent)}%`,
-                  background: isTranscode ? '#f59e0b' : '#6366f1',
+                  background: isTranscode ? 'var(--mon-warn)' : 'var(--mon-accent)',
                 }}
               />
             </div>

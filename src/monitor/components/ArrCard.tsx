@@ -8,7 +8,7 @@ interface ArrCardProps { arr: ArrSnapshot; }
 // Distinguishing accents so Sonarr vs Radarr is readable at a glance.
 const ARR_TYPE_LABEL: Record<string, string> = { sonarr: 'Sonarr', radarr: 'Radarr' };
 const ARR_TYPE_COLOR: Record<string, string> = {
-  sonarr: '#6366f1',   // indigo
+  sonarr: 'var(--mon-accent)',   // indigo
   radarr: '#fb923c',   // orange
 };
 
@@ -52,7 +52,7 @@ export function ArrCard({ arr }: ArrCardProps) {
       {/* Header */}
       <div className="flex items-center gap-[9px] mb-[11px]">
         <h2 className="text-[14.5px] font-semibold text-[var(--color-text-primary)] flex items-center gap-1.5">
-          <Film className="w-4 h-4 text-[#6366f1]" />
+          <Film className="w-4 h-4 text-[var(--mon-accent)]" />
           Sonarr / Radarr
         </h2>
         <span className="text-[11px] text-[var(--color-text-secondary)]">
@@ -99,7 +99,7 @@ export function ArrCard({ arr }: ArrCardProps) {
 
 function InstanceChip({ inst }: { inst: ArrInstance }) {
   const down = inst.status === 'down';
-  const color = down ? 'var(--color-error)' : (ARR_TYPE_COLOR[inst.type] ?? '#6366f1');
+  const color = down ? 'var(--color-error)' : (ARR_TYPE_COLOR[inst.type] ?? 'var(--mon-accent)');
   return (
     <div
       className="flex items-center gap-[6px] rounded-lg border px-[8px] py-[4px] text-[11px]"
@@ -124,7 +124,7 @@ function InstanceChip({ inst }: { inst: ArrInstance }) {
 }
 
 function QueueRow({ item: q }: { item: ArrQueueItem }) {
-  const color = ARR_TYPE_COLOR[q.instanceType] ?? '#6366f1';
+  const color = ARR_TYPE_COLOR[q.instanceType] ?? 'var(--mon-accent)';
   const pct = q.progressPercent != null ? Math.min(100, Math.max(0, Math.round(q.progressPercent))) : null;
   const done = pct === 100;
   const eta = parseEtaLabel(q.timeLeft);

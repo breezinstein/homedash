@@ -22,7 +22,7 @@ function formatPower(w: number | null): string {
  */
 export function SolarCard({ solar }: PowerCardProps) {
   const soc = solar.batterySocPercent;
-  const socColor = soc == null ? '#34d399' : soc <= 15 ? '#ef4444' : soc <= 30 ? '#f59e0b' : '#34d399';
+  const socColor = soc == null ? 'var(--mon-ok)' : soc <= 15 ? 'var(--mon-danger)' : soc <= 30 ? 'var(--mon-warn)' : 'var(--mon-ok)';
 
   const batt = solar.batteryPowerW;
   const battCharging = batteryCharging(batt);
@@ -73,13 +73,13 @@ export function SolarCard({ solar }: PowerCardProps) {
             icon={<Battery className="w-3.5 h-3.5" />}
             label="Battery"
             value={`${battSign} ${battVal}`.trim()}
-            accent={battCharging ? '#34d399' : battDischarging ? '#ef4444' : undefined}
+            accent={battCharging ? 'var(--mon-ok)' : battDischarging ? 'var(--mon-danger)' : undefined}
           />
           <SummaryRow
             icon={<Plug className="w-3.5 h-3.5" />}
             label="Grid"
             value={gridVal}
-            accent={gridExport ? '#34d399' : gridImport ? '#f59e0b' : undefined}
+            accent={gridExport ? 'var(--mon-ok)' : gridImport ? 'var(--mon-warn)' : undefined}
           />
           <SummaryRow icon={<House className="w-3.5 h-3.5" />} label="House load" value={formatPower(solar.loadPowerW)} />
           <SummaryRow icon={<Clock className="w-3.5 h-3.5" />} label={runtimeLabel(battCharging)} value={runtime.text} accent={runtime.color} />

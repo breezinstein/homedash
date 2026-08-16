@@ -1592,8 +1592,9 @@ app.post('/api/notifications/dismiss', requireAuth, (req, res) => {
 // ---------------------------------------------------------------------------
 
 // GET /api/monitor/overview - Latest snapshot from the background poller.
-// Admin only: contains hostnames, IPs, container lists, media details.
-app.get('/api/monitor/overview', requireAuth, async (req, res) => {
+// Public read: the monitor kiosk is viewable without sign-in. Only the
+// settings panel and alert acknowledgement below stay admin-gated.
+app.get('/api/monitor/overview', async (req, res) => {
   if (req.query.wait === '1') {
     const interval = monitorManager.getOverview().pollIntervalMs;
     return res.json(await monitorManager.waitForNextSnapshot(interval + 1000));
@@ -1601,8 +1602,8 @@ app.get('/api/monitor/overview', requireAuth, async (req, res) => {
   res.json(monitorManager.getOverview());
 });
 
-// GET /api/monitor/alerts - Active + recently resolved alert instances.
-app.get('/api/monitor/alerts', requireAuth, (req, res) => {
+// GET /api/monitor/alerts - Active + recently resolved alert instances (public).
+app.get('/api/monitor/alerts', (req, res) => {
   res.json(monitorManager.getAlerts());
 });
 

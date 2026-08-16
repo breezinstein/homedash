@@ -209,18 +209,16 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               </button>
             )}
 
-            {/* Monitor — admin only; opens the /monitor full-screen dashboard */}
-            {authenticated && (
-              <a
-                href="/monitor"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-                title="HomeLab Monitor (new tab)"
-              >
-                <Monitor className="w-5 h-5" />
-              </a>
-            )}
+            {/* Monitor — visible to all; opens the /monitor full-screen dashboard */}
+            <a
+              href="/monitor"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              title="HomeLab Monitor (new tab)"
+            >
+              <Monitor className="w-5 h-5" />
+            </a>
 
             {/* Inverter Monitor — admin only */}
             {authenticated && (
@@ -376,6 +374,15 @@ export function Header({ onSettingsClick, onFileSharingClick, onClipboardClick, 
               <FolderOpen className="w-5 h-5" />
               <span className="text-sm">File Sharing</span>
             </button>
+
+            {/* Mobile Monitor Button — visible to all */}
+            <a
+              href="/monitor"
+              className="w-full flex items-center gap-2 px-3 py-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            >
+              <Monitor className="w-5 h-5" />
+              <span className="text-sm">HomeLab Monitor</span>
+            </a>
 
             {/* Mobile Clipboard Button (admin only) */}
             {authenticated && (
