@@ -27,6 +27,12 @@ const MONITOR_SNAPSHOT_PATH = join(MONITOR_CONFIG_DIR, 'monitor-snapshot.json');
 const MONITOR_ALERTS_PATH = join(MONITOR_CONFIG_DIR, 'monitor-alerts.json');
 const DEFAULT_POLL_INTERVAL_MS = 10_000;
 const FETCH_TIMEOUT_MS = 8_000;
+// Upper bound on a single poll cycle. Every awaited operation in _tick() is
+// bounded (fetches carry FETCH_TIMEOUT_MS, ntfy publish 8s), so a healthy cycle
+// finishes well under this. If a cycle ever overstays it we release the in-flight
+// latch so one hung operation can't leave the monitor serving stale data until
+// the container is restarted.
+const MAX_CYCLE_MS = 45_000;
 const MAX_ALERTS = 100;
 const NETWORK_PREV_PATH = join(MONITOR_CONFIG_DIR, 'monitor-net-prev.json');
 // Rolling house-load history per solar instance (keyed by inverter URL),
@@ -187,14 +193,21 @@ async function fetchJson(url, username, password) {
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
     const res = await fetch(base, { headers, signal: controller.signal });
-    clearTimeout(timeout);
     if (res.status === 401) return { ok: false, error: 'Authentication required (HTTP 401)' };
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    // Fetch has resolved (headers arrived) but the BODY may still be streaming.
+    // Previously `clearTimeout` was called here, so a server that responded then
+    // stalled on the body left this promise hanging forever. A single hung
+    // Glances/Solar fetch wedges the whole monitor poller (inFlight stays true,
+    // the cached snapshot never advances, stale data until the container
+    // restarts). Keep the abort timer armed until the body is fully read so a
+    // stalled body times out instead of hanging the poller.
     const data = await res.json();
     return { ok: true, data };
   } catch (err) {
-    clearTimeout(timeout);
     return { ok: false, error: err.name === 'AbortError' ? 'Request timed out' : err.message };
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -1866,6 +1879,8 @@ export class MonitorManager {
     this._timer = null;
     this._running = false;
     this._inFlight = false;
+    this._cycleStartedAt = null;
+    this._cycleToken = 0;
     this._lastCycleDurationMs = null;
     this._lastAlertSerialized = null;
     this._waiters = new Set();
@@ -1895,8 +1910,20 @@ export class MonitorManager {
   }
 
   async _tick() {
-    if (!this._running || this._inFlight) return;
+    if (!this._running) return;
+    // Prevent overlapping cycles, with self-healing: if a cycle has been stuck
+    // (inFlight) past MAX_CYCLE_MS we release the latch so one hung operation
+    // can't freeze the poller on stale data until the container restarts.
+    if (this._inFlight) {
+      if (this._cycleStartedAt && Date.now() - this._cycleStartedAt > MAX_CYCLE_MS) {
+        console.warn(`Monitor: poll cycle stalled > ${MAX_CYCLE_MS}ms; releasing latch to avoid stale data`);
+      } else {
+        return;
+      }
+    }
+    const token = ++this._cycleToken;
     this._inFlight = true;
+    this._cycleStartedAt = Date.now();
     const startedAt = Date.now();
     try {
     const cfg = this._getConfig();
@@ -2007,7 +2034,12 @@ export class MonitorManager {
       console.warn('Failed to persist alert history:', err?.message ?? err);
     }
     } finally {
-      this._inFlight = false;
+      // Only the cycle that armed the latch may disarm it, so a stale cycle that
+      // completes later can't clear the latch underneath a newer cycle.
+      if (this._cycleToken === token) {
+        this._inFlight = false;
+        this._cycleStartedAt = null;
+      }
     }
   }
 
