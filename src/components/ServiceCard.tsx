@@ -31,23 +31,53 @@ export const ServiceCard = memo(function ServiceCard({ service, index, localInde
   const [isDragging, setIsDragging] = useState(false);
   const [cachedIconUrl, setCachedIconUrl] = useState<string | null>(null);
 
-  // Cache external icons
+  // Cache external icons. Because the proxy result is pinned on the page's
+  // first request, a degraded upstream (icon container down, returning 400s)
+  // previously produced a one-shot fallback the page never retried — so icons
+  // stayed missing until a full refresh after recovery. We now retry on a
+  // short interval until the icon is served from the cache, so the card
+  // self-heals without any manual refresh.
   useEffect(() => {
     if (service.icon && isExternalIcon(service.icon)) {
-      configApi.proxyIcon(service.icon)
-        .then(result => {
-          setCachedIconUrl(result.url);
-        })
-        .catch(() => {
-          // Fallback to original URL on error
-          setCachedIconUrl(service.icon);
-        });
+      let cancelled = false;
+      let retryTimer: number | undefined;
+      const attempt = () => {
+        configApi.proxyIcon(service.icon)
+          .then(result => {
+            if (cancelled) return;
+            if (result.url && result.url.startsWith('/icons/')) {
+              // Stable cached icon — done.
+              setCachedIconUrl(result.url);
+            } else {
+              // Degraded / not yet cached: keep the letter avatar and retry.
+              setCachedIconUrl(null);
+              retryTimer = window.setTimeout(attempt, 30_000);
+            }
+          })
+          .catch(() => {
+            if (cancelled) return;
+            setCachedIconUrl(null);
+            retryTimer = window.setTimeout(attempt, 30_000);
+          });
+      };
+      attempt();
+      return () => {
+        cancelled = true;
+        if (retryTimer) window.clearTimeout(retryTimer);
+      };
     } else {
       setCachedIconUrl(service.icon || null);
     }
   }, [service.icon]);
 
   const displayIconUrl = cachedIconUrl || service.icon;
+
+  // When the effective icon URL changes (e.g. a degraded fallback is replaced
+  // by a freshly cached icon), clear the error so the <img> is recreated and
+  // actually attempts to load instead of staying stuck on the letter avatar.
+  useEffect(() => {
+    setImgError(false);
+  }, [displayIconUrl]);
 
   const handleClick = () => {
     if (!isEditMode) {

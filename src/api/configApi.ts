@@ -7,15 +7,30 @@ const API_BASE = '';
 // Dedupe in-flight icon proxy requests. Many service cards can share the
 // same external icon URL (or the same card can re-mount under StrictMode),
 // which previously meant N concurrent requests to the same endpoint.
-// Resolved results are also cached for the life of the page so subsequent
-// re-renders skip the network entirely.
-type ProxyIconResult = { cached: boolean; url: string };
+// Resolved results are cached for the life of the page so subsequent
+// re-renders skip the network entirely — but ONLY for stable results. A
+// locally-cached icon (`/icons/...`) is stable and pinned forever; a
+// transient fallback/unavailable result (upstream icon container down) is
+// cached with a short TTL so the card re-asks the server and self-heals
+// without a manual refresh.
+type ProxyIconResult = {
+  cached: boolean;
+  url: string | null;
+  stale?: boolean;
+  good?: boolean;
+  fallback?: boolean;
+  unavailable?: boolean;
+  degraded?: boolean;
+};
 const inFlightIconRequests = new Map<string, Promise<ProxyIconResult>>();
-const resolvedIconResults = new Map<string, ProxyIconResult>();
+const resolvedIconResults = new Map<string, { result: ProxyIconResult; expiresAt: number }>();
+// How long to remember a degraded/unavailable resolution before re-querying.
+const RETRY_TTL_MS = 30_000;
 
 function proxyIconCoalesced(url: string): Promise<ProxyIconResult> {
-  const resolved = resolvedIconResults.get(url);
-  if (resolved) return Promise.resolve(resolved);
+  const entry = resolvedIconResults.get(url);
+  if (entry && entry.expiresAt > Date.now()) return Promise.resolve(entry.result);
+  resolvedIconResults.delete(url); // drop an expired (transient) entry
   const existing = inFlightIconRequests.get(url);
   if (existing) return existing;
   // Icons are a public, read-only concern: use plain fetch (with credentials
@@ -29,7 +44,11 @@ function proxyIconCoalesced(url: string): Promise<ProxyIconResult> {
       return res.json() as Promise<ProxyIconResult>;
     })
     .then(result => {
-      resolvedIconResults.set(url, result);
+      const stable = Boolean(result.url && result.url.startsWith('/icons/'));
+      resolvedIconResults.set(url, {
+        result,
+        expiresAt: stable ? Infinity : Date.now() + RETRY_TTL_MS,
+      });
       inFlightIconRequests.delete(url);
       return result;
     })
@@ -121,7 +140,7 @@ export const configApi = {
   },
 
   // Proxy and cache an external icon
-  async proxyIcon(url: string): Promise<{ cached: boolean; url: string }> {
+  async proxyIcon(url: string): Promise<ProxyIconResult> {
     return proxyIconCoalesced(url);
   },
 
