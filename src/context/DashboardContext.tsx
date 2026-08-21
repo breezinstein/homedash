@@ -219,7 +219,12 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   // sign-in and anonymous viewers get the redacted projection after sign-out.
   // Also re-fetches backups (admin-only endpoint) so the Settings panel has
   // fresh data right after sign-in. Guarded by `isLoading` so the initial
-  // fetch isn't duplicated on first paint.
+  // fetch isn't duplicated on first paint. `isLoading` MUST be a dependency:
+  // if a sign-in completes while the initial config fetch is still in flight
+  // (common on slow/mobile first loads), the guard would drop the transition
+  // and leave the app authenticated but stuck on the redacted anonymous
+  // config until a full page refresh. Keying on `isLoading` too re-fires the
+  // reload the moment loading finishes, so the post-login full payload lands.
   useEffect(() => {
     if (isLoading) return;
     let cancelled = false;
@@ -237,7 +242,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated]);
+  }, [authenticated, isLoading]);
 
   // Load backups only once auth has resolved AND we're allowed to write.
   // refreshBackups() no-ops internally when !canWriteRef.current, but keying
