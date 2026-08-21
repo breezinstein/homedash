@@ -419,18 +419,36 @@ app.use('/uploads', express.static(join(__dirname, 'data', 'uploads')));
 // Serve cached icons
 app.use('/icons', express.static(ICONS_CACHE_DIR));
 
-// Find a cached icon file for a URL hash regardless of extension. The stored
+// Find the cached icon file for a URL hash regardless of extension. The stored
 // file's extension depends on what the upstream returned at fetch time
 // (webp/svg/jpg/...), not on the URL's own extension, so a plain
 // `${hash}.png` lookup misses whenever the upstream served anything other than
-// a PNG. Scanning by hash prefix makes the cache actually hit.
+// a PNG. Scanning by hash prefix makes the cache actually hit. When several
+// cached variants exist (e.g. an old extension was superseded), the most
+// recently written file wins — the "last good" icon.
 function findCachedIcon(urlHash) {
   try {
-    const files = readdirSync(ICONS_CACHE_DIR);
-    return files.find((file) => file.startsWith(`${urlHash}.`)) || null;
+    const files = readdirSync(ICONS_CACHE_DIR)
+      .filter((file) => file.startsWith(`${urlHash}.`))
+      .map((file) => ({ file, mtime: statSync(join(ICONS_CACHE_DIR, file)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime);
+    return files.length ? files[0].file : null;
   } catch {
     return null;
   }
+}
+
+// Degraded-upstream fallback (stale-while-revalidate): if a cached icon exists
+// for this hash, serve it so the dashboard never shows a broken image while
+// the icon container is down. If nothing is cached yet, return an explicit
+// "unavailable" result (url: null) rather than handing back the dead external
+// URL — the client renders a letter avatar and retries shortly after.
+function degradedIconResponse(res, urlHash, iconUrl) {
+  const cachedFilename = findCachedIcon(urlHash);
+  if (cachedFilename) {
+    return res.json({ cached: true, url: `/icons/${cachedFilename}`, stale: true, good: false });
+  }
+  return res.json({ cached: false, url: null, unavailable: true, degraded: true, fallback: true });
 }
 
 // GET /api/icons/proxy - Proxy and cache external icon (admin: outbound
@@ -465,7 +483,8 @@ app.get('/api/icons/proxy', async (req, res) => {
     if (cachedFilename) {
       return res.json({
         cached: true,
-        url: `/icons/${cachedFilename}`
+        url: `/icons/${cachedFilename}`,
+        good: true
       });
     }
 
@@ -492,22 +511,16 @@ app.get('/api/icons/proxy', async (req, res) => {
     } catch (fetchError) {
       clearTimeout(timeout);
       console.error('Icon fetch error:', fetchError.message);
-      // Return original URL as fallback - let client try directly
-      return res.json({ 
-        cached: false, 
-        url: iconUrl,
-        fallback: true 
-      });
+      // Icon container unreachable: serve the last good cached icon, or mark
+      // unavailable so the client retries later.
+      return degradedIconResponse(res, urlHash, iconUrl);
     }
     clearTimeout(timeout);
 
     if (!response.ok) {
-      // Return original URL as fallback
-      return res.json({ 
-        cached: false, 
-        url: iconUrl,
-        fallback: true 
-      });
+      // Upstream returned a non-2xx (e.g. 400 while the icon container is in a
+      // bad state): serve the last good cached icon, or mark unavailable.
+      return degradedIconResponse(res, urlHash, iconUrl);
     }
 
     // Get content type and adjust extension if needed
@@ -537,14 +550,14 @@ app.get('/api/icons/proxy', async (req, res) => {
     });
   } catch (error) {
     console.error('Icon proxy error:', error.message);
-    // Return original URL as fallback instead of error
+    // Any unexpected failure: prefer a cached icon so the dashboard still
+    // renders, otherwise signal unavailability for a later retry.
     const iconUrl = req.query.url;
-    res.json({ 
-      cached: false, 
-      url: iconUrl,
-      fallback: true,
-      error: error.message 
-    });
+    if (iconUrl) {
+      const urlHash = crypto.createHash('md5').update(iconUrl).digest('hex');
+      return degradedIconResponse(res, urlHash, iconUrl);
+    }
+    res.json({ cached: false, url: null, unavailable: true, degraded: true, error: error.message });
   }
 });
 
