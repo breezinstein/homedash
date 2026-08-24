@@ -190,12 +190,13 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto p-3 sm:p-4">
-            {/* Monitoring pointer — settings now live on the /monitor page */}
+            {/* Monitoring pointer — host selection & monitoring prefs live on /monitor; endpoints stay in Server Stats */}
             <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)]">
               <Gauge className="w-4 h-4 text-[var(--color-primary)] shrink-0" />
               <p className="text-xs text-[var(--color-text-secondary)]">
-                Monitor settings (hosts, solar, docker, media, alerts…) now live on the{' '}
+                Monitoring preferences (which hosts to watch, solar, docker, media, alerts…) now live on the{' '}
                 <a href="/monitor" className="text-[var(--color-primary)] hover:underline">monitor page</a>.
+                Add or edit the remote Glances endpoints themselves in <strong>Server Stats</strong>.
               </p>
             </div>
 
