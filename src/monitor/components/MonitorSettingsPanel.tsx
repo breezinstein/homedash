@@ -913,7 +913,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                     <Info className="w-4 h-4 text-indigo-400 mt-0.5 flex-shrink-0" />
                     <span>
                       Hosts selected here feed the <strong>Server</strong> tab (CPU, memory, storage, loads,
-                      thermals and network IO). Configure remote Glances endpoints in the main dashboard settings under <strong>Server Stats</strong>.
+                      thermals and network IO). Add or edit the remote Glances endpoints themselves in <strong>Server Stats</strong> on the main dashboard.
                     </span>
                   </div>
 
@@ -922,7 +922,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                       <Server className="w-10 h-10 text-[var(--mon-text-faint)] mx-auto mb-3 opacity-60" />
                       <h4 className="text-sm font-semibold text-[var(--mon-text-dim)]">No servers configured in Homedash</h4>
                       <p className="text-xs text-[var(--mon-text-muted)] mt-1 max-w-md mx-auto">
-                        Add your Glances instances in the dashboard settings first. They will automatically appear here for monitoring.
+                        Add your Glances instances in <strong>Server Stats</strong> first. They will automatically appear here for monitoring.
                       </p>
                     </div>
                   ) : (
