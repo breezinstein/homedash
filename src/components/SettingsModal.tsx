@@ -169,8 +169,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   };
 
   // Search filter over nav sections
+  const hasQuery = !!searchQuery.trim();
   const filteredNavSections = useMemo(() => {
-    if (!searchQuery.trim()) return NAV_SECTIONS;
+    if (!hasQuery) return NAV_SECTIONS;
     const q = searchQuery.toLowerCase();
     return NAV_SECTIONS.filter(
       (s) =>
@@ -178,11 +179,18 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         s.description.toLowerCase().includes(q) ||
         s.group.toLowerCase().includes(q),
     );
-  }, [searchQuery]);
+  }, [searchQuery, hasQuery]);
 
-  const activeSectionMeta = useMemo(() => {
-    return NAV_SECTIONS.find((s) => s.key === active) ?? NAV_SECTIONS[0];
-  }, [active]);
+  // The section to render in the main pane. While searching, keep the pane in
+  // sync with the visible sidebar: if the previously-active section was
+  // filtered out, fall back to the first match so the header/content still
+  // correspond to a highlighted nav item; if nothing matches (or no query),
+  // the sidebar drives a "no results" empty state instead of stale content.
+  const section = useMemo(() => {
+    if (hasQuery && filteredNavSections.length === 0) return null;
+    if (!hasQuery) return NAV_SECTIONS.find((s) => s.key === active) ?? NAV_SECTIONS[0];
+    return filteredNavSections.find((s) => s.key === active) ?? filteredNavSections[0] ?? null;
+  }, [active, filteredNavSections, hasQuery]);
 
   const colorOptions = [
     { key: 'primary' as const, label: 'Primary' },
@@ -197,6 +205,23 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     { key: 'warning' as const, label: 'Warning' },
     { key: 'error' as const, label: 'Error' },
   ];
+
+  // Monitoring pointer. Rendered in the sidebar footer on desktop (sm+), and
+  // above the content on mobile where that footer is hidden — so the pointer
+  // that says where Servers/hosts are configured never disappears.
+  const monitoringPointer = (
+    <div className="p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
+      <div className="flex items-center gap-1.5 mb-1 font-semibold text-[var(--color-text-primary)]">
+        <ShieldAlert className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+        Monitoring & hosts
+      </div>
+      Monitoring preferences (hosts, solar, docker, media, alerts…) live on the{' '}
+      <a href="/monitor" target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] hover:underline">
+        <Monitor className="inline w-3 h-3 -mt-0.5" /> monitor page
+      </a>.
+      Add or edit remote Glances endpoints in <strong className="text-[var(--color-text-primary)]">Server Stats</strong>.
+    </div>
+  );
 
   return (
     <>
@@ -240,7 +265,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <div className="flex flex-1 min-h-0 flex-col sm:flex-row">
 
             {/* Left Navigation Sidebar */}
-            <nav className="sm:w-60 sm:flex-shrink-0 sm:border-r border-[var(--color-border)] bg-[var(--color-background)]/50 sm:overflow-y-auto p-3 sm:p-4 flex sm:flex-col gap-1.5 border-t sm:border-t-0">
+            <nav className="sm:w-60 sm:flex-shrink-0 sm:border-r border-[var(--color-border)] bg-[var(--color-background)]/50 sm:overflow-y-auto p-3 sm:p-4 flex sm:flex-col gap-1.5 border-t sm:border-t-0 overflow-x-auto">
               {/* Search Input */}
               <div className="relative mb-1 sm:px-1 flex-shrink-0">
                 <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none" />
@@ -265,14 +290,14 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     </div>
                     {groupItems.map((item) => {
                       const { count, dot } = getBadgeForSection(item.key);
-                      const isActive = active === item.key;
+                      const isActive = section?.key === item.key;
                       const Icon = item.icon;
                       return (
                         <button
                           key={item.key}
                           type="button"
                           onClick={() => setActive(item.key)}
-                          className={`flex items-center gap-2.5 py-2 px-3 rounded-lg text-sm font-medium transition-all text-left ${
+                          className={`flex items-center gap-2.5 py-2 px-3 rounded-lg text-sm font-medium transition-all text-left flex-shrink-0 whitespace-nowrap ${
                             isActive
                               ? 'bg-[var(--color-primary)]/10 text-[var(--color-text-primary)] border border-[var(--color-primary)]/40'
                               : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] border border-transparent'
@@ -301,60 +326,66 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 );
               })}
 
-              {/* Nav footer: monitoring pointer */}
+              {/* Nav footer: monitoring pointer (desktop; mobile gets it above content) */}
               <div className="hidden sm:block mt-auto pt-3 border-t border-[var(--color-border)] px-1">
-                <div className="p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
-                  <div className="flex items-center gap-1.5 mb-1 font-semibold text-[var(--color-text-primary)]">
-                    <ShieldAlert className="w-3.5 h-3.5 text-[var(--color-primary)]" />
-                    Monitoring & hosts
-                  </div>
-                  Monitoring preferences (hosts, solar, docker, media, alerts…) live on the{' '}
-                  <a href="/monitor" target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] hover:underline">
-                    <Monitor className="inline w-3 h-3 -mt-0.5" /> monitor page
-                  </a>.
-                  Add or edit remote Glances endpoints in <strong className="text-[var(--color-text-primary)]">Server Stats</strong>.
-                </div>
+                {monitoringPointer}
               </div>
             </nav>
 
             {/* Main Content Area */}
             <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[var(--color-surface)]">
-              {/* Section Header */}
-              <div className="mb-5 pb-4 border-b border-[var(--color-border)] flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[var(--color-text-primary)]">
-                    <activeSectionMeta.icon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" />
-                    <span>{activeSectionMeta.label}</span>
-                  </div>
-                  <div className="text-xs text-[var(--color-text-secondary)] mt-1">
-                    {activeSectionMeta.description}
-                  </div>
+              {/* Monitoring pointer — above the content on mobile where the
+                  sidebar footer is hidden, so it never disappears. */}
+              {!!section && (
+                <div className="sm:hidden mb-5">{monitoringPointer}</div>
+              )}
+
+              {!section ? (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <Search className="w-10 h-10 text-[var(--color-text-secondary)] mb-3 opacity-50" />
+                  <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                    No settings match "{searchQuery}"
+                  </p>
+                  <p className="text-xs text-[var(--color-text-secondary)] mt-1">Try a different search term</p>
                 </div>
+              ) : (
+                <>
+                  {/* Section Header */}
+                  <div className="mb-5 pb-4 border-b border-[var(--color-border)] flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[var(--color-text-primary)]">
+                        <section.icon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" />
+                        <span>{section.label}</span>
+                      </div>
+                      <div className="text-xs text-[var(--color-text-secondary)] mt-1">
+                        {section.description}
+                      </div>
+                    </div>
 
-                {/* Quick actions */}
-                {active === 'categories' && (
-                  <button
-                    onClick={() => { setEditingCategory(null); setShowCategoryModal(true); }}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm flex-shrink-0"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Add Category
-                  </button>
-                )}
-                {active === 'backups' && (
-                  <button
-                    onClick={() => setShowBackupManager(true)}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm flex-shrink-0"
-                  >
-                    <Database className="w-4 h-4" />
-                    Open Backup Manager
-                  </button>
-                )}
-              </div>
+                    {/* Quick actions */}
+                    {section.key === 'categories' && (
+                      <button
+                        onClick={() => { setEditingCategory(null); setShowCategoryModal(true); }}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm flex-shrink-0"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Add Category
+                      </button>
+                    )}
+                    {section.key === 'backups' && (
+                      <button
+                        onClick={() => setShowBackupManager(true)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm flex-shrink-0"
+                      >
+                        <Database className="w-4 h-4" />
+                        Open Backup Manager
+                      </button>
+                    )}
+                  </div>
 
-              <div className="max-w-3xl">
+                  <div className="max-w-3xl">
                 {/* ── CATEGORIES ── */}
-                {active === 'categories' && (
+                {section.key === 'categories' && (
                   <div className="space-y-2">
                     {config.categoryOrder.length === 0 ? (
                       <div className="text-center py-12 text-[var(--color-text-secondary)]">
@@ -424,7 +455,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 )}
 
                 {/* ── APPEARANCE ── */}
-                {active === 'appearance' && (
+                {section.key === 'appearance' && (
                   <div className="space-y-6">
                     {/* Grid Columns */}
                     <div>
@@ -662,24 +693,38 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 )}
 
                 {/* ── NOTIFICATIONS ── */}
-                {active === 'notifications' && <NotificationsSettings />}
+                {section.key === 'notifications' && <NotificationsSettings />}
 
                 {/* ── BACKUPS ── */}
-                {active === 'backups' && (
+                {section.key === 'backups' && (
                   <div className="space-y-4">
                     <p className="text-xs sm:text-sm text-[var(--color-text-secondary)]">
-                      Create and manage configuration backups
+                      Create and manage configuration backups. Use the Open Backup Manager button above to create, restore, import, or export.
                     </p>
-                    <button
-                      onClick={() => setShowBackupManager(true)}
-                      className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm"
-                    >
-                      <Database className="w-4 h-4" />
-                      Open Backup Manager
-                    </button>
+                    {backups.length === 0 ? (
+                      <div className="text-xs text-[var(--color-text-secondary)]">
+                        No backups yet — create one to capture your current configuration.
+                      </div>
+                    ) : (
+                      <ul className="space-y-1">
+                        {backups.map((b) => (
+                          <li
+                            key={`${b.name}-${b.date}`}
+                            className="flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]"
+                          >
+                            <span className="truncate">{b.name}</span>
+                            <span className="flex-shrink-0 tabular-nums">
+                              {new Date(b.date).toLocaleString()} <span className="opacity-70">· {b.serviceCount} services</span>
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 )}
-              </div>
+                  </div>
+                </>
+              )}
             </main>
           </div>
         </div>
