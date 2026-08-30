@@ -202,6 +202,7 @@ const defaultConfig = {
     ntopng: [],
     homeassistant: [],
     certificates: [],
+    certificateRefreshHours: 24,
     ui: { tabRotationSeconds: 15 },
     alerts: [
       { id: 'host-cpu-high', name: 'High CPU', enabled: true, source: 'glances', metric: 'cpu.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 120, notify: false },

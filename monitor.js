@@ -1983,6 +1983,33 @@ export class MonitorManager {
     this._lastCycleDurationMs = null;
     this._lastAlertSerialized = null;
     this._waiters = new Set();
+    // Certificate checks are throttled: the report is only rebuilt once per
+    // refresh window (default 24h), and served from cache in between. The
+    // config signature is tracked so adding/removing a certificate triggers an
+    // immediate re-check rather than waiting for the next window.
+    this._certCache = null;
+    this._certSig = null;
+    this._certCacheAt = 0;
+  }
+
+  // Returns the certificate snapshot, re-checking the endpoints only when the
+  // cache is stale (past certificateRefreshHours) or the certificate config
+  // list changed. Returns the cached snapshot otherwise.
+  async _certSnapshot(mon) {
+    const configs = Array.isArray(mon.certificates) ? mon.certificates : [];
+    const refreshHours = Math.max(1, Math.min(168, Number(mon.certificateRefreshHours) || 24));
+    const refreshMs = refreshHours * 3600_000;
+    const now = Date.now();
+    const sig = JSON.stringify(configs.map(c => ({ id: c.id, name: c.name, host: c.host, port: c.port })));
+    const fresh = this._certCache
+      && this._certSig === sig
+      && (now - this._certCacheAt) < refreshMs;
+    if (fresh) return this._certCache;
+    const snapshot = await fetchCertificates(configs);
+    this._certCache = snapshot;
+    this._certSig = sig;
+    this._certCacheAt = now;
+    return snapshot;
   }
 
   start() {
@@ -2043,7 +2070,7 @@ export class MonitorManager {
       fetchOpnsense(mon.opnsense),
       fetchNtopng(mon.ntopng),
       fetchHomeAssistant(mon.homeassistant),
-      fetchCertificates(mon.certificates),
+      this._certSnapshot(mon),
     ]);
 
     const docker = mon.docker?.enabled === false

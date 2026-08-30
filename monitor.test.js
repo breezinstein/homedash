@@ -15,6 +15,7 @@ import {
   fetchCertificates,
   buildAutoAlertRules,
   ensureAutoAlertRules,
+  MonitorManager,
 } from './monitor.js';
 
 function snapshot(hosts = []) {
@@ -638,4 +639,29 @@ test('fetchCertificates handles an empty config and unreachable hosts without re
   assert.equal(res.items[0].status, 'error');
   assert.equal(res.items[0].daysLeft, null);
   assert.ok(res.items[0].error);
+});
+
+test('MonitorManager._certSnapshot throttles: caches within the window and re-checks on config change', async () => {
+  const manager = new MonitorManager(() => ({ monitoring: { enabled: true } }), null);
+  const mon = {
+    certificates: [{ id: 'c1', name: 'nowhere', host: '127.0.0.1', port: 1 }],
+  };
+
+  // First call performs an actual check.
+  const first = await manager._certSnapshot(mon);
+  assert.equal(first.items[0].status, 'error');
+
+  // Second call a moment later → same cached snapshot reference, no re-check.
+  const second = await manager._certSnapshot(mon);
+  assert.equal(second, first, 'expected cache hit (same reference) within refresh window');
+
+  // Config change (added host) → signature differs → forces a fresh re-check.
+  const extended = await manager._certSnapshot({
+    certificates: [
+      { id: 'c1', name: 'nowhere', host: '127.0.0.1', port: 1 },
+      { id: 'c2', name: 'nowhere2', host: '127.0.0.1', port: 2 },
+    ],
+  });
+  assert.notEqual(extended, first, 'expected a fresh snapshot after config change');
+  assert.equal(extended.items.length, 2);
 });
