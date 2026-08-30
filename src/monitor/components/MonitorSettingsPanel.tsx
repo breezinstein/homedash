@@ -2225,7 +2225,10 @@ function EntityModalDialog({
           <button
             type="button"
             onClick={() => onSave(form, isNew)}
-            disabled={!form.name?.trim() || !form.url?.trim()}
+            disabled={
+              !form.name?.trim() ||
+              (section === 'certs' ? !form.host?.trim() : !form.url?.trim())
+            }
             className="ms-btn ms-btn-primary text-xs"
           >
             <Check className="w-3.5 h-3.5" />
