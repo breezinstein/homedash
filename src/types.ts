@@ -234,11 +234,20 @@ export interface MonitoredHomeAssistant {
   insecureTls?: boolean;
 }
 
+// A TLS endpoint whose certificate expiry is watched. The poller opens a raw
+// TLS socket to host:port and reads the peer cert's notAfter date.
+export interface MonitoredCertificate {
+  id: string;
+  name: string;
+  host: string;
+  port?: number;
+}
+
 export interface AlertRule {
   id: string;
   name: string;
   enabled: boolean;
-  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'seerr' | 'homeassistant' | 'ntopng' | 'reachability';
+  source: 'glances' | 'solar' | 'docker' | 'media' | 'usenet' | 'seerr' | 'homeassistant' | 'ntopng' | 'reachability' | 'certificate';
   host?: string;
   metric: string;
   operator: '>' | '>=' | '<' | '<=' | '==' | '!=';
@@ -261,6 +270,7 @@ export interface MonitoringConfig {
   opnsense: MonitoredOpnsense[];
   ntopng: MonitoredNtopng[];
   homeassistant: MonitoredHomeAssistant[];
+  certificates: MonitoredCertificate[];
   ui: { tabRotationSeconds: number };
   alerts: AlertRule[];
   // Auto-created rule ids the user has explicitly deleted, so the backend
@@ -577,6 +587,25 @@ export interface HomeAssistantSnapshot {
   pump: HomeAssistantPump;
 }
 
+/** Per-certificate expiry result from the monitor poller. */
+export interface CertificateEntry {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  daysLeft: number | null;      // whole days until notAfter; negative = already expired
+  expiresAt: string | null;     // peer cert valid_to
+  validFrom?: string | null;    // peer cert valid_from
+  status: 'valid' | 'expired' | 'error';
+  error?: string;               // set when status === 'error'
+}
+
+export interface CertificateSnapshot {
+  status: SourceStatus;         // 'down' when every check failed
+  items: CertificateEntry[];
+  minDaysLeft: number | null;   // most expiring certificate (display signal)
+}
+
 export interface AlertInstance {
   id: string;
   ruleId: string;
@@ -604,6 +633,7 @@ export interface MonitorOverview {
   opnsense: OpnsenseSnapshot | null;
   ntopng: NtopngSnapshot | null;
   homeassistant: HomeAssistantSnapshot | null;
+  certificates: CertificateSnapshot | null;
   alerts: { firing: AlertInstance[]; recentlyResolved: AlertInstance[] };
   pollIntervalMs: number;
   tabRotationSeconds: number;

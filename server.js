@@ -201,6 +201,7 @@ const defaultConfig = {
     opnsense: [],
     ntopng: [],
     homeassistant: [],
+    certificates: [],
     ui: { tabRotationSeconds: 15 },
     alerts: [
       { id: 'host-cpu-high', name: 'High CPU', enabled: true, source: 'glances', metric: 'cpu.percent', operator: '>=', threshold: 90, severity: 'warning', forSeconds: 120, notify: false },
@@ -211,6 +212,7 @@ const defaultConfig = {
       { id: 'battery-low', name: 'Low battery', enabled: true, source: 'solar', metric: 'battery.soc', operator: '<=', threshold: 15, severity: 'critical', forSeconds: 60, notify: true },
       { id: 'stream-transcoding', name: 'High transcode count', enabled: true, source: 'media', metric: 'streams.transcoding', operator: '>=', threshold: 4, severity: 'warning', forSeconds: 60, notify: false },
       { id: 'downloads-paused', name: 'Downloads paused', enabled: true, source: 'usenet', metric: 'downloads.paused', operator: '==', threshold: 1, severity: 'info', forSeconds: 1800, notify: false },
+      { id: 'cert-expiring', name: 'Certificate expiring soon', enabled: true, source: 'certificate', metric: 'cert.daysLeft', operator: '<', threshold: 5, severity: 'warning', forSeconds: 0, notify: true },
     ],
   },
   colors: {

@@ -12,6 +12,7 @@ import {
   pickHostTemp,
   fetchNtopng,
   fetchHomeAssistant,
+  fetchCertificates,
   buildAutoAlertRules,
   ensureAutoAlertRules,
 } from './monitor.js';
@@ -564,4 +565,77 @@ test('fetchNtopng ranks top talkers by live throughput, not bytes', async () => 
   } finally {
     await new Promise(r => server.close(r));
   }
+});
+
+// ---------------------------------------------------------------------------
+// TLS certificate expiry — alert engine (synthetic snapshots, no network)
+// ---------------------------------------------------------------------------
+
+function certSnap(items) {
+  return { pollIntervalMs: 10_000, certificates: { status: 'ok', items } };
+}
+
+const certRule = {
+  id: 'auto-cert-expiring', name: 'Certificate expiring soon', enabled: true,
+  source: 'certificate', metric: 'cert.daysLeft', operator: '<', threshold: 5,
+  severity: 'warning', forSeconds: 0, notify: true,
+};
+
+test('auto-creates a certificate expiry alert rule when certificates are configured', () => {
+  const rules = buildAutoAlertRules({ certificates: [{ id: 'c1', name: 'opn', host: '192.168.1.1' }] });
+  const certRuleFound = rules.find(r => r.source === 'certificate');
+  assert.ok(certRuleFound, 'expected a certificate alert rule');
+  assert.equal(certRuleFound.metric, 'cert.daysLeft');
+  assert.equal(certRuleFound.operator, '<');
+  assert.equal(certRuleFound.threshold, 5);
+  assert.equal(certRuleFound.notify, true, 'expiry alert should be push-notified');
+});
+
+test('fans a certificate rule out per-certificate and names the due one', () => {
+  resetAlertStateForTests();
+  const snap = certSnap([
+    { id: 'c1', name: 'opnsense', host: '10.1.2.1', port: 443, daysLeft: 3, status: 'valid' },
+    { id: 'c2', name: 'homeassistant', host: '10.1.2.2', port: 8123, daysLeft: 40, status: 'valid' },
+  ]);
+  evaluateAlerts([certRule], snap);
+  evaluateAlerts([certRule], snap);
+
+  const firing = getAlertInstancesForTests();
+  assert.equal(firing.length, 1, 'only the < 5 day certificate should fire');
+  assert.equal(firing[0].id, 'auto-cert-expiring:c1');
+  assert.match(firing[0].message, /opnsense/);
+});
+
+test('an already-expired certificate still breaches the expiry alert', () => {
+  resetAlertStateForTests();
+  const snap = certSnap([{ id: 'c1', name: 'opnsense', host: '10.1.2.1', port: 443, daysLeft: -2, status: 'expired' }]);
+  evaluateAlerts([certRule], snap);
+  assert.equal(getAlertInstancesForTests()[0].state, 'firing');
+});
+
+test('certificate alert resolves after renewal', () => {
+  resetAlertStateForTests();
+  evaluateAlerts([certRule], certSnap([{ id: 'c1', name: 'opnsense', host: '10.1.2.1', port: 443, daysLeft: 2, status: 'valid' }]));
+  assert.equal(getAlertInstancesForTests()[0].state, 'firing');
+  evaluateAlerts([certRule], certSnap([{ id: 'c1', name: 'opnsense', host: '10.1.2.1', port: 443, daysLeft: 30, status: 'valid' }]));
+  assert.equal(getAlertInstancesForTests()[0].state, 'resolved');
+});
+
+test('resolveMetric returns daysLeft for the certificate source', () => {
+  const rule = { source: 'certificate', metric: 'cert.daysLeft' };
+  const snap = { certificates: {} };
+  assert.equal(resolveMetric(rule, snap, { id: 'c1', name: 'opn', daysLeft: 3 }), 3);
+  assert.equal(resolveMetric(rule, snap, { id: 'c1', name: 'opn', daysLeft: null }), null);
+});
+
+test('fetchCertificates handles an empty config and unreachable hosts without rejecting', async () => {
+  const empty = await fetchCertificates([]);
+  assert.equal(empty.status, 'ok');
+  assert.deepEqual(empty.items, []);
+
+  // Connection refused on a closed loopback port → error entry, not a rejection.
+  const res = await fetchCertificates([{ id: 'c1', name: 'nowhere', host: '127.0.0.1', port: 1 }]);
+  assert.equal(res.items[0].status, 'error');
+  assert.equal(res.items[0].daysLeft, null);
+  assert.ok(res.items[0].error);
 });

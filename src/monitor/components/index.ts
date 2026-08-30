@@ -11,6 +11,7 @@ export { SeerrCard } from './SeerrCard';
 export { UsenetCard } from './UsenetCard';
 export { ArrCard } from './ArrCard';
 export { OpnsenseCard } from './OpnsenseCard';
+export { CertificatesCard } from './CertificatesCard';
 export { HomeStatusCard } from './HomeStatusCard';
 export { NetworkPanel } from './NetworkPanel';
 export { PowerPanel } from './PowerPanel';
