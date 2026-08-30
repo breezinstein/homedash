@@ -16,6 +16,7 @@ import {
   UsenetCard,
   ArrCard,
   OpnsenseCard,
+  CertificatesCard,
 } from './components';
 import { MonitorSettingsPanel } from './components/MonitorSettingsPanel';
 import { HomeStatusCard } from './components/HomeStatusCard';
@@ -128,7 +129,20 @@ export function MonitorApp() {
           {/* Home tab */}
           {activeTab === 'home' && (
             <div className="network-panel">
-              <HomePanel homeAssistant={overview?.homeassistant ?? null} />
+              {(overview?.homeassistant || (overview?.certificates?.items?.length ?? 0) > 0) ? (
+                <>
+                  {overview?.homeassistant && (
+                    <HomePanel homeAssistant={overview.homeassistant} />
+                  )}
+                  {(overview?.certificates?.items?.length ?? 0) > 0 && (
+                    <div style={{ marginTop: overview?.homeassistant ? 12 : 0 }}>
+                      <CertificatesCard certificates={overview?.certificates ?? null} />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="empty-grid-msg">No home or certificate sources configured</div>
+              )}
             </div>
           )}
 

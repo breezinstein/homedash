@@ -27,6 +27,7 @@ import {
   CheckCircle2,
   Sliders,
   Radio,
+  Lock,
 } from 'lucide-react';
 import { configApi } from '../../api/configApi';
 import { newId } from '../../lib/id';
@@ -40,6 +41,7 @@ import type {
   MonitoredOpnsense,
   MonitoredNtopng,
   MonitoredHomeAssistant,
+  MonitoredCertificate,
   RemoteServer,
   AlertRule,
   Severity,
@@ -60,6 +62,7 @@ type SectionKey =
   | 'seerr'
   | 'network'
   | 'home'
+  | 'certs'
   | 'alerts';
 
 interface NavSectionItem {
@@ -82,6 +85,7 @@ const NAV_SECTIONS: NavSectionItem[] = [
   { key: 'seerr', label: 'Media Requests', group: 'Media', icon: Clapperboard, accentColor: '#f97316', description: 'Overseerr & Jellyseerr pending requests and media issues' },
   { key: 'network', label: 'Network Appliances', group: 'Infra', icon: Shield, accentColor: 'var(--mon-danger)', description: 'OPNsense multi-WAN firewall & ntopng traffic analytics' },
   { key: 'home', label: 'Home Assistant', group: 'Infra', icon: House, accentColor: '#14b8a6', description: 'Smart-home device reachability, battery and sensors' },
+  { key: 'certs', label: 'TLS Certificates', group: 'Infra', icon: Lock, accentColor: '#10b981', description: 'Watch certificate expiry on hosts & services' },
   { key: 'alerts', label: 'Alert Rules', group: 'Automation', icon: Bell, accentColor: '#ec4899', description: 'Real-time telemetry thresholds and firing notifications' },
 ];
 
@@ -95,6 +99,7 @@ const SOURCE_LABELS: Record<AlertRule['source'], string> = {
   homeassistant: 'Home Assistant',
   ntopng: 'ntopng',
   reachability: 'Host reachability',
+  certificate: 'TLS Certificate',
 };
 
 const METRICS: Record<AlertRule['source'], { value: string; label: string }[]> = {
@@ -146,6 +151,10 @@ const METRICS: Record<AlertRule['source'], { value: string; label: string }[]> =
   ],
   reachability: [
     { value: 'reachable', label: 'Host reachable (0/1)' },
+  ],
+  certificate: [
+    { value: 'cert.daysLeft', label: 'Days until expiry' },
+    { value: 'cert.minDaysLeft', label: 'Most-expiring cert (days)' },
   ],
 };
 
@@ -238,7 +247,7 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
   }, []);
 
   const setList = useCallback(
-    <K extends 'media' | 'usenet' | 'arr' | 'seerr' | 'opnsense' | 'ntopng' | 'homeassistant'>(
+    <K extends 'media' | 'usenet' | 'arr' | 'seerr' | 'opnsense' | 'ntopng' | 'homeassistant' | 'certificates'>(
       key: K,
       list: MonitoringConfig[K],
     ) => {
@@ -309,6 +318,8 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
         return { count: (mon.opnsense?.length ?? 0) + (mon.ntopng?.length ?? 0) };
       case 'home':
         return { count: mon.homeassistant?.length ?? 0 };
+      case 'certs':
+        return { count: mon.certificates?.length ?? 0 };
       case 'alerts':
         return { count: (mon.alerts ?? []).filter((a) => a.enabled).length };
       default:
@@ -420,6 +431,15 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
         setList('homeassistant', [...list, { ...item, id: newId() } as MonitoredHomeAssistant]);
       } else {
         setList('homeassistant', list.map((i) => (i.id === item.id ? item : i)));
+      }
+    } else if (sec === 'certs') {
+      const list = mon.certificates ?? [];
+      const clean = { ...item };
+      delete clean._type;
+      if (isNew) {
+        setList('certificates', [...list, { ...clean, id: newId() } as MonitoredCertificate]);
+      } else {
+        setList('certificates', list.map((i) => (i.id === item.id ? clean : i)));
       }
     }
     setEntityModal(null);
@@ -1491,6 +1511,75 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                 </div>
               )}
 
+              {/* ── 10b. TLS CERTIFICATES SECTION ── */}
+              {active === 'certs' && (
+                <div className="space-y-4">
+                  <div className="ms-card">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="ms-card-title mb-0">
+                        <Lock className="w-4 h-4 text-emerald-400" />
+                        TLS Certificates (Expiry Watch)
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setEntityModal({
+                            open: true,
+                            section: 'certs',
+                            item: { name: '', host: '', port: 443 },
+                            isNew: true,
+                          })
+                        }
+                        className="ms-btn ms-btn-primary text-xs py-1 px-2.5"
+                      >
+                        <Plus className="w-3 h-3" /> Add Certificate
+                      </button>
+                    </div>
+
+                    {(mon.certificates ?? []).length === 0 ? (
+                      <div className="p-4 text-center rounded-lg bg-[var(--mon-panel)] border border-[var(--mon-border-soft)] text-xs text-[var(--mon-text-muted)]">
+                        No certificates configured. Add a host:port to watch its TLS expiry — you'll be
+                        alerted when fewer than 5 days remain.
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {(mon.certificates ?? []).map((item) => (
+                          <EntityCard
+                            key={item.id}
+                            icon={Lock}
+                            name={item.name}
+                            url={`${item.host}:${item.port ?? 443}`}
+                            type="#10b981"
+                            badgeLabel="TLS"
+                            details={`Port ${item.port ?? 443}`}
+                            onCopy={() => copyToClipboard(`${item.host}:${item.port ?? 443}`, 'Certificate endpoint')}
+                            onEdit={() =>
+                              setEntityModal({
+                                open: true,
+                                section: 'certs',
+                                item: { ...item },
+                                isNew: false,
+                              })
+                            }
+                            onDelete={() =>
+                              setConfirmDialog({
+                                title: `Delete ${item.name}?`,
+                                message: 'This will stop watching the certificate expiry for this endpoint.',
+                                onConfirm: () =>
+                                  setList(
+                                    'certificates',
+                                    (mon.certificates ?? []).filter((c) => c.id !== item.id),
+                                  ),
+                              })
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* ── 11. ALERTS SECTION ── */}
               {active === 'alerts' && (
                 <div className="space-y-4">
@@ -1852,6 +1941,8 @@ function EntityModalDialog({
         return form._type === 'opnsense' ? `${action} OPNsense Firewall` : `${action} ntopng Analyser`;
       case 'home':
         return `${action} Home Assistant`;
+      case 'certs':
+        return `${action} TLS Certificate`;
       default:
         return `${action} Service`;
     }
@@ -1933,15 +2024,38 @@ function EntityModalDialog({
             />
           </FormField>
 
-          <FormField label="Endpoint URL">
-            <input
-              type="text"
-              className="ms-input font-mono text-xs"
-              placeholder="http://192.168.1.50:8096"
-              value={form.url ?? ''}
-              onChange={(e) => setField('url', e.target.value)}
-            />
-          </FormField>
+          {section === 'certs' ? (
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <FormField label="Hostname / IP">
+                <input
+                  type="text"
+                  className="ms-input font-mono text-xs"
+                  placeholder="opnsense.lan"
+                  value={form.host ?? ''}
+                  onChange={(e) => setField('host', e.target.value)}
+                />
+              </FormField>
+              <FormField label="Port">
+                <input
+                  type="number"
+                  className="ms-input font-mono text-xs"
+                  placeholder="443"
+                  value={form.port ?? ''}
+                  onChange={(e) => setField('port', e.target.value ? Number(e.target.value) : 443)}
+                />
+              </FormField>
+            </div>
+          ) : (
+            <FormField label="Endpoint URL">
+              <input
+                type="text"
+                className="ms-input font-mono text-xs"
+                placeholder="http://192.168.1.50:8096"
+                value={form.url ?? ''}
+                onChange={(e) => setField('url', e.target.value)}
+              />
+            </FormField>
+          )}
 
           {/* Media / Arr / Seerr API Key */}
           {(section === 'media' || section === 'arr' || section === 'seerr' || (section === 'usenet' && form.type === 'sabnzbd')) && (
@@ -2111,7 +2225,10 @@ function EntityModalDialog({
           <button
             type="button"
             onClick={() => onSave(form, isNew)}
-            disabled={!form.name?.trim() || !form.url?.trim()}
+            disabled={
+              !form.name?.trim() ||
+              (section === 'certs' ? !form.host?.trim() : !form.url?.trim())
+            }
             className="ms-btn ms-btn-primary text-xs"
           >
             <Check className="w-3.5 h-3.5" />
@@ -2598,6 +2715,7 @@ function defaultMonitoring(): MonitoringConfig {
     opnsense: [],
     ntopng: [],
     homeassistant: [],
+    certificates: [],
     ui: { tabRotationSeconds: 15 },
     alerts: [],
   };

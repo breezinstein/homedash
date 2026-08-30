@@ -23,6 +23,7 @@ const SOURCE_LABELS: Record<SourceKey, string> = {
   homeassistant: 'Home Assistant',
   ntopng: 'ntopng',
   reachability: 'Host reachability',
+  certificate: 'TLS Certificate',
 };
 
 const METRICS: Record<SourceKey, { value: string; label: string }[]> = {
@@ -74,6 +75,10 @@ const METRICS: Record<SourceKey, { value: string; label: string }[]> = {
   ],
   reachability: [
     { value: 'reachable', label: 'Host reachable (0/1)' },
+  ],
+  certificate: [
+    { value: 'cert.daysLeft', label: 'Days until expiry' },
+    { value: 'cert.minDaysLeft', label: 'Most-expiring cert (days)' },
   ],
 };
 

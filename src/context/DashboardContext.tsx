@@ -132,6 +132,7 @@ const defaultConfig: DashboardConfig = {
     opnsense: [],
     ntopng: [],
     homeassistant: [],
+    certificates: [],
     ui: { tabRotationSeconds: 15 },
     alerts: [],
   },

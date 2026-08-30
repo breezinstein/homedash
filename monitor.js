@@ -14,6 +14,7 @@ import { existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import https from 'https';
+import tls from 'tls';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -1587,6 +1588,88 @@ export async function fetchHomeAssistant(haConfigs) {
 }
 
 // ---------------------------------------------------------------------------
+// TLS certificate expiry checks
+// ---------------------------------------------------------------------------
+// Each configured host:port is opened with a raw TLS socket (no chain
+// verification — we only want the notAfter date, and home-lab certs are often
+// self-signed). The peer cert's `valid_to` → days remaining. A connect timeout
+// bounds each check so a dead host can't stall the poller (the same concern as
+// fetchJson's body timeout). Each check *never rejects*; errors become a
+// status: 'error' entry so one unreachable host doesn't wedge the poll cycle.
+// ---------------------------------------------------------------------------
+
+const CERT_TIMEOUT_MS = 5_000;
+
+function checkCertificate(cert) {
+  return new Promise((resolve) => {
+    const host = String(cert?.host || '').trim();
+    const port = Number(cert?.port) || 443;
+    const name = cert?.name || host;
+    const id = cert?.id || host;
+    if (!host) {
+      resolve({ id, name, host, port, daysLeft: null, status: 'error', error: 'Missing host' });
+      return;
+    }
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const socket = tls.connect({
+      host,
+      port,
+      // SNI servername is only valid for hostnames — Node throws
+      // ERR_INVALID_ARG_VALUE when it's an IP address.
+      servername: /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':') ? undefined : host,
+      rejectUnauthorized: false,
+    });
+    socket.once('secureConnect', () => {
+      const peer = socket.getPeerCertificate();
+      const notAfter = peer?.valid_to || null;
+      const validFrom = peer?.valid_from || null;
+      const daysLeft = notAfter ? Math.floor((Date.parse(notAfter) - Date.now()) / 86_400_000) : null;
+      const status = typeof daysLeft === 'number' && daysLeft < 0 ? 'expired' : 'valid';
+      socket.destroy();
+      finish({ id, name, host, port, daysLeft, expiresAt: notAfter, validFrom, status });
+    });
+    socket.once('error', (err) => {
+      socket.destroy();
+      finish({ id, name, host, port, daysLeft: null, status: 'error', error: err.message });
+    });
+    socket.setTimeout(CERT_TIMEOUT_MS, () => {
+      socket.destroy();
+      finish({ id, name, host, port, daysLeft: null, status: 'error', error: 'Timed out' });
+    });
+  });
+}
+
+function buildCertificateSnapshot(items) {
+  if (!Array.isArray(items) || items.length === 0) return { status: 'ok', items: [] };
+  let minDaysLeft = Infinity;
+  for (const c of items) {
+    if (typeof c.daysLeft === 'number' && c.daysLeft < minDaysLeft) minDaysLeft = c.daysLeft;
+  }
+  const anyError = items.some(c => c.status === 'error');
+  const anyExpired = items.some(c => c.status === 'expired');
+  const allError = items.every(c => c.status === 'error');
+  let status = 'ok';
+  if (anyError || anyExpired || (Number.isFinite(minDaysLeft) && minDaysLeft < 5)) status = 'degraded';
+  if (allError) status = 'down';
+  return {
+    status,
+    items,
+    minDaysLeft: Number.isFinite(minDaysLeft) ? Math.round(minDaysLeft) : null,
+  };
+}
+
+export async function fetchCertificates(certConfigs) {
+  const list = Array.isArray(certConfigs) ? certConfigs : [];
+  const items = await Promise.all(list.map(c => checkCertificate(c)));
+  return buildCertificateSnapshot(items);
+}
+
+// ---------------------------------------------------------------------------
 // Docker aggregation (from Glances container lists)
 // ---------------------------------------------------------------------------
 
@@ -1634,11 +1717,14 @@ export function evaluateAlerts(rules, snapshot) {
 
   for (const rule of rules) {
     if (!rule.enabled) continue;
-    const hosts = (rule.source === 'glances' || rule.source === 'reachability') && !rule.host
-      ? snapshot.hosts : [rule.host ? snapshot.hosts.find(h => h.host.id === rule.host) : null];
+    const hosts = rule.source === 'certificate' && !rule.host
+      ? (snapshot.certificates?.items || [])
+      : (rule.source === 'glances' || rule.source === 'reachability') && !rule.host
+        ? snapshot.hosts : [rule.host ? snapshot.hosts.find(h => h.host.id === rule.host) : null];
     const targets = hosts.length ? hosts : [null];
     for (const host of targets) {
-      const key = host ? `${rule.id}:${host.host.id}` : rule.id;
+      const certEntryId = x => (x && x.host && x.host.id) || (x && x.id) || '?';
+      const key = host ? `${rule.id}:${certEntryId(host)}` : rule.id;
       evaluated.add(key);
       const value = resolveMetric(rule, snapshot, host);
       const entry = alertState.get(key) || { consecutiveBreachMs: 0, instance: null };
@@ -1690,6 +1776,14 @@ export function resolveMetric(rule, snapshot, targetHost = null) {
   if ((source === 'glances' || source === 'reachability') && metric === 'reachable') {
     const h = targetHost || (host ? snapshot.hosts.find(x => x.host.id === host) : null);
     return h ? (h.status === 'down' ? 0 : 1) : 0;
+  }
+  if (source === 'certificate') {
+    if (metric === 'cert.daysLeft') {
+      const c = targetHost || null;
+      return (c && typeof c.daysLeft === 'number') ? c.daysLeft : null;
+    }
+    if (metric === 'cert.minDaysLeft') return snapshot.certificates?.minDaysLeft ?? null;
+    return null;
   }
   if (source === 'docker' && (metric === 'unhealthy' || metric === 'docker.unhealthy')) return snapshot.docker?.unhealthy ?? null;
   if (source === 'docker' && (metric === 'restarting' || metric === 'docker.restarting')) return snapshot.docker?.restarting ?? null;
@@ -1786,7 +1880,7 @@ export function compareMetric(op, value, threshold) {
 
 function buildAlertMessage(rule, value, host) {
   const val = typeof value === 'number' ? round1(value) : value;
-  const source = host ? `${host.host.name} ` : '';
+  const source = host ? `${(host.host && host.host.name) || host.name} ` : '';
   return `${source}${rule.name}: ${val} ${rule.operator} ${rule.threshold}`;
 }
 
@@ -1843,6 +1937,11 @@ export function buildAutoAlertRules(mon) {
     // ~100 MB/s (~800 Mbps) on the busiest host — a genuinely suspicious spike.
     add('auto-ntopng-busy', 'Very high host throughput', 'ntopng', 'ntopng.topThroughput', '>=', 100e6, 'warning', 300);
   }
+  if (has(mon?.certificates)) {
+    // Alert when any configured TLS certificate has fewer than 5 days left.
+    // Iterates per-cert so the alert names exactly which certificate is due.
+    add('auto-cert-expiring', 'Certificate expiring soon', 'certificate', 'cert.daysLeft', '<', 5, 'warning', 0, true);
+  }
 
   return rules;
 }
@@ -1884,6 +1983,33 @@ export class MonitorManager {
     this._lastCycleDurationMs = null;
     this._lastAlertSerialized = null;
     this._waiters = new Set();
+    // Certificate checks are throttled: the report is only rebuilt once per
+    // refresh window (default 24h), and served from cache in between. The
+    // config signature is tracked so adding/removing a certificate triggers an
+    // immediate re-check rather than waiting for the next window.
+    this._certCache = null;
+    this._certSig = null;
+    this._certCacheAt = 0;
+  }
+
+  // Returns the certificate snapshot, re-checking the endpoints only when the
+  // cache is stale (past certificateRefreshHours) or the certificate config
+  // list changed. Returns the cached snapshot otherwise.
+  async _certSnapshot(mon) {
+    const configs = Array.isArray(mon.certificates) ? mon.certificates : [];
+    const refreshHours = Math.max(1, Math.min(168, Number(mon.certificateRefreshHours) || 24));
+    const refreshMs = refreshHours * 3600_000;
+    const now = Date.now();
+    const sig = JSON.stringify(configs.map(c => ({ id: c.id, name: c.name, host: c.host, port: c.port })));
+    const fresh = this._certCache
+      && this._certSig === sig
+      && (now - this._certCacheAt) < refreshMs;
+    if (fresh) return this._certCache;
+    const snapshot = await fetchCertificates(configs);
+    this._certCache = snapshot;
+    this._certSig = sig;
+    this._certCacheAt = now;
+    return snapshot;
   }
 
   start() {
@@ -1934,7 +2060,7 @@ export class MonitorManager {
 
     // Fan out
     const hostCfgs = Array.isArray(mon.glancesHosts) ? mon.glancesHosts : [];
-    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult, homeAssistantResult] = await Promise.all([
+    const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult, homeAssistantResult, certificateResult] = await Promise.all([
       Promise.all(hostCfgs.map(h => fetchGlancesHost(h))),
       fetchSolar(cfg),
       fetchMedia(mon.media),
@@ -1944,6 +2070,7 @@ export class MonitorManager {
       fetchOpnsense(mon.opnsense),
       fetchNtopng(mon.ntopng),
       fetchHomeAssistant(mon.homeassistant),
+      this._certSnapshot(mon),
     ]);
 
     const docker = mon.docker?.enabled === false
@@ -1957,7 +2084,7 @@ export class MonitorManager {
     if (hostDowns > 0) globalStatus = 'degraded';
     if (hostDowns === hostResults.length && hostResults.length > 0) globalStatus = 'critical';
     if ((docker.unhealthy || 0) > 0 || (docker.restarting || 0) > 0) globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
-    if ([solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult, homeAssistantResult].some(source => source?.status === 'down')) {
+    if ([solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult, homeAssistantResult, certificateResult].some(source => source?.status === 'down')) {
       globalStatus = globalStatus === 'ok' ? 'degraded' : globalStatus;
     }
 
@@ -1974,6 +2101,7 @@ export class MonitorManager {
       opnsense: opnsenseResult,
       ntopng: ntopngResult,
       homeassistant: homeAssistantResult,
+      certificates: certificateResult,
       alerts: { firing: [], recentlyResolved: [] },
       pollIntervalMs: interval,
       tabRotationSeconds: mon.ui?.tabRotationSeconds ?? 15,
@@ -2097,6 +2225,7 @@ function emptyOverview() {
     arr: null,
     seerr: null,
     opnsense: null,
+    certificates: { status: 'ok', items: [] },
     alerts: { firing: [], recentlyResolved: [] },
     pollIntervalMs: DEFAULT_POLL_INTERVAL_MS,
     tabRotationSeconds: 15,
