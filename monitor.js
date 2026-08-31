@@ -1600,6 +1600,32 @@ export async function fetchHomeAssistant(haConfigs) {
 
 const CERT_TIMEOUT_MS = 5_000;
 
+// Certificate checks are fanned out to a single upstream IP whenever every
+// configured hostname resolves to the same host (the common case — a reverse
+// proxy sitting in front of every service). Firing every `tls.connect` at once
+// makes the upstream's firewall/WAF drop the burst as a SYN blackhole, so hosts
+// that connect fine one-at-a-time time out in the aggregate. Stagger the checks
+// into small batches so only a handful of concurrent connects hit the upstream
+// at once.
+const CERT_CHECK_BATCH = 4;
+const CERT_CHECK_BATCH_DELAY_MS = 200;
+const CERT_RETRY_DELAY_MS = 400;
+
+// Run `fn` over `items` in fixed-size batches, pausing briefly between batches,
+// so no more than CERT_CHECK_BATCH operations are in flight at once. Preserves
+// input order (important: the snapshot must mirror the config list).
+async function mapInBatches(items, batchSize, delayMs, fn) {
+  const results = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    results.push(...(await Promise.all(batch.map((it, j) => fn(it, i + j)))));
+    if (i + batchSize < items.length && delayMs > 0) {
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+  return results;
+}
+
 function checkCertificate(cert) {
   return new Promise((resolve) => {
     const host = String(cert?.host || '').trim();
@@ -1663,9 +1689,25 @@ function buildCertificateSnapshot(items) {
   };
 }
 
+// A rate-limited / SYN-dropping upstream fails the FIRST attempt to a host that
+// is actually reachable (we prove that hosts check fine in isolation). Because
+// the poller caches the certificate snapshot for the whole refresh window
+// (default 24h), one transient drop would otherwise stick on the dashboard for
+// a day. Retry a failed check once after a short backoff; if the retry also
+// fails, keep the original error entry.
+async function checkCertificateWithRetry(cert) {
+  const first = await checkCertificate(cert);
+  if (first.status !== 'error') return first;
+  await new Promise((r) => setTimeout(r, CERT_RETRY_DELAY_MS));
+  const retry = await checkCertificate(cert);
+  // Prefer a successful retry, but don't discard a meaningful first error
+  // message if the retry additionally failed.
+  return (retry.status !== 'error') ? retry : first;
+}
+
 export async function fetchCertificates(certConfigs) {
   const list = Array.isArray(certConfigs) ? certConfigs : [];
-  const items = await Promise.all(list.map(c => checkCertificate(c)));
+  const items = await mapInBatches(list, CERT_CHECK_BATCH, CERT_CHECK_BATCH_DELAY_MS, (c) => checkCertificateWithRetry(c));
   return buildCertificateSnapshot(items);
 }
 
