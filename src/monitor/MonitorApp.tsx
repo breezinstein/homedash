@@ -16,7 +16,6 @@ import {
   UsenetCard,
   ArrCard,
   OpnsenseCard,
-  CertificatesCard,
 } from './components';
 import { MonitorSettingsPanel } from './components/MonitorSettingsPanel';
 import { HomeStatusCard } from './components/HomeStatusCard';
@@ -129,19 +128,10 @@ export function MonitorApp() {
           {/* Home tab */}
           {activeTab === 'home' && (
             <div className="network-panel">
-              {(overview?.homeassistant || (overview?.certificates?.items?.length ?? 0) > 0) ? (
-                <>
-                  {overview?.homeassistant && (
-                    <HomePanel homeAssistant={overview.homeassistant} />
-                  )}
-                  {(overview?.certificates?.items?.length ?? 0) > 0 && (
-                    <div style={{ marginTop: overview?.homeassistant ? 12 : 0 }}>
-                      <CertificatesCard certificates={overview?.certificates ?? null} />
-                    </div>
-                  )}
-                </>
+              {overview?.homeassistant ? (
+                <HomePanel homeAssistant={overview.homeassistant} />
               ) : (
-                <div className="empty-grid-msg">No home or certificate sources configured</div>
+                <div className="empty-grid-msg">No home source configured</div>
               )}
             </div>
           )}
@@ -211,11 +201,15 @@ export function MonitorApp() {
           {/* Network tab */}
           {activeTab === 'network' && (
             <div className="network-panel">
-              {overview?.opnsense || overview?.ntopng ? (
-                <NetworkPanel opnsense={overview.opnsense} ntopng={overview.ntopng} />
+              {overview?.opnsense || overview?.ntopng || (overview?.certificates?.items?.length ?? 0) > 0 ? (
+                <NetworkPanel
+                  opnsense={overview?.opnsense ?? null}
+                  ntopng={overview?.ntopng ?? null}
+                  certificates={overview?.certificates ?? null}
+                />
               ) : (
                 <div className="empty-grid-msg">
-                  No network appliances configured
+                  No network appliances or certificates configured
                 </div>
               )}
             </div>
@@ -250,7 +244,12 @@ export function MonitorApp() {
       />
 
       {/* Full-screen monitor settings (admin) */}
-      {settingsOpen && <MonitorSettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <MonitorSettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          certificates={overview?.certificates ?? null}
+        />
+      )}
 
       {/* Login modal for anonymous viewers who click Settings */}
       {showLogin && <LoginModal onClose={handleLoginClose} />}

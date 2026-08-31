@@ -27,9 +27,12 @@ import {
   CheckCircle2,
   Sliders,
   Radio,
+  RefreshCw,
   Lock,
 } from 'lucide-react';
 import { configApi } from '../../api/configApi';
+import { refreshCertificates } from '../monitorApi';
+import { copyToClipboard as copyText } from '../../lib/clipboard';
 import { newId } from '../../lib/id';
 import type {
   DashboardConfig,
@@ -45,10 +48,13 @@ import type {
   RemoteServer,
   AlertRule,
   Severity,
+  CertificateSnapshot,
+  CertificateEntry,
 } from '../../types';
 
 interface MonitorSettingsPanelProps {
   onClose: () => void;
+  certificates?: CertificateSnapshot | null;
 }
 
 type SectionKey =
@@ -166,7 +172,7 @@ const SEVERITIES: { value: Severity; label: string; color: string; bg: string }[
   { value: 'info', label: 'Info', color: 'var(--mon-accent)', bg: 'rgba(99, 102, 241, 0.16)' },
 ];
 
-export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
+export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: MonitorSettingsPanelProps) {
   const [draft, setDraft] = useState<DashboardConfig | null>(null);
   const [initialJson, setInitialJson] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -176,6 +182,16 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
   const [active, setActive] = useState<SectionKey>('general');
   const [searchQuery, setSearchQuery] = useState('');
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+
+  // Live certificate snapshot (from the monitor overview poll) merged with
+  // per-refresh results so the certs section shows current days-to-expiry.
+  const [certRefreshing, setCertRefreshing] = useState<Set<string>>(new Set());
+  const [certAllRefreshing, setCertAllRefreshing] = useState(false);
+  const [certRefreshError, setCertRefreshError] = useState<string | null>(null);
+  // Per-cert refresh results, applied immediately so the UI doesn't wait for
+  // the next overview poll. Cleared when a fresh poll snapshot arrives so the
+  // server's (fresher) data always wins.
+  const [certOverrides, setCertOverrides] = useState<Map<string, CertificateEntry>>(new Map());
 
   // Submodal state for Add/Edit
   const [entityModal, setEntityModal] = useState<{
@@ -445,10 +461,58 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
     setEntityModal(null);
   };
 
-  const copyToClipboard = (text: string, label = 'Copied') => {
-    navigator.clipboard.writeText(text);
-    showToast(`${label} copied to clipboard`);
+  const copyToClipboard = async (text: string, label = 'Copied') => {
+    const ok = await copyText(text);
+    showToast(ok ? `${label} copied to clipboard` : 'Copy failed');
   };
+
+  // Map a configured certificate to its live snapshot entry (by id) so the
+  // settings list can show days-to-expiry for every configured certificate.
+  // Prefers an immediately-applied refresh result over the polled snapshot.
+  const liveCertFor = useCallback(
+    (item: MonitoredCertificate): CertificateEntry | undefined => {
+      return certOverrides.get(item.id) ?? liveCerts?.items?.find((e) => e.id === item.id);
+    },
+    [certOverrides, liveCerts],
+  );
+
+  // When a fresh overview poll arrives, drop any refresh overrides so the
+  // server's (fresher) data always wins once the poll cycle catches up.
+  useEffect(() => {
+    setCertOverrides(new Map());
+  }, [liveCerts]);
+
+  // Refresh a single certificate (or all, when `ids` is omitted) on demand,
+  // bypassing the throttled cache. The returned snapshot's per-cert entries are
+  // applied immediately as overrides so the days-left updates without waiting
+  // for the next poll.
+  const doRefreshCertificates = useCallback(
+    async (ids?: string[]) => {
+      setCertRefreshError(null);
+      if (ids && ids.length === 1) {
+        setCertRefreshing((prev) => new Set(prev).add(ids[0]));
+      } else {
+        setCertAllRefreshing(true);
+      }
+      try {
+        const snapshot = await refreshCertificates(ids);
+        setCertOverrides((prev) => {
+          const next = new Map(prev);
+          for (const e of snapshot.items) next.set(e.id, e);
+          return next;
+        });
+        showToast(ids && ids.length === 1 ? 'Certificate re-checked' : 'All certificates re-checked');
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Failed to refresh certificates';
+        setCertRefreshError(msg);
+        showToast('Refresh failed');
+      } finally {
+        setCertRefreshing(new Set());
+        setCertAllRefreshing(false);
+      }
+    },
+    [showToast],
+  );
 
   if (loading) {
     return (
@@ -1514,26 +1578,49 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
               {/* ── 10b. TLS CERTIFICATES SECTION ── */}
               {active === 'certs' && (
                 <div className="space-y-4">
+                  {certRefreshError && (
+                    <div className="p-2.5 rounded-lg bg-[var(--mon-danger)]/10 border border-[var(--mon-danger)]/25 text-xs text-[var(--mon-danger)]">
+                      {certRefreshError}
+                    </div>
+                  )}
                   <div className="ms-card">
                     <div className="flex items-center justify-between mb-3">
                       <div className="ms-card-title mb-0">
                         <Lock className="w-4 h-4 text-emerald-400" />
                         TLS Certificates (Expiry Watch)
+                        {(mon.certificates ?? []).length > 0 && (
+                          <span className="ml-2 text-[10px] font-medium text-[var(--mon-text-faint)]">
+                            re-checked ~daily · Refresh to re-verify now
+                          </span>
+                        )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setEntityModal({
-                            open: true,
-                            section: 'certs',
-                            item: { name: '', host: '', port: 443 },
-                            isNew: true,
-                          })
-                        }
-                        className="ms-btn ms-btn-primary text-xs py-1 px-2.5"
-                      >
-                        <Plus className="w-3 h-3" /> Add Certificate
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {(mon.certificates ?? []).length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => doRefreshCertificates()}
+                            disabled={certAllRefreshing}
+                            className="ms-btn text-xs py-1 px-2.5"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${certAllRefreshing ? 'animate-spin' : ''}`} />
+                            Refresh All
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setEntityModal({
+                              open: true,
+                              section: 'certs',
+                              item: { name: '', host: '', port: 443 },
+                              isNew: true,
+                            })
+                          }
+                          className="ms-btn ms-btn-primary text-xs py-1 px-2.5"
+                        >
+                          <Plus className="w-3 h-3" /> Add Certificate
+                        </button>
+                      </div>
                     </div>
 
                     {(mon.certificates ?? []).length === 0 ? (
@@ -1543,37 +1630,66 @@ export function MonitorSettingsPanel({ onClose }: MonitorSettingsPanelProps) {
                       </div>
                     ) : (
                       <div className="space-y-2">
-                        {(mon.certificates ?? []).map((item) => (
-                          <EntityCard
-                            key={item.id}
-                            icon={Lock}
-                            name={item.name}
-                            url={`${item.host}:${item.port ?? 443}`}
-                            type="#10b981"
-                            badgeLabel="TLS"
-                            details={`Port ${item.port ?? 443}`}
-                            onCopy={() => copyToClipboard(`${item.host}:${item.port ?? 443}`, 'Certificate endpoint')}
-                            onEdit={() =>
-                              setEntityModal({
-                                open: true,
-                                section: 'certs',
-                                item: { ...item },
-                                isNew: false,
-                              })
+                        {(mon.certificates ?? []).map((item) => {
+                          const live = liveCertFor(item);
+                          const days = live?.daysLeft ?? null;
+                          const status = live?.status ?? null;
+                          let expiryLabel = 'Not checked yet';
+                          let expiryColor = 'var(--mon-text-faint)';
+                          if (status === 'error') {
+                            expiryLabel = 'Unreachable';
+                            expiryColor = 'var(--mon-text-faint)';
+                          } else if (typeof days === 'number') {
+                            if (days < 0) {
+                              expiryLabel = 'EXPIRED';
+                              expiryColor = 'var(--mon-danger)';
+                            } else if (days <= 5) {
+                              expiryLabel = `${days} days left`;
+                              expiryColor = 'var(--mon-danger)';
+                            } else if (days <= 21) {
+                              expiryLabel = `${days} days left`;
+                              expiryColor = 'var(--mon-warn)';
+                            } else {
+                              expiryLabel = `${days} days left`;
+                              expiryColor = 'var(--mon-ok)';
                             }
-                            onDelete={() =>
-                              setConfirmDialog({
-                                title: `Delete ${item.name}?`,
-                                message: 'This will stop watching the certificate expiry for this endpoint.',
-                                onConfirm: () =>
-                                  setList(
-                                    'certificates',
-                                    (mon.certificates ?? []).filter((c) => c.id !== item.id),
-                                  ),
-                              })
-                            }
-                          />
-                        ))}
+                          }
+                          const refreshing = certRefreshing.has(item.id);
+                          return (
+                            <EntityCard
+                              key={item.id}
+                              icon={Lock}
+                              name={item.name}
+                              url={`${item.host}:${item.port ?? 443}`}
+                              type="#10b981"
+                              badgeLabel="TLS"
+                              details={`Port ${item.port ?? 443}`}
+                              expiry={{ label: expiryLabel, color: expiryColor }}
+                              onCopy={() => copyToClipboard(`${item.host}:${item.port ?? 443}`, 'Certificate endpoint')}
+                              onRefresh={() => doRefreshCertificates([item.id])}
+                              refreshing={refreshing}
+                              onEdit={() =>
+                                setEntityModal({
+                                  open: true,
+                                  section: 'certs',
+                                  item: { ...item },
+                                  isNew: false,
+                                })
+                              }
+                              onDelete={() =>
+                                setConfirmDialog({
+                                  title: `Delete ${item.name}?`,
+                                  message: 'This will stop watching the certificate expiry for this endpoint.',
+                                  onConfirm: () =>
+                                    setList(
+                                      'certificates',
+                                      (mon.certificates ?? []).filter((c) => c.id !== item.id),
+                                    ),
+                                })
+                              }
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1829,9 +1945,12 @@ function EntityCard({
   typeColor = 'var(--mon-accent)',
   badgeLabel,
   details,
+  expiry,
   onCopy,
   onEdit,
   onDelete,
+  onRefresh,
+  refreshing = false,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   name: string;
@@ -1840,9 +1959,12 @@ function EntityCard({
   typeColor?: string;
   badgeLabel?: string;
   details?: string;
+  expiry?: { label: string; color: string };
   onCopy: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
 }) {
   return (
     <div className="ms-entity-card">
@@ -1876,11 +1998,31 @@ function EntityCard({
               <Copy className="w-3 h-3" />
             </button>
           </div>
-          {details && <div className="text-[10px] text-[var(--mon-text-faint)] mt-0.5">{details}</div>}
+          {(details || expiry) && (
+            <div className="flex items-center gap-2 mt-0.5">
+              {details && <div className="text-[10px] text-[var(--mon-text-faint)]">{details}</div>}
+              {expiry && (
+                <div className="text-[10px] font-semibold" style={{ color: expiry.color }}>
+                  {expiry.label}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
       <div className="ms-entity-actions">
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={refreshing}
+            className="ms-icon-btn ms-icon-btn-primary"
+            title={refreshing ? 'Re-checking…' : 'Re-check certificate now'}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+        )}
         <button
           type="button"
           onClick={onEdit}
