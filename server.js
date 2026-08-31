@@ -1618,6 +1618,19 @@ app.get('/api/monitor/overview', async (req, res) => {
   res.json(monitorManager.getOverview());
 });
 
+// POST /api/monitor/certificates/refresh - Force a re-check of TLS certificate
+// expiry (all, or a subset by id), bypassing the throttled cache. Admin-gated
+// because it's a settings action. Returns the fresh CertificateSnapshot.
+app.post('/api/monitor/certificates/refresh', requireAuth, async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids : undefined;
+    const snapshot = await monitorManager.refreshCertificates(ids);
+    res.json(snapshot);
+  } catch (e) {
+    res.status(500).json({ error: e.message || 'Failed to refresh certificates' });
+  }
+});
+
 // GET /api/monitor/alerts - Active + recently resolved alert instances (public).
 app.get('/api/monitor/alerts', (req, res) => {
   res.json(monitorManager.getAlerts());

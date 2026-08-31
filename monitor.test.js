@@ -665,3 +665,32 @@ test('MonitorManager._certSnapshot throttles: caches within the window and re-ch
   assert.notEqual(extended, first, 'expected a fresh snapshot after config change');
   assert.equal(extended.items.length, 2);
 });
+
+test('MonitorManager.refreshCertificates bypasses the throttle, merges subset, and covers all configs', async () => {
+  const manager = new MonitorManager(() => ({ monitoring: { enabled: true } }), null);
+  const mon = {
+    certificates: [
+      { id: 'c1', name: 'nowhere', host: '127.0.0.1', port: 1 },
+      { id: 'c2', name: 'nowhere2', host: '127.0.0.1', port: 2 },
+    ],
+  };
+
+  // Refresh a single cert → returns a snapshot that still spans every
+  // configured certificate (un-refreshed c2 preserved as an entry), and the
+  // refreshed c1 is present. The cache is replaced so the next _certSnapshot
+  // call returns the refreshed snapshot (referred by id), not a stale cache.
+  const single = await manager.refreshCertificates(['c1'], mon);
+  assert.equal(single.items.length, 2, 'subset refresh must preserve un-refreshed certs');
+  const c1 = single.items.find((c) => c.id === 'c1');
+  assert.ok(c1 && c1.status === 'error', 'refreshed cert should be re-checked');
+
+  // The cache was replaced, so _certSnapshot returns the refreshed snapshot
+  // (the same reference, since the refresh stored it as the cache).
+  const fromCache = await manager._certSnapshot(mon);
+  assert.equal(fromCache, single, 'cache should reflect the refresh');
+
+  // Refresh all → every configured cert is re-checked (both present, none dropped).
+  const all = await manager.refreshCertificates(undefined, mon);
+  assert.equal(all.items.length, 2);
+  assert.ok(all.items.every((c) => c.status === 'error'));
+});

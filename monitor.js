@@ -2012,6 +2012,41 @@ export class MonitorManager {
     return snapshot;
   }
 
+  // Force a re-check of certificate expiry, bypassing the throttled cache.
+  // Called from the settings panel's Refresh buttons. `ids` (optional) limits
+  // the re-check to a subset — when omitted, every configured certificate is
+  // re-checked. The refreshed entries are merged back into the full set (so the
+  // overview always reflects every configured certificate) and the cache is
+  // replaced, so the next poll cycle serves the fresh result immediately.
+  async refreshCertificates(ids, monOverride) {
+    const cfg = monOverride ? { monitoring: monOverride } : this._getConfig();
+    const mon = cfg?.monitoring;
+    const configs = Array.isArray(mon?.certificates) ? mon.certificates : [];
+    const idSet = Array.isArray(ids) && ids.length > 0 ? new Set(ids) : null;
+    const targets = idSet ? configs.filter(c => idSet.has(c.id)) : configs;
+    const fresh = await fetchCertificates(targets);
+
+    let snapshot = fresh;
+    if (idSet) {
+      // Merge the refreshed subset back into the previously cached full set so
+      // un-refreshed certificates are preserved. Without a prior cache, fall
+      // back to a per-configured-cert placeholder.
+      const freshById = new Map(fresh.items.map(c => [c.id, c]));
+      const baseItems = this._certCache?.items
+        ?? configs.map(c => ({
+          id: c.id, name: c.name, host: c.host, port: c.port || 443,
+          daysLeft: null, status: 'error', error: 'Not yet checked',
+        }));
+      const merged = baseItems.map(c => freshById.get(c.id) ?? c);
+      snapshot = buildCertificateSnapshot(merged);
+    }
+
+    this._certCache = snapshot;
+    this._certSig = JSON.stringify(configs.map(c => ({ id: c.id, name: c.name, host: c.host, port: c.port })));
+    this._certCacheAt = Date.now();
+    return snapshot;
+  }
+
   start() {
     if (this._running) return;
     const cfg = this._getConfig();

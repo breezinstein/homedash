@@ -250,7 +250,12 @@ export function MonitorApp() {
       />
 
       {/* Full-screen monitor settings (admin) */}
-      {settingsOpen && <MonitorSettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && (
+        <MonitorSettingsPanel
+          onClose={() => setSettingsOpen(false)}
+          certificates={overview?.certificates ?? null}
+        />
+      )}
 
       {/* Login modal for anonymous viewers who click Settings */}
       {showLogin && <LoginModal onClose={handleLoginClose} />}
