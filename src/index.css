@@ -970,6 +970,10 @@ select {
   gap: 12px;
 }
 
+.net-v2-row-4 {
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+}
+
 .net-v2-card {
   background: var(--mon-surface);
   border: 1px solid var(--mon-border);
@@ -1047,6 +1051,46 @@ select {
 .net-iface-bps {
   font-size: 10px;
   color: var(--mon-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Certificate rows inside the network grid */
+.net-cert-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.net-cert-status {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.net-cert-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.net-cert-row .net-iface-name {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.net-cert-row .net-iface-name span:last-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.net-cert-days {
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 
