@@ -1,18 +1,20 @@
-import type { OpnsenseSnapshot, NtopngSnapshot, NtopngTalker } from '../../types';
+import type { OpnsenseSnapshot, NtopngSnapshot, NtopngTalker, CertificateSnapshot } from '../../types';
 import { RingGauge } from './RingGauge';
 import { formatBitRate, formatBytes, formatWindow } from '../format';
 import { activeWanSaturation } from '../wan';
+import { CertificatesCard } from './CertificatesCard';
 
 interface NetworkPanelProps {
   opnsense?: OpnsenseSnapshot | null;
   ntopng?: NtopngSnapshot | null;
+  certificates?: CertificateSnapshot | null;
 }
 
 /**
- * Network overview panel: 3-column top row (throughput gauge, WAN, LAN)
- * followed by a full-width Top Talkers table.
+ * Network overview panel: 4-column top row (throughput gauge, WAN, LAN,
+ * Certificates) followed by a full-width Top Talkers table.
  */
-export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
+export function NetworkPanel({ opnsense, ntopng, certificates }: NetworkPanelProps) {
   // Gauge = active WAN uplink saturation (see wan.ts). When opnsense is
   // unconfigured the panel renders an ntopng-only view, so saturation is zeroed.
   const sat = opnsense
@@ -26,10 +28,16 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
   // ntopng top talkers take precedence; OPNsense NetFlow is the fallback.
   const ntopngTalkers = ntopng?.topTalkers ?? [];
   const netflowTalkers = opnsense?.netflowTalkers ?? [];
+  const hasCerts = (certificates?.items?.length ?? 0) > 0;
 
   if (!opnsense) {
     return (
       <div className="net-v2">
+        {hasCerts && (
+          <div className="net-v2-row net-v2-row-4">
+            <CertificatesCard certificates={certificates ?? null} />
+          </div>
+        )}
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
           <div className="net-section-title">
             Top Talkers · ntopng
@@ -49,8 +57,8 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
 
   return (
     <div className="net-v2">
-      {/* ── Row 1: 3 columns ── */}
-      <div className="net-v2-row">
+      {/* ── Row 1: 4 columns ── */}
+      <div className="net-v2-row net-v2-row-4">
         {/* Column 1: WAN Uplink saturation */}
         <div className="net-v2-card">
           <div className="net-section-title">WAN Uplink</div>
@@ -85,6 +93,9 @@ export function NetworkPanel({ opnsense, ntopng }: NetworkPanelProps) {
           <div className="net-section-title">LAN Interfaces</div>
           <IfacesTable ifaces={opnsense.lanInterfaces} activeColor="var(--mon-accent)" />
         </div>
+
+        {/* Column 4: Certificates */}
+        <CertificatesCard certificates={certificates ?? null} />
       </div>
 
       {/* ── Row 2: Top Talkers (ntopng preferred, OPNsense NetFlow fallback) ── */}
