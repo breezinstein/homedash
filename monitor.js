@@ -511,7 +511,7 @@ async function fetchSolar(config) {
   }
 }
 
-async function fetchMedia(mediaConfigs) {
+export async function fetchMedia(mediaConfigs) {
   if (!Array.isArray(mediaConfigs) || mediaConfigs.length === 0) return null;
   const allStreams = [];
   let successfulSources = 0;
@@ -520,9 +520,15 @@ async function fetchMedia(mediaConfigs) {
   for (const m of mediaConfigs) {
     try {
       const url = `${m.url}/Sessions`;
-      const headers = { Accept: 'application/json', 'User-Agent': 'HomeDash/1.0' };
-      // Emby uses api_key query param; Jellyfin accepts it too
-      const r = await fetch(`${url}?api_key=${encodeURIComponent(m.apiKey)}`, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+      // Jellyfin 10.12+ removed the api_key query param (and the /emby, /jellyfin
+      // path prefixes); auth is now the `MediaBrowser Token` Authorization header.
+      // Emby accepts the same header, so one call path covers both servers.
+      const headers = {
+        Accept: 'application/json',
+        'User-Agent': 'HomeDash/1.0',
+        Authorization: `MediaBrowser Token="${m.apiKey}"`,
+      };
+      const r = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       if (!r.ok) {
         worstError = `HTTP ${r.status} from ${m.name}`;
         continue;
