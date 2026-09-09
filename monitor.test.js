@@ -13,6 +13,7 @@ import {
   fetchNtopng,
   fetchHomeAssistant,
   fetchCertificates,
+  fetchMedia,
   buildAutoAlertRules,
   ensureAutoAlertRules,
   MonitorManager,
@@ -535,6 +536,55 @@ test('fetchHomeAssistant reports auth failure on 401', async () => {
     const out = await fetchHomeAssistant([{ id: 'ha1', name: 'ha', url: `http://127.0.0.1:${port}`, token: 'bad' }]);
     assert.equal(out.status, 'down');
     assert.match(out.error, /authentication failed/i);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchMedia authenticates via MediaBrowser Token header and hits root /Sessions (no api_key query)', async () => {
+  // Jellyfin 10.12 removed the api_key query param and the /emby, /jellyfin
+  // path prefixes; auth is now the `Authorization: MediaBrowser Token` header.
+  // Assert the request shape AND that streams parse, so a regression to the
+  // old call fails this test.
+  let seenUrl = null;
+  let seenAuth = null;
+  const server = createServer((req, res) => {
+    seenUrl = req.url;
+    seenAuth = req.headers.authorization;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify([{
+      UserName: 'bob', Client: 'Jellyfin Web', DeviceName: 'ipad',
+      PlayState: { IsPaused: false, PositionTicks: 600000000, PlayMethod: 'DirectPlay' },
+      NowPlayingItem: {
+        SeriesName: 'The Expanse', SeasonName: 'S2', Name: 'Immolation',
+        RunTimeTicks: 3000000000, Width: 1920, Height: 1080,
+      },
+    }]));
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchMedia([{ id: 'm1', name: 'jf', type: 'jellyfin', url: `http://127.0.0.1:${port}`, apiKey: 'secret' }]);
+    assert.equal(seenUrl, '/Sessions');                      // root path, no legacy prefix
+    assert.equal(seenAuth, 'MediaBrowser Token="secret"');   // header auth, not query param
+    assert.equal(out.status, 'ok');
+    assert.equal(out.activeStreams, 1);
+    assert.equal(out.streams[0].title, 'The Expanse');
+    assert.equal(out.streams[0].user, 'bob');
+    assert.equal(out.error, undefined);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchMedia marks the source down on HTTP 401 (Jellyfin 10.12 no longer accepts the api_key query param)', async () => {
+  const server = createServer((req, res) => { res.statusCode = 401; res.end(); });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchMedia([{ id: 'm1', name: 'jf', type: 'jellyfin', url: `http://127.0.0.1:${port}`, apiKey: 'bad' }]);
+    assert.equal(out.status, 'down');
+    assert.match(out.error, /HTTP 401 from jf/);
   } finally {
     await new Promise(r => server.close(r));
   }
