@@ -64,37 +64,46 @@ function StreamRow({ stream: s }: { stream: MediaStream }) {
   if (s.client && s.client !== '—') parts.push(`via ${s.client}`);
   const userLine = parts.join(' ') || '—';
 
+  // The badge can carry a long raw transcode reason (e.g. a codec + Jellyfin
+  // TranscodeReasons enum). Keep it on its own bottom line, capped by CSS, and
+  // surface the full string on hover so the row width stays bounded.
+  const badgeText = s.transcodeDetail || s.playMethod;
+
   return (
     <div className={`stream-row ${isTranscode ? 'stream-row-transcode' : ''} ${s.paused ? 'stream-row-paused' : ''}`}>
-      <span className="stream-dot" style={{ background: dotColor }} title={s.paused ? 'Paused' : 'Playing'} />
-      <div className="stream-info">
-        <div className="stream-title" title={s.title}>
-          {s.title}
-          {s.subtitle && <span className="stream-title-sub"> — {s.subtitle}</span>}
-        </div>
-        <div className="stream-meta">
-          <span>{userLine}</span>
-          <span className="stream-meta-sep">·</span>
-          <span>{s.server}</span>
-          {s.paused && <span className="stream-paused">PAUSED</span>}
-        </div>
-        {s.progressPercent != null && (
-          <div className="stream-progress">
-            <div className="stream-progress-bg">
-              <div
-                className="stream-progress-fill"
-                style={{
-                  width: `${Math.min(100, s.progressPercent)}%`,
-                  background: isTranscode ? 'var(--mon-warn)' : 'var(--mon-accent)',
-                }}
-              />
-            </div>
-            <span className="stream-position">{s.positionLabel}</span>
+      <div className="stream-top">
+        <span className="stream-dot" style={{ background: dotColor }} title={s.paused ? 'Paused' : 'Playing'} />
+        <div className="stream-info">
+          <div className="stream-title" title={s.title}>
+            {s.title}
+            {s.subtitle && <span className="stream-title-sub"> — {s.subtitle}</span>}
           </div>
-        )}
+          <div className="stream-meta">
+            <span>{userLine}</span>
+            <span className="stream-meta-sep">·</span>
+            <span>{s.server}</span>
+            {s.paused && <span className="stream-paused">PAUSED</span>}
+          </div>
+        </div>
       </div>
-      <span className={`stream-badge ${badgeClass}`}>
-        {s.transcodeDetail || s.playMethod}
+
+      {s.progressPercent != null && (
+        <div className="stream-progress">
+          <div className="stream-progress-bg">
+            <div
+              className="stream-progress-fill"
+              style={{
+                width: `${Math.min(100, s.progressPercent)}%`,
+                background: isTranscode ? 'var(--mon-warn)' : 'var(--mon-accent)',
+              }}
+            />
+          </div>
+          <span className="stream-position">{s.positionLabel}</span>
+        </div>
+      )}
+
+      <span className={`stream-badge ${badgeClass}`} title={badgeText}>
+        {badgeText}
       </span>
     </div>
   );

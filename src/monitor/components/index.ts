@@ -5,7 +5,6 @@ export { SolarCard } from './SolarCard';
 export { DockerCard } from './DockerCard';
 export { AlertsRail } from './AlertsRail';
 export { TabBar } from './TabBar';
-export { StreamsCard } from './StreamsCard';
 export { StreamsPanel } from './StreamsPanel';
 export { SeerrCard } from './SeerrCard';
 export { UsenetCard } from './UsenetCard';
