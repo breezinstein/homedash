@@ -6,6 +6,7 @@ interface MonitorHeaderProps {
   overview: MonitorOverview | null;
   isLoading: boolean;
   connectionError: string | null;
+  lastUpdated: Date | null;
   onSettings?: () => void;
 }
 
@@ -22,13 +23,27 @@ function statusLabel(s: string): string {
   }
 }
 
+function formatUpdatedAt(date: Date | null): string | null {
+  if (!date) return null;
+  return date.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+}
+
 export function MonitorHeader({
   overview,
   isLoading,
   connectionError,
+  lastUpdated,
   onSettings,
 }: MonitorHeaderProps) {
-  const gs = overview?.globalStatus ?? 'ok';
+  // Never present stale health as current. A dropped connection has its own
+  // unknown/stale state, and a first load that failed must not read as "ok".
+  const gs = connectionError ? 'unknown' : overview?.globalStatus ?? 'unknown';
+  const updatedAt = formatUpdatedAt(lastUpdated);
+  const statusText = connectionError ? 'Connection lost' : statusLabel(gs);
 
   return (
     <header className="monitor-header">
@@ -42,8 +57,12 @@ export function MonitorHeader({
           {isLoading
             ? 'Connecting…'
             : connectionError
-              ? 'Offline'
-              : `${overview?.hosts.length ?? 0} hosts · solar · docker — live overview`}
+              ? updatedAt
+                ? `Offline — showing data from ${updatedAt}`
+                : 'Offline — no data received'
+              : overview
+                ? `${overview.hosts.length} hosts · solar · docker — live overview`
+                : 'Waiting for data…'}
         </p>
       </div>
 
@@ -62,14 +81,16 @@ export function MonitorHeader({
       )}
 
       {/* Global status pill */}
-      {!isLoading && <StatusPill status={gs} label={statusLabel(gs)} />}
+      {!isLoading && <StatusPill status={gs} label={statusText} />}
 
       {/* Clock */}
       <div className="monitor-clock">
         <ClockDisplay />
         <p className="monitor-poll">
           {connectionError
-            ? 'disconnected'
+            ? updatedAt
+              ? `stale · ${updatedAt}`
+              : 'disconnected'
             : isLoading
               ? 'loading…'
               : `poll ${Math.round((overview?.pollIntervalMs ?? 5000) / 1000)}s`}
@@ -85,7 +106,9 @@ function StatusPill({ status, label }: { status: string; label: string }) {
       ? 'status-pill--ok'
       : status === 'degraded'
         ? 'status-pill--degraded'
-        : 'status-pill--critical';
+        : status === 'critical'
+          ? 'status-pill--critical'
+          : 'status-pill--unknown';
 
   return (
     <div className={`status-pill ${variant}`}>

@@ -79,12 +79,6 @@ export const ServiceCard = memo(function ServiceCard({ service, index, localInde
     setImgError(false);
   }, [displayIconUrl]);
 
-  const handleClick = () => {
-    if (!isEditMode) {
-      window.open(service.url, '_blank', 'noopener,noreferrer');
-    }
-  };
-
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
     if (onDragStart) {
@@ -99,16 +93,14 @@ export const ServiceCard = memo(function ServiceCard({ service, index, localInde
     }
   };
 
-  return (
-    <div
-      className={`group relative bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 transition-all duration-200 ${
-        isEditMode ? 'cursor-move' : 'cursor-pointer hover:border-[var(--color-primary)] hover:shadow-lg hover:shadow-[var(--color-primary)]/10 active:scale-[0.98] active:bg-[var(--color-background)]'
-      } ${isDragging ? 'opacity-50' : ''}`}
-      onClick={handleClick}
-      draggable={isEditMode}
-      onDragStart={handleDragStart}
-      onDragEnd={handleDragEnd}
-    >
+  const cardClassName = `group relative bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 transition-all duration-200 ${
+    isEditMode
+      ? 'cursor-move'
+      : 'block cursor-pointer hover:border-[var(--color-primary)] hover:shadow-lg hover:shadow-[var(--color-primary)]/10 active:scale-[0.98] active:bg-[var(--color-background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]'
+  } ${isDragging ? 'opacity-50' : ''}`;
+
+  const cardContent = (
+    <>
       {isEditMode && (
         <div className="absolute top-2 right-2 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
           <button
@@ -180,6 +172,30 @@ export const ServiceCard = memo(function ServiceCard({ service, index, localInde
           </p>
         </div>
       </div>
-    </div>
+    </>
+  );
+
+  if (isEditMode) {
+    return (
+      <div
+        className={cardClassName}
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+      >
+        {cardContent}
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={service.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={cardClassName}
+    >
+      {cardContent}
+    </a>
   );
 });

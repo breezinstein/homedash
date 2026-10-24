@@ -110,6 +110,7 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
             <button
               type="button"
               onClick={() => setIconMode('url')}
+              aria-pressed={iconMode === 'url'}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 iconMode === 'url'
                   ? 'bg-[var(--color-primary)] text-white'
@@ -122,6 +123,7 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
             <button
               type="button"
               onClick={() => setIconMode('upload')}
+              aria-pressed={iconMode === 'upload'}
               className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 iconMode === 'upload'
                   ? 'bg-[var(--color-primary)] text-white'
@@ -136,10 +138,14 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
           {/* Icon Input */}
           {iconMode === 'url' ? (
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+              <label
+                htmlFor="service-icon-url"
+                className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
+              >
                 Icon URL
               </label>
               <input
+                id="service-icon-url"
                 type="url"
                 value={formData.icon}
                 onChange={(e) => {
@@ -152,10 +158,14 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
             </div>
           ) : (
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+              <label
+                htmlFor="service-icon-file"
+                className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
+              >
                 Upload Icon {isUploading && <span className="text-[var(--color-primary)]">(uploading...)</span>}
               </label>
               <input
+                id="service-icon-file"
                 type="file"
                 accept="image/*"
                 onChange={handleIconUpload}
@@ -167,10 +177,14 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
 
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+            <label
+              htmlFor="service-name"
+              className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
+            >
               Name *
             </label>
             <input
+              id="service-name"
               type="text"
               value={formData.name}
               onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -182,10 +196,14 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
 
           {/* URL */}
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+            <label
+              htmlFor="service-url"
+              className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
+            >
               URL *
             </label>
             <input
+              id="service-url"
               type="url"
               value={formData.url}
               onChange={(e) => setFormData({ ...formData, url: e.target.value })}
@@ -197,10 +215,14 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
 
           {/* Category */}
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+            <label
+              htmlFor="service-category"
+              className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
+            >
               Category *
             </label>
             <select
+              id="service-category"
               value={formData.category}
               onChange={(e) => setFormData({ ...formData, category: e.target.value })}
               required
@@ -217,10 +239,14 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+            <label
+              htmlFor="service-description"
+              className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
+            >
               Description
             </label>
             <input
+              id="service-description"
               type="text"
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}

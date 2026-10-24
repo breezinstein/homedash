@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Bell } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { useAuth } from '../../context/AuthContext';
 import { fetchNotificationsCount } from '../../api/notificationsApi';
 
@@ -13,7 +14,8 @@ interface NotificationsBellProps {
 const PUBLIC_POLL_MS = 20000;
 
 export function NotificationsBell({ onClick, variant = 'icon' }: NotificationsBellProps) {
-  const { config, unreadCount: adminUnread, notificationsStatus } = useDashboard();
+  const { config } = useDashboard();
+  const { unreadCount: adminUnread, notificationsStatus } = useNotifications();
   const { authenticated } = useAuth();
   const [publicUnread, setPublicUnread] = useState(0);
   const [publicHasError, setPublicHasError] = useState(false);

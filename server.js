@@ -1,5 +1,4 @@
 import express from 'express';
-import cors from 'cors';
 import compression from 'compression';
 import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync, readdirSync, unlinkSync, rmSync, createReadStream, createWriteStream, statfsSync, renameSync, copyFileSync } from 'fs';
 import { readFile, writeFile, stat } from 'fs/promises';
@@ -89,7 +88,9 @@ async function persistConfig(config) {
   configCache.serialized = serialized;
 }
 
-app.use(cors());
+// Same-origin only: the production UI is served by this process and the dev
+// server proxies /api here. No CORS headers are emitted, so other websites
+// cannot read the redacted config or public monitor endpoints cross-origin.
 // gzip text-ish responses. The default filter skips images / already
 // compressed payloads, so the cached-icons /icons static mount is
 // unaffected. Server-Sent Events must never be buffered/compressed, so the

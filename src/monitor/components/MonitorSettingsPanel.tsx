@@ -17,8 +17,6 @@ import {
   Trash2,
   Edit2,
   Copy,
-  Eye,
-  EyeOff,
   Search,
   Zap,
   Layers,
@@ -46,30 +44,22 @@ import type {
   MonitoredHomeAssistant,
   MonitoredCertificate,
   RemoteServer,
-  AlertRule,
-  Severity,
   CertificateSnapshot,
   CertificateEntry,
 } from '../../types';
+import type {
+  EntityFormValues,
+  EntityModalState,
+  SectionKey,
+} from './monitorSettingsTypes';
+import { EntityModalDialog } from './MonitorEntityModal';
+import { AlertsSection } from './MonitorAlertsSection';
+import { SwitchToggle } from './MonitorSettingsControls';
 
 interface MonitorSettingsPanelProps {
   onClose: () => void;
   certificates?: CertificateSnapshot | null;
 }
-
-type SectionKey =
-  | 'general'
-  | 'hosts'
-  | 'solar'
-  | 'docker'
-  | 'media'
-  | 'usenet'
-  | 'arr'
-  | 'seerr'
-  | 'network'
-  | 'home'
-  | 'certs'
-  | 'alerts';
 
 interface NavSectionItem {
   key: SectionKey;
@@ -95,83 +85,6 @@ const NAV_SECTIONS: NavSectionItem[] = [
   { key: 'alerts', label: 'Alert Rules', group: 'Automation', icon: Bell, accentColor: '#ec4899', description: 'Real-time telemetry thresholds and firing notifications' },
 ];
 
-const SOURCE_LABELS: Record<AlertRule['source'], string> = {
-  glances: 'Host (Glances)',
-  solar: 'Solar / Battery',
-  docker: 'Docker',
-  media: 'Media streams',
-  usenet: 'Usenet',
-  seerr: 'Seerr / Overseerr',
-  homeassistant: 'Home Assistant',
-  ntopng: 'ntopng',
-  reachability: 'Host reachability',
-  certificate: 'TLS Certificate',
-};
-
-const METRICS: Record<AlertRule['source'], { value: string; label: string }[]> = {
-  glances: [
-    { value: 'cpu.percent', label: 'CPU %' },
-    { value: 'memory.percent', label: 'Memory %' },
-    { value: 'disk.percent', label: 'Disk %' },
-    { value: 'temperature', label: 'Temperature °C' },
-    { value: 'cpu.load.1m', label: 'Load average (1m)' },
-    { value: 'network.rxBps', label: 'Network ↓ (B/s)' },
-    { value: 'network.txBps', label: 'Network ↑ (B/s)' },
-  ],
-  solar: [
-    { value: 'battery.soc', label: 'Battery SOC %' },
-    { value: 'battery.power', label: 'Battery power (W)' },
-    { value: 'pv.power', label: 'PV power (W)' },
-    { value: 'grid.power', label: 'Grid power (W)' },
-    { value: 'load.percent', label: 'Load % of capacity' },
-  ],
-  docker: [
-    { value: 'docker.unhealthy', label: 'Unhealthy containers' },
-    { value: 'docker.restarting', label: 'Restarting containers' },
-    { value: 'docker.runningRatio', label: 'Running ratio (0–1)' },
-  ],
-  media: [
-    { value: 'streams.transcoding', label: 'Transcoding streams' },
-    { value: 'streams.count', label: 'Active streams' },
-  ],
-  usenet: [
-    { value: 'downloads.paused', label: 'Downloads paused' },
-    { value: 'queue.slots', label: 'Queued items' },
-    { value: 'downloads.speed', label: 'Download speed (B/s)' },
-  ],
-  seerr: [
-    { value: 'seerr.issues', label: 'Open media issues' },
-    { value: 'seerr.pending', label: 'Pending requests' },
-    { value: 'seerr.failed', label: 'Failed requests' },
-  ],
-  homeassistant: [
-    { value: 'ha.unavailable', label: 'Devices offline' },
-    { value: 'ha.unavailableRatio', label: 'Share of devices offline (0–1)' },
-    { value: 'ha.batteryLow', label: 'Lowest battery %' },
-    { value: 'ha.doorsOpen', label: 'Doors open' },
-    { value: 'ha.entities', label: 'Entity count' },
-  ],
-  ntopng: [
-    { value: 'ntopng.topThroughput', label: 'Busiest host (B/s)' },
-    { value: 'ntopng.talkerCount', label: 'Top talkers tracked' },
-  ],
-  reachability: [
-    { value: 'reachable', label: 'Host reachable (0/1)' },
-  ],
-  certificate: [
-    { value: 'cert.daysLeft', label: 'Days until expiry' },
-    { value: 'cert.minDaysLeft', label: 'Most-expiring cert (days)' },
-  ],
-};
-
-const OPERATORS = ['>', '>=', '<', '<=', '==', '!='] as const;
-
-const SEVERITIES: { value: Severity; label: string; color: string; bg: string }[] = [
-  { value: 'critical', label: 'Critical', color: 'var(--mon-danger)', bg: 'rgba(239, 68, 68, 0.16)' },
-  { value: 'warning', label: 'Warning', color: 'var(--mon-warn)', bg: 'rgba(245, 158, 11, 0.16)' },
-  { value: 'info', label: 'Info', color: 'var(--mon-accent)', bg: 'rgba(99, 102, 241, 0.16)' },
-];
-
 export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: MonitorSettingsPanelProps) {
   const [draft, setDraft] = useState<DashboardConfig | null>(null);
   const [initialJson, setInitialJson] = useState<string>('');
@@ -194,12 +107,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
   const [certOverrides, setCertOverrides] = useState<Map<string, CertificateEntry>>(new Map());
 
   // Submodal state for Add/Edit
-  const [entityModal, setEntityModal] = useState<{
-    open: boolean;
-    section: SectionKey;
-    item: any;
-    isNew: boolean;
-  } | null>(null);
+  const [entityModal, setEntityModal] = useState<EntityModalState | null>(null);
 
   // Confirm delete dialog state
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -389,73 +297,70 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
     updateMonitoring({ glancesHosts: [] });
   };
 
-  // Generic Save entity handler
-  const handleSaveEntity = (item: any, isNew: boolean) => {
+  // Generic Save entity handler. The modal state is a discriminated union, so
+  // the section determines which monitored-list shape the draft belongs to.
+  const handleSaveEntity = (item: EntityFormValues, isNew: boolean) => {
     if (!entityModal) return;
-    const sec = entityModal.section;
-    if (sec === 'media') {
+    const modal = entityModal;
+
+    if (modal.section === 'media') {
       const list = mon.media ?? [];
       if (isNew) {
         setList('media', [...list, { ...item, id: newId() } as MonitoredMedia]);
       } else {
-        setList('media', list.map((i) => (i.id === item.id ? item : i)));
+        setList('media', list.map((i) => (i.id === item.id ? { ...i, ...item } as MonitoredMedia : i)));
       }
-    } else if (sec === 'usenet') {
+    } else if (modal.section === 'usenet') {
       const list = mon.usenet ?? [];
       if (isNew) {
         setList('usenet', [...list, { ...item, id: newId() } as MonitoredUsenet]);
       } else {
-        setList('usenet', list.map((i) => (i.id === item.id ? item : i)));
+        setList('usenet', list.map((i) => (i.id === item.id ? { ...i, ...item } as MonitoredUsenet : i)));
       }
-    } else if (sec === 'arr') {
+    } else if (modal.section === 'arr') {
       const list = mon.arr ?? [];
       if (isNew) {
         setList('arr', [...list, { ...item, id: newId() } as MonitoredArr]);
       } else {
-        setList('arr', list.map((i) => (i.id === item.id ? item : i)));
+        setList('arr', list.map((i) => (i.id === item.id ? { ...i, ...item } as MonitoredArr : i)));
       }
-    } else if (sec === 'seerr') {
+    } else if (modal.section === 'seerr') {
       const list = mon.seerr ?? [];
       if (isNew) {
         setList('seerr', [...list, { ...item, id: newId() } as MonitoredSeerr]);
       } else {
-        setList('seerr', list.map((i) => (i.id === item.id ? item : i)));
+        setList('seerr', list.map((i) => (i.id === item.id ? { ...i, ...item } as MonitoredSeerr : i)));
       }
-    } else if (sec === 'network') {
-      if (item._type === 'opnsense') {
+    } else if (modal.section === 'network') {
+      const { _type, ...clean } = item;
+      if (_type === 'opnsense') {
         const list = mon.opnsense ?? [];
-        const clean = { ...item };
-        delete clean._type;
         if (isNew) {
           setList('opnsense', [...list, { ...clean, id: newId() } as MonitoredOpnsense]);
         } else {
-          setList('opnsense', list.map((i) => (i.id === item.id ? clean : i)));
+          setList('opnsense', list.map((i) => (i.id === item.id ? { ...i, ...clean } as MonitoredOpnsense : i)));
         }
       } else {
         const list = mon.ntopng ?? [];
-        const clean = { ...item };
-        delete clean._type;
         if (isNew) {
           setList('ntopng', [...list, { ...clean, id: newId() } as MonitoredNtopng]);
         } else {
-          setList('ntopng', list.map((i) => (i.id === item.id ? clean : i)));
+          setList('ntopng', list.map((i) => (i.id === item.id ? { ...i, ...clean } as MonitoredNtopng : i)));
         }
       }
-    } else if (sec === 'home') {
+    } else if (modal.section === 'home') {
       const list = mon.homeassistant ?? [];
       if (isNew) {
         setList('homeassistant', [...list, { ...item, id: newId() } as MonitoredHomeAssistant]);
       } else {
-        setList('homeassistant', list.map((i) => (i.id === item.id ? item : i)));
+        setList('homeassistant', list.map((i) => (i.id === item.id ? { ...i, ...item } as MonitoredHomeAssistant : i)));
       }
-    } else if (sec === 'certs') {
+    } else if (modal.section === 'certs') {
       const list = mon.certificates ?? [];
-      const clean = { ...item };
-      delete clean._type;
       if (isNew) {
-        setList('certificates', [...list, { ...clean, id: newId() } as MonitoredCertificate]);
+        setList('certificates', [...list, { ...item, id: newId() } as MonitoredCertificate]);
       } else {
-        setList('certificates', list.map((i) => (i.id === item.id ? clean : i)));
+        setList('certificates', list.map((i) => (i.id === item.id ? { ...i, ...item } as MonitoredCertificate : i)));
       }
     }
     setEntityModal(null);
@@ -528,7 +433,12 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
   }
 
   return (
-    <div className="ms-overlay" role="dialog" aria-modal="true">
+    <div
+      className="ms-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="monitor-settings-title"
+    >
       <div className="ms-dialog">
         {/* Top Header */}
         <header className="ms-header">
@@ -537,7 +447,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
           </div>
           <div className="ms-title-block">
             <div className="flex items-center gap-2.5">
-              <span className="ms-title">Monitor Settings</span>
+              <span id="monitor-settings-title" className="ms-title">Monitor Settings</span>
               <span
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold tracking-wide uppercase ${
                   mon.enabled
@@ -1094,7 +1004,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                     <div className="ms-card">
                       <div className="ms-card-title">Configured Inverters in Homedash</div>
                       <div className="space-y-2">
-                        {inverters.map((inv: any) => (
+                        {inverters.map((inv) => (
                           <div
                             key={inv.id}
                             className="p-3 rounded-lg bg-[var(--mon-panel)] border border-[var(--mon-border)] flex items-center justify-between text-xs"
@@ -1771,37 +1681,6 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
    Subcomponents & UI Controls
    ────────────────────────────────────────────────────────────── */
 
-function SwitchToggle({
-  checked,
-  onChange,
-  disabled = false,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <div
-      className={`ms-toggle-wrap ${disabled ? 'opacity-40 pointer-events-none' : ''}`}
-      data-checked={checked}
-      role="switch"
-      aria-checked={checked}
-      tabIndex={0}
-      onClick={() => onChange(!checked)}
-      onKeyDown={(e) => {
-        if (e.key === ' ' || e.key === 'Enter') {
-          e.preventDefault();
-          onChange(!checked);
-        }
-      }}
-    >
-      <div className="ms-toggle-track">
-        <div className="ms-toggle-thumb" />
-      </div>
-    </div>
-  );
-}
-
 function PresetSlider({
   label,
   detail,
@@ -2045,803 +1924,8 @@ function EntityCard({
 }
 
 /* ──────────────────────────────────────────────────────────────
-   Entity Add / Edit Dialog Form
-   ────────────────────────────────────────────────────────────── */
-
-function EntityModalDialog({
-  section,
-  item,
-  isNew,
-  onSave,
-  onClose,
-}: {
-  section: SectionKey;
-  item: any;
-  isNew: boolean;
-  onSave: (form: any, isNew: boolean) => void;
-  onClose: () => void;
-}) {
-  const [form, setForm] = useState<any>({ ...item });
-  const [showPassword, setShowPassword] = useState(false);
-
-  const setField = (key: string, val: any) => {
-    setForm((prev: any) => ({ ...prev, [key]: val }));
-  };
-
-  const getTitle = () => {
-    const action = isNew ? 'Add' : 'Edit';
-    switch (section) {
-      case 'media':
-        return `${action} Media Server`;
-      case 'usenet':
-        return `${action} Usenet Downloader`;
-      case 'arr':
-        return `${action} Sonarr / Radarr`;
-      case 'seerr':
-        return `${action} Seerr Instance`;
-      case 'network':
-        return form._type === 'opnsense' ? `${action} OPNsense Firewall` : `${action} ntopng Analyser`;
-      case 'home':
-        return `${action} Home Assistant`;
-      case 'certs':
-        return `${action} TLS Certificate`;
-      default:
-        return `${action} Service`;
-    }
-  };
-
-  return (
-    <div className="ms-submodal-overlay">
-      <div className="ms-submodal-dialog animate-in zoom-in-95 duration-150">
-        {/* Header */}
-        <div className="ms-submodal-header">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-bold text-[var(--mon-text)]">{getTitle()}</span>
-          </div>
-          <button type="button" onClick={onClose} className="text-[var(--mon-text-muted)] hover:text-[var(--mon-text)] p-1">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <div className="ms-submodal-body">
-          {/* Section-specific Type Pickers */}
-          {section === 'media' && (
-            <TypePicker
-              label="Service Type"
-              value={form.type || 'jellyfin'}
-              options={[
-                { value: 'jellyfin', label: 'Jellyfin', color: '#a855f7' },
-                { value: 'emby', label: 'Emby', color: 'var(--mon-ok)' },
-              ]}
-              onChange={(v) => setField('type', v)}
-            />
-          )}
-
-          {section === 'usenet' && (
-            <TypePicker
-              label="Downloader Type"
-              value={form.type || 'sabnzbd'}
-              options={[
-                { value: 'sabnzbd', label: 'SABnzbd', color: 'var(--mon-warn)' },
-                { value: 'nzbget', label: 'NZBGet', color: '#3b82f6' },
-              ]}
-              onChange={(v) => setField('type', v)}
-            />
-          )}
-
-          {section === 'arr' && (
-            <TypePicker
-              label="Application Type"
-              value={form.type || 'sonarr'}
-              options={[
-                { value: 'sonarr', label: 'Sonarr (TV Shows)', color: '#38bdf8' },
-                { value: 'radarr', label: 'Radarr (Movies)', color: '#fb923c' },
-              ]}
-              onChange={(v) => setField('type', v)}
-            />
-          )}
-
-          {section === 'seerr' && (
-            <TypePicker
-              label="Seerr Variant"
-              value={form.type || 'overseerr'}
-              options={[
-                { value: 'overseerr', label: 'Overseerr', color: '#f97316' },
-                { value: 'jellyseerr', label: 'Jellyseerr', color: '#a855f7' },
-                { value: 'seerr', label: 'Seerr', color: '#3b82f6' },
-              ]}
-              onChange={(v) => setField('type', v)}
-            />
-          )}
-
-          {/* Standard Fields */}
-          <FormField label="Friendly Name / Label">
-            <input
-              type="text"
-              className="ms-input"
-              placeholder="e.g. main-instance"
-              value={form.name ?? ''}
-              onChange={(e) => setField('name', e.target.value)}
-            />
-          </FormField>
-
-          {section === 'certs' ? (
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <FormField label="Hostname / IP">
-                <input
-                  type="text"
-                  className="ms-input font-mono text-xs"
-                  placeholder="opnsense.lan"
-                  value={form.host ?? ''}
-                  onChange={(e) => setField('host', e.target.value)}
-                />
-              </FormField>
-              <FormField label="Port">
-                <input
-                  type="number"
-                  className="ms-input font-mono text-xs"
-                  placeholder="443"
-                  value={form.port ?? ''}
-                  onChange={(e) => setField('port', e.target.value ? Number(e.target.value) : 443)}
-                />
-              </FormField>
-            </div>
-          ) : (
-            <FormField label="Endpoint URL">
-              <input
-                type="text"
-                className="ms-input font-mono text-xs"
-                placeholder="http://192.168.1.50:8096"
-                value={form.url ?? ''}
-                onChange={(e) => setField('url', e.target.value)}
-              />
-            </FormField>
-          )}
-
-          {/* Media / Arr / Seerr API Key */}
-          {(section === 'media' || section === 'arr' || section === 'seerr' || (section === 'usenet' && form.type === 'sabnzbd')) && (
-            <FormField
-              label={section === 'usenet' ? 'API Key (or use Basic Auth below)' : 'API Key'}
-              helpText={
-                section === 'arr'
-                  ? 'Found under Settings → General → Security → API Key'
-                  : section === 'media'
-                  ? 'Found in Jellyfin/Emby Dashboard → Advanced → API Keys'
-                  : undefined
-              }
-            >
-              <div className="ms-input-password-wrap">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  className="ms-input font-mono text-xs"
-                  placeholder="Paste API Key here…"
-                  value={form.apiKey ?? ''}
-                  onChange={(e) => setField('apiKey', e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="ms-input-action-btn"
-                  title={showPassword ? 'Hide value' : 'Show value'}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </FormField>
-          )}
-
-          {/* Usenet / ntopng Basic Auth */}
-          {(section === 'usenet' || (section === 'network' && form._type === 'ntopng')) && (
-            <div className="grid grid-cols-2 gap-3 pt-1">
-              <FormField label="Username (Optional)">
-                <input
-                  type="text"
-                  className="ms-input"
-                  placeholder="admin"
-                  value={form.username ?? ''}
-                  onChange={(e) => setField('username', e.target.value)}
-                />
-              </FormField>
-
-              <FormField label="Password / Token">
-                <div className="ms-input-password-wrap">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="ms-input"
-                    placeholder="••••••••"
-                    value={form.password ?? ''}
-                    onChange={(e) => setField('password', e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="ms-input-action-btn"
-                    title={showPassword ? 'Hide password' : 'Show password'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </FormField>
-            </div>
-          )}
-
-          {/* OPNsense API Key & Secret */}
-          {section === 'network' && form._type === 'opnsense' && (
-            <>
-              <FormField label="API Key">
-                <input
-                  type="text"
-                  className="ms-input font-mono text-xs"
-                  placeholder="OPNsense API Key"
-                  value={form.apiKey ?? ''}
-                  onChange={(e) => setField('apiKey', e.target.value)}
-                />
-              </FormField>
-
-              <FormField label="API Secret">
-                <div className="ms-input-password-wrap">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    className="ms-input font-mono text-xs"
-                    placeholder="OPNsense API Secret"
-                    value={form.apiSecret ?? ''}
-                    onChange={(e) => setField('apiSecret', e.target.value)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="ms-input-action-btn"
-                    title={showPassword ? 'Hide secret' : 'Show secret'}
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
-                </div>
-              </FormField>
-            </>
-          )}
-
-          {/* ntopng Interface ID */}
-          {section === 'network' && form._type === 'ntopng' && (
-            <FormField label="Interface ID (Optional, 0 = default)">
-              <input
-                type="number"
-                className="ms-input font-mono text-xs"
-                placeholder="0"
-                value={form.ifid ?? ''}
-                onChange={(e) => setField('ifid', e.target.value ? Number(e.target.value) : undefined)}
-              />
-            </FormField>
-          )}
-
-          {/* Home Assistant Long-Lived Access Token */}
-          {section === 'home' && (
-            <FormField
-              label="Long-Lived Access Token"
-              helpText="Generate under Home Assistant → Profile → Security → Long-Lived Access Tokens"
-            >
-              <div className="ms-input-password-wrap">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  className="ms-input font-mono text-xs"
-                  placeholder="Bearer token…"
-                  value={form.token ?? ''}
-                  onChange={(e) => setField('token', e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="ms-input-action-btn"
-                  title={showPassword ? 'Hide token' : 'Show token'}
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </FormField>
-          )}
-
-          {/* TLS Insecure Checkbox */}
-          {(section === 'network' || section === 'home') && (
-            <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[var(--mon-surface-2)] border border-[var(--mon-border)] cursor-pointer text-xs text-[var(--mon-text-dim)]">
-              <input
-                type="checkbox"
-                checked={form.insecureTls === true}
-                onChange={(e) => setField('insecureTls', e.target.checked)}
-                className="w-4 h-4 rounded bg-[var(--mon-panel)] border-[var(--mon-border)] text-indigo-600 focus:ring-0"
-              />
-              <div>
-                <span className="font-semibold text-[var(--mon-text-dim)]">Allow Self-Signed TLS Certificates</span>
-                <p className="text-[11px] text-[var(--mon-text-faint)]">
-                  Bypasses TLS verification if using a local HTTPS certificate.
-                </p>
-              </div>
-            </label>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="ms-submodal-footer">
-          <button type="button" onClick={onClose} className="ms-btn ms-btn-ghost text-xs">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onSave(form, isNew)}
-            disabled={
-              !form.name?.trim() ||
-              (section === 'certs' ? !form.host?.trim() : !form.url?.trim())
-            }
-            className="ms-btn ms-btn-primary text-xs"
-          >
-            <Check className="w-3.5 h-3.5" />
-            {isNew ? 'Add Source' : 'Save Changes'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function FormField({
-  label,
-  helpText,
-  children,
-}: {
-  label: string;
-  helpText?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-[11px] font-bold text-[var(--mon-text-dim)] uppercase tracking-wider block">
-        {label}
-      </label>
-      {children}
-      {helpText && <p className="text-[11px] text-[var(--mon-text-faint)] leading-normal">{helpText}</p>}
-    </div>
-  );
-}
-
-function TypePicker({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: { value: string; label: string; color: string }[];
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="space-y-1.5">
-      <label className="text-[11px] font-bold text-[var(--mon-text-dim)] uppercase tracking-wider block">
-        {label}
-      </label>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-        {options.map((opt) => {
-          const isSelected = value === opt.value;
-          return (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => onChange(opt.value)}
-              className={`p-2.5 rounded-lg border text-xs font-semibold transition-all text-center ${
-                isSelected
-                  ? 'bg-indigo-950/40 border-indigo-500 text-[var(--mon-text)] shadow-sm'
-                  : 'bg-[var(--mon-surface-2)] border-[var(--mon-border)] text-[var(--mon-text-muted)] hover:text-[var(--mon-text-dim)]'
-              }`}
-            >
-              <div className="flex items-center justify-center gap-1.5">
-                <span
-                  className="w-2 h-2 rounded-full"
-                  style={{ backgroundColor: opt.color }}
-                />
-                {opt.label}
-              </div>
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────
-   Alerts Management Section
-   ────────────────────────────────────────────────────────────── */
-
-function AlertsSection({
-  rules,
-  servers,
-  onChange,
-  onRemove,
-}: {
-  rules: AlertRule[];
-  servers: RemoteServer[];
-  onChange: (rules: AlertRule[]) => void;
-  onRemove: (id: string) => void;
-}) {
-  const [filter, setFilter] = useState<'all' | Severity>('all');
-  const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
-  const [isNew, setIsNew] = useState(false);
-
-  const filteredRules = useMemo(() => {
-    if (filter === 'all') return rules;
-    return rules.filter((r) => r.severity === filter);
-  }, [rules, filter]);
-
-  const handleToggle = (id: string) => {
-    onChange(rules.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r)));
-  };
-
-  const handleSaveRule = (rule: AlertRule) => {
-    if (isNew) {
-      onChange([...rules, { ...rule, id: newId() }]);
-    } else {
-      onChange(rules.map((r) => (r.id === rule.id ? rule : r)));
-    }
-    setEditingRule(null);
-  };
-
-  return (
-    <div className="space-y-4">
-      {/* Top Filter Bar */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-1.5">
-          {(['all', 'critical', 'warning', 'info'] as const).map((sev) => {
-            const isSelected = filter === sev;
-            const count =
-              sev === 'all'
-                ? rules.length
-                : rules.filter((r) => r.severity === sev).length;
-
-            return (
-              <button
-                key={sev}
-                type="button"
-                onClick={() => setFilter(sev)}
-                className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 ${
-                  isSelected
-                    ? 'bg-indigo-600 border-indigo-500 text-[var(--mon-text)]'
-                    : 'bg-[var(--mon-surface-2)] border-[var(--mon-border)] text-[var(--mon-text-muted)] hover:text-[var(--mon-text-dim)]'
-                }`}
-              >
-                <span className="capitalize">{sev}</span>
-                <span
-                  className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isSelected ? 'bg-indigo-800 text-indigo-200' : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)]'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            setIsNew(true);
-            setEditingRule(emptyRule());
-          }}
-          className="ms-btn ms-btn-primary text-xs py-1.5 px-3"
-        >
-          <Plus className="w-3.5 h-3.5" /> Create Alert Rule
-        </button>
-      </div>
-
-      {/* Rules list */}
-      {filteredRules.length === 0 ? (
-        <div className="p-8 text-center bg-[var(--mon-surface)] border border-[var(--mon-border)] rounded-xl text-[var(--mon-text-muted)] text-xs">
-          No alert rules matching this filter.
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {filteredRules.map((rule) => {
-            const sev = SEVERITIES.find((s) => s.value === rule.severity) ?? SEVERITIES[1];
-            const metricLabel =
-              METRICS[rule.source]?.find((m) => m.value === rule.metric)?.label ?? rule.metric;
-
-            return (
-              <div
-                key={rule.id}
-                className={`p-3.5 rounded-xl border transition-all flex items-center justify-between gap-3 ${
-                  rule.enabled
-                    ? 'bg-[var(--mon-surface)] border-[var(--mon-border)] hover:border-[var(--mon-border)]'
-                    : 'bg-[var(--mon-bg)] border-[var(--mon-border)] opacity-60'
-                }`}
-              >
-                <div className="flex items-start gap-3 min-w-0">
-                  <div
-                    className="p-2 rounded-lg flex-shrink-0"
-                    style={{ backgroundColor: sev.bg, color: sev.color }}
-                  >
-                    <Bell className="w-4 h-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`text-xs font-bold truncate ${
-                          rule.enabled ? 'text-[var(--mon-text)]' : 'text-[var(--mon-text-faint)] line-through'
-                        }`}
-                      >
-                        {rule.name}
-                      </span>
-                      <span
-                        className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded tracking-wider flex-shrink-0"
-                        style={{ backgroundColor: sev.bg, color: sev.color }}
-                      >
-                        {sev.label}
-                      </span>
-                      {rule.notify && (
-                        <span className="text-[10px] text-[var(--mon-text-muted)] bg-[var(--mon-surface-2)] px-1.5 py-0.5 rounded flex items-center gap-1">
-                          <Bell className="w-2.5 h-2.5" /> Push
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-[var(--mon-text-muted)] mt-1 truncate">
-                      <strong className="text-[var(--mon-text-dim)]">{SOURCE_LABELS[rule.source]}</strong> ·{' '}
-                      {metricLabel}{' '}
-                      <span className="font-mono text-indigo-400 font-bold">
-                        {rule.operator} {rule.threshold}
-                      </span>
-                      {rule.forSeconds > 0 ? ` (sustained for ${rule.forSeconds}s)` : ''}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <SwitchToggle
-                    checked={rule.enabled}
-                    onChange={() => handleToggle(rule.id)}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsNew(false);
-                      setEditingRule({ ...rule });
-                    }}
-                    className="ms-icon-btn ms-icon-btn-primary"
-                    title="Edit Rule"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onRemove(rule.id)}
-                    className="ms-icon-btn ms-icon-btn-danger"
-                    title="Delete Rule"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Edit / Create Rule Modal */}
-      {editingRule && (
-        <AlertRuleEditModal
-          rule={editingRule}
-          isNew={isNew}
-          servers={servers}
-          onSave={handleSaveRule}
-          onClose={() => setEditingRule(null)}
-        />
-      )}
-    </div>
-  );
-}
-
-function AlertRuleEditModal({
-  rule,
-  isNew,
-  servers,
-  onSave,
-  onClose,
-}: {
-  rule: AlertRule;
-  isNew: boolean;
-  servers: RemoteServer[];
-  onSave: (rule: AlertRule) => void;
-  onClose: () => void;
-}) {
-  const [form, setForm] = useState<AlertRule>({ ...rule });
-
-  const set = (patch: Partial<AlertRule>) => setForm((prev) => ({ ...prev, ...patch }));
-  const setSource = (source: AlertRule['source']) => {
-    setForm((prev) => ({
-      ...prev,
-      source,
-      metric: METRICS[source]?.[0]?.value ?? '',
-      host: undefined,
-    }));
-  };
-
-  const metrics = METRICS[form.source] ?? METRICS.glances;
-  const showHost = form.source === 'glances' || form.source === 'reachability';
-
-  return (
-    <div className="ms-submodal-overlay">
-      <div className="ms-submodal-dialog max-w-lg animate-in zoom-in-95 duration-150">
-        <div className="ms-submodal-header">
-          <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-indigo-400" />
-            <span className="text-sm font-bold text-[var(--mon-text)]">
-              {isNew ? 'Create Alert Rule' : 'Edit Alert Rule'}
-            </span>
-          </div>
-          <button type="button" onClick={onClose} className="text-[var(--mon-text-muted)] hover:text-[var(--mon-text)] p-1">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="ms-submodal-body">
-          <FormField label="Rule Name">
-            <input
-              type="text"
-              className="ms-input"
-              placeholder="e.g. High CPU Usage"
-              value={form.name}
-              onChange={(e) => set({ name: e.target.value })}
-            />
-          </FormField>
-
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Telemetry Source">
-              <select
-                className="ms-select"
-                value={form.source}
-                onChange={(e) => setSource(e.target.value as AlertRule['source'])}
-              >
-                {(Object.keys(METRICS) as AlertRule['source'][]).map((s) => (
-                  <option key={s} value={s}>
-                    {SOURCE_LABELS[s]}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Target Metric">
-              <select
-                className="ms-select"
-                value={form.metric}
-                onChange={(e) => set({ metric: e.target.value })}
-              >
-                {metrics.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-          </div>
-
-          {showHost && (
-            <FormField label="Target Host">
-              <select
-                className="ms-select"
-                value={form.host || ''}
-                onChange={(e) => set({ host: e.target.value || undefined })}
-              >
-                <option value="">All Monitored Hosts</option>
-                {servers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-          )}
-
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Condition Operator">
-              <select
-                className="ms-select font-mono"
-                value={form.operator}
-                onChange={(e) => set({ operator: e.target.value as AlertRule['operator'] })}
-              >
-                {OPERATORS.map((op) => (
-                  <option key={op} value={op}>
-                    {op}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Threshold Value">
-              <input
-                type="number"
-                step="any"
-                className="ms-input font-mono"
-                value={form.threshold}
-                onChange={(e) => set({ threshold: Number(e.target.value) })}
-              />
-            </FormField>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <FormField label="Severity Level">
-              <select
-                className="ms-select"
-                value={form.severity}
-                onChange={(e) => set({ severity: e.target.value as Severity })}
-              >
-                {SEVERITIES.map((s) => (
-                  <option key={s.value} value={s.value}>
-                    {s.label}
-                  </option>
-                ))}
-              </select>
-            </FormField>
-
-            <FormField label="Sustain Duration (Seconds)">
-              <input
-                type="number"
-                min={0}
-                className="ms-input"
-                value={form.forSeconds}
-                onChange={(e) => set({ forSeconds: Number(e.target.value) })}
-              />
-            </FormField>
-          </div>
-
-          <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[var(--mon-surface-2)] border border-[var(--mon-border)] cursor-pointer text-xs text-[var(--mon-text-dim)]">
-            <input
-              type="checkbox"
-              checked={form.notify}
-              onChange={(e) => set({ notify: e.target.checked })}
-              className="w-4 h-4 rounded bg-[var(--mon-panel)] border-[var(--mon-border)] text-indigo-600 focus:ring-0"
-            />
-            <div>
-              <span className="font-semibold text-[var(--mon-text-dim)]">Push Browser / Webhook Notifications</span>
-              <p className="text-[11px] text-[var(--mon-text-faint)]">
-                Dispatches a notification when this alert rule starts firing.
-              </p>
-            </div>
-          </label>
-        </div>
-
-        <div className="ms-submodal-footer">
-          <button type="button" onClick={onClose} className="ms-btn ms-btn-ghost text-xs">
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={() => onSave(form)}
-            className="ms-btn ms-btn-primary text-xs"
-          >
-            <Check className="w-3.5 h-3.5" />
-            {isNew ? 'Create Rule' : 'Save Rule'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────────
    Helpers
    ────────────────────────────────────────────────────────────── */
-
-function emptyRule(): AlertRule {
-  return {
-    id: newId(),
-    name: 'High CPU Alert',
-    enabled: true,
-    source: 'glances',
-    metric: 'cpu.percent',
-    operator: '>=',
-    threshold: 90,
-    severity: 'warning',
-    forSeconds: 60,
-    notify: true,
-  };
-}
 
 function defaultMonitoring(): MonitoringConfig {
   return {

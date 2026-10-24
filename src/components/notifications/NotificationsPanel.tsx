@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, Bell, Trash2, RefreshCw, BellOff, ChevronDown, ChevronRight } from 'lucide-react';
-import { useDashboard } from '../../context/DashboardContext';
+import { useNotifications } from '../../context/NotificationsContext';
 import { ModalShell, useConfirm } from '../ui';
 import { NotificationCard } from './NotificationCard';
 
@@ -25,7 +25,7 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
     clearAllNotifications,
     clearTopicNotifications,
     reconnectNotifications,
-  } = useDashboard();
+  } = useNotifications();
   const confirm = useConfirm();
 
   // Topics the user has collapsed. Expanded by default.

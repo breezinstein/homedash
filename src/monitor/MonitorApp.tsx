@@ -30,7 +30,7 @@ const MAX_VISIBLE_HOSTS = 9;
 
 export function MonitorApp() {
   useMonitorTheme();
-  const { overview, isLoading, error } = useMonitorOverview();
+  const { overview, isLoading, error, lastUpdated } = useMonitorOverview();
   const { authEnabled, authenticated } = useAuth();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
@@ -92,6 +92,7 @@ export function MonitorApp() {
         overview={overview}
         isLoading={isLoading}
         connectionError={error}
+        lastUpdated={lastUpdated}
         onSettings={handleSettings}
       />
       <AlertBanner alerts={bannerAlerts} />
@@ -276,7 +277,7 @@ function CardPlaceholder({
             <span className="subtitle">{subtitle}</span>
           </div>
         </div>
-        <span className="status-ok" style={{ opacity: 0.4 }}>offline</span>
+        <span className="status-muted">Not configured</span>
       </div>
       <div
         className="flex items-center justify-center text-[var(--mon-text-muted)] text-[12px]"
