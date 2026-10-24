@@ -6,6 +6,7 @@ interface UseMonitorOverviewResult {
   overview: MonitorOverview | null;
   isLoading: boolean;
   error: string | null;
+  lastUpdated: Date | null;
 }
 
 // Poll /api/monitor/overview at half the server poll interval (minimum 2 s,
@@ -16,6 +17,7 @@ export function useMonitorOverview(): UseMonitorOverviewResult {
   const [overview, setOverview] = useState<MonitorOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const failCount = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -28,6 +30,7 @@ export function useMonitorOverview(): UseMonitorOverviewResult {
       setOverview(data);
       intervalRef.current = Math.max(2000, Math.min(30000, data.pollIntervalMs / 2));
       setError(null);
+      setLastUpdated(new Date());
       failCount.current = 0;
     } catch (err) {
       failCount.current++;
@@ -69,5 +72,5 @@ export function useMonitorOverview(): UseMonitorOverviewResult {
     };
   }, [poll]);
 
-  return { overview, isLoading, error };
+  return { overview, isLoading, error, lastUpdated };
 }

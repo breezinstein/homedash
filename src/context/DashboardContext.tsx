@@ -2,40 +2,16 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo, u
 import type {
   Clip,
   DashboardConfig,
-  NotificationItem,
-  NotificationsConfig,
-  NotificationsStatus,
-  NtfyMessage,
   RemoteServer,
   InverterServer,
   Service,
 } from '../types';
 import { configApi } from '../api/configApi';
-import {
-  clearNotificationsOnServer,
-  dismissNotificationOnServer,
-  fetchNotifications,
-  openNotificationStream,
-} from '../api/notificationsApi';
 import { useToast } from '../components/ui';
 import { newId } from '../lib/id';
 import { useAuth } from './AuthContext';
-
-const defaultNotifications: NotificationsConfig = {
-  enabled: false,
-  serverUrl: '',
-  topics: [],
-  backfill: '12h',
-  maxHistory: 200,
-  browserNotifications: false,
-};
-
-interface ServerBackup {
-  name: string;
-  date: string;
-  filename: string;
-  serviceCount: number;
-}
+import { BackupsProvider } from './BackupsContext';
+import { defaultNotifications, NotificationsProvider } from './NotificationsContext';
 
 interface DashboardContextType {
   config: DashboardConfig;
@@ -49,11 +25,7 @@ interface DashboardContextType {
   reorderCategories: (newOrder: string[]) => void;
   moveServiceToCategory: (serviceIndex: number, targetCategory: string, targetPosition?: number) => void;
   reorderServicesInCategory: (category: string, fromIndex: number, toIndex: number) => void;
-  backups: ServerBackup[];
-  createBackup: (name?: string) => Promise<void>;
-  restoreBackup: (backup: ServerBackup) => Promise<void>;
-  deleteBackup: (filename: string) => Promise<void>;
-  refreshBackups: () => Promise<void>;
+  reloadConfig: () => Promise<void>;
   importConfig: (file: File) => Promise<void>;
   exportConfig: () => void;
   isEditMode: boolean;
@@ -83,16 +55,6 @@ interface DashboardContextType {
   addInverter: (name: string, url: string, username?: string, password?: string) => void;
   updateInverter: (id: string, patch: Partial<Pick<InverterServer, 'name' | 'url' | 'username' | 'password'>>) => void;
   deleteInverter: (id: string) => void;
-  notifications: NotificationItem[];
-  unreadCount: number;
-  notificationsStatus: NotificationsStatus;
-  notificationsError: string | null;
-  latestNotification: NotificationItem | null;
-  markAllNotificationsRead: () => void;
-  dismissNotification: (id: string) => void;
-  clearAllNotifications: () => void;
-  clearTopicNotifications: (topic: string) => void;
-  reconnectNotifications: () => void;
 }
 
 const defaultConfig: DashboardConfig = {
@@ -157,7 +119,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const { authenticated, authEnabled, ready: authReady } = useAuth();
   const toast = useToast();
   const [config, setConfigState] = useState<DashboardConfig>(defaultConfig);
-  const [backups, setBackups] = useState<ServerBackup[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<string[]>(() => {
     const saved = localStorage.getItem('homedash-collapsed');
@@ -168,12 +129,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
-  const [notificationsStatus, setNotificationsStatus] = useState<NotificationsStatus>('disabled');
-  const [notificationsError, setNotificationsError] = useState<string | null>(null);
-  // Bumped to force the subscription effect to tear down and reconnect.
-  const [reconnectNonce, setReconnectNonce] = useState(0);
 
   const lastModifiedRef = useRef<number>(0);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -216,45 +171,36 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     loadConfig();
   }, []);
 
+  // Re-fetch the whole config document. Used after auth transitions (the
+  // admin payload contains private sections the anonymous projection omits)
+  // and after restoring a backup from disk.
+  const reloadConfig = useCallback(async () => {
+    const { config: serverConfig, lastModified } = await configApi.getConfig();
+    setConfigState(serverConfig);
+    setCollapsedCategories(serverConfig.collapsedCategories || []);
+    lastModifiedRef.current = lastModified;
+    setSyncError(null);
+  }, []);
+
   // Auth-state change: reload config so admins get the full payload after
   // sign-in and anonymous viewers get the redacted projection after sign-out.
-  // Also re-fetches backups (admin-only endpoint) so the Settings panel has
-  // fresh data right after sign-in. Guarded by `isLoading` so the initial
-  // fetch isn't duplicated on first paint. `isLoading` MUST be a dependency:
-  // if a sign-in completes while the initial config fetch is still in flight
-  // (common on slow/mobile first loads), the guard would drop the transition
-  // and leave the app authenticated but stuck on the redacted anonymous
-  // config until a full page refresh. Keying on `isLoading` too re-fires the
-  // reload the moment loading finishes, so the post-login full payload lands.
+  // Guarded by `isLoading` so the initial fetch isn't duplicated on first
+  // paint. `isLoading` MUST be a dependency: if a sign-in completes while the
+  // initial config fetch is still in flight (common on slow/mobile first
+  // loads), the guard would drop the transition and leave the app
+  // authenticated but stuck on the redacted anonymous config until a full
+  // page refresh. Keying on `isLoading` too re-fires the reload the moment
+  // loading finishes, so the post-login full payload lands.
   useEffect(() => {
     if (isLoading) return;
     let cancelled = false;
-    (async () => {
-      try {
-        const { config: serverConfig, lastModified } = await configApi.getConfig();
-        if (cancelled) return;
-        setConfigState(serverConfig);
-        lastModifiedRef.current = lastModified;
-        setSyncError(null);
-      } catch (error) {
-        if (cancelled) return;
+    reloadConfig().catch((error) => {
+      if (!cancelled) {
         console.error('Failed to reload config after auth change:', error);
       }
-    })();
+    });
     return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, isLoading]);
-
-  // Load backups only once auth has resolved AND we're allowed to write.
-  // refreshBackups() no-ops internally when !canWriteRef.current, but keying
-  // this effect on `authReady`/`authenticated` ensures it actually fires the
-  // moment we transition into an authorised state (initial load or sign-in)
-  // instead of racing the auth status request on first paint.
-  useEffect(() => {
-    if (!authReady) return;
-    refreshBackups();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, authenticated]);
+  }, [authenticated, isLoading, reloadConfig]);
 
   // Poll for changes from server
   useEffect(() => {
@@ -369,22 +315,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setConfigState(updated);
     saveToServer(updated);
   }, [saveToServer]);
-
-  const refreshBackups = useCallback(async () => {
-    // /api/backups is admin-gated; skip the request entirely when not
-    // authenticated so the anonymous viewer doesn't trigger a 401 + forced
-    // login modal on initial load.
-    if (!canWriteRef.current) {
-      setBackups([]);
-      return;
-    }
-    try {
-      const serverBackups = await configApi.listBackups();
-      setBackups(serverBackups);
-    } catch (error) {
-      console.error('Failed to load backups:', error);
-    }
-  }, []);
 
   const updateService = useCallback((index: number, service: Service) => {
     const cfg = configRef.current;
@@ -519,36 +449,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
     setConfig({ ...cfg, services: newServices });
   }, [setConfig]);
-
-  const createBackup = useCallback(async (name?: string) => {
-    try {
-      await configApi.createBackup(name);
-      await refreshBackups();
-    } catch (error) {
-      console.error('Failed to create backup:', error);
-    }
-  }, [refreshBackups]);
-
-  const restoreBackup = useCallback(async (backup: ServerBackup) => {
-    try {
-      await configApi.restoreBackup(backup.filename);
-      const { config: serverConfig, lastModified } = await configApi.getConfig();
-      setConfigState(serverConfig);
-      setCollapsedCategories(serverConfig.collapsedCategories || []);
-      lastModifiedRef.current = lastModified;
-    } catch (error) {
-      console.error('Failed to restore backup:', error);
-    }
-  }, []);
-
-  const deleteBackup = useCallback(async (filename: string) => {
-    try {
-      await configApi.deleteBackup(filename);
-      await refreshBackups();
-    } catch (error) {
-      console.error('Failed to delete backup:', error);
-    }
-  }, [refreshBackups]);
 
   const uploadIcon = useCallback(async (file: File): Promise<string> => {
     const result = await configApi.uploadIcon(file);
@@ -740,121 +640,6 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // --- Notifications (ntfy) ---------------------------------------------
-  // The upstream ntfy subscription lives on the server. Here we mirror the
-  // server's history + connection status: seed from GET /api/notifications and
-  // keep it current over a same-origin SSE stream. Read state is derived
-  // locally from lastReadAt (persisted in config); dismissed state is owned by
-  // the server and broadcast to every connected tab.
-  const ntfyEnabled = !!config.notifications?.enabled;
-
-  useEffect(() => {
-    if (!ntfyEnabled) {
-      setNotifications([]);
-      setNotificationsStatus('disabled');
-      setNotificationsError(null);
-      return;
-    }
-
-    let closed = false;
-
-    const toItem = (m: NtfyMessage & { dismissed?: boolean }): NotificationItem => {
-      const lastReadAt = configRef.current.notifications?.lastReadAt ?? 0;
-      return {
-        ...m,
-        read: m.time * 1000 <= lastReadAt,
-        dismissed: !!m.dismissed,
-      };
-    };
-
-    const resync = async () => {
-      try {
-        const state = await fetchNotifications();
-        if (closed) return;
-        setNotifications(state.items.map(toItem));
-        setNotificationsStatus(state.status);
-        setNotificationsError(state.error);
-      } catch {
-        // Leave existing state; SSE status events will correct it.
-      }
-    };
-
-    // Seed immediately, then open the live stream. onOpen re-syncs after any
-    // automatic EventSource reconnect so gaps during an outage are filled.
-    resync();
-    const es = openNotificationStream({
-      onOpen: resync,
-      onMessage: (m) => {
-        setNotifications((prev) =>
-          prev.some((n) => n.id === m.id) ? prev : [toItem(m), ...prev]
-        );
-      },
-      onStatus: (status, error) => {
-        setNotificationsStatus(status);
-        setNotificationsError(error);
-      },
-      onDismiss: (id) => {
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === id ? { ...n, dismissed: true } : n))
-        );
-      },
-      onClear: (topic) => {
-        setNotifications((prev) =>
-          prev.map((n) =>
-            topic && n.topic !== topic ? n : { ...n, dismissed: true }
-          )
-        );
-      },
-    });
-
-    return () => {
-      closed = true;
-      es.close();
-    };
-  }, [ntfyEnabled, reconnectNonce]);
-
-  const visibleNotifications = useMemo(
-    () => notifications.filter(n => !n.dismissed),
-    [notifications]
-  );
-
-  const unreadCount = useMemo(
-    () => visibleNotifications.reduce((acc, n) => acc + (n.read ? 0 : 1), 0),
-    [visibleNotifications]
-  );
-
-  const latestNotification = visibleNotifications[0] ?? null;
-
-  const markAllNotificationsRead = useCallback(() => {
-    setNotifications(prev =>
-      prev.some(n => !n.read) ? prev.map(n => (n.read ? n : { ...n, read: true })) : prev
-    );
-    const cfg = configRef.current;
-    const current = cfg.notifications ?? defaultNotifications;
-    setConfig({ ...cfg, notifications: { ...current, lastReadAt: Date.now() } });
-  }, [setConfig]);
-
-  const dismissNotification = useCallback((id: string) => {
-    setNotifications(prev => prev.map(n => (n.id === id ? { ...n, dismissed: true } : n)));
-    void dismissNotificationOnServer(id);
-  }, []);
-
-  const clearAllNotifications = useCallback(() => {
-    setNotifications(prev => prev.map(n => ({ ...n, dismissed: true, read: true })));
-    void clearNotificationsOnServer();
-  }, []);
-
-  const clearTopicNotifications = useCallback((topic: string) => {
-    setNotifications(prev =>
-      prev.map(n => (n.topic === topic ? { ...n, dismissed: true, read: true } : n))
-    );
-    void clearNotificationsOnServer(topic);
-  }, []);
-
-  const reconnectNotifications = useCallback(() => {
-    setReconnectNonce(n => n + 1);
-  }, []);
-
   // Memoize the context value so it only changes when a piece of state it
   // exposes actually changes. All callbacks above have stable identities, so
   // the dependency list is just the reactive values.
@@ -870,11 +655,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     reorderCategories,
     moveServiceToCategory,
     reorderServicesInCategory,
-    backups,
-    createBackup,
-    restoreBackup,
-    deleteBackup,
-    refreshBackups,
+    reloadConfig,
     importConfig,
     exportConfig,
     isEditMode,
@@ -904,34 +685,24 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     addInverter,
     updateInverter,
     deleteInverter,
-    notifications: visibleNotifications,
-    unreadCount,
-    notificationsStatus,
-    notificationsError,
-    latestNotification,
-    markAllNotificationsRead,
-    dismissNotification,
-    clearAllNotifications,
-    clearTopicNotifications,
-    reconnectNotifications,
   }), [
     config, setConfig, updateService, addService, deleteService, updateCategory,
     addCategory, deleteCategory, reorderCategories, moveServiceToCategory,
-    reorderServicesInCategory, backups, createBackup, restoreBackup, deleteBackup,
-    refreshBackups, importConfig, exportConfig, isEditMode, collapsedCategories,
-    toggleCategoryCollapse, isLoading, isSyncing, lastSyncTime, syncError, uploadIcon,
-    searchQuery, serviceIndexByRef, clips, addClip, updateClip, deleteClip,
-    toggleClipPin, reorderClips, copyClipToSystemClipboard,
-    servers, addServer, updateServer, deleteServer,
+    reorderServicesInCategory, reloadConfig, importConfig, exportConfig,
+    isEditMode, collapsedCategories, toggleCategoryCollapse, isLoading, isSyncing,
+    lastSyncTime, syncError, uploadIcon, searchQuery, serviceIndexByRef, clips,
+    addClip, updateClip, deleteClip, toggleClipPin, reorderClips,
+    copyClipToSystemClipboard, servers, addServer, updateServer, deleteServer,
     inverters, addInverter, updateInverter, deleteInverter,
-    visibleNotifications, unreadCount, notificationsStatus, notificationsError,
-    latestNotification, markAllNotificationsRead, dismissNotification,
-    clearAllNotifications, clearTopicNotifications, reconnectNotifications,
   ]);
 
   return (
     <DashboardContext.Provider value={value}>
-      {children}
+      <BackupsProvider onRestored={reloadConfig}>
+        <NotificationsProvider config={config} setConfig={setConfig}>
+          {children}
+        </NotificationsProvider>
+      </BackupsProvider>
     </DashboardContext.Provider>
   );
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Lock, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { ModalShell } from './ui/ModalShell';
 
 interface LoginModalProps {
   onClose?: () => void;
@@ -18,15 +19,6 @@ export function LoginModal({ onClose, forced = false }: LoginModalProps) {
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
-
-  useEffect(() => {
-    if (forced) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose?.();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [forced, onClose]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,14 +41,14 @@ export function LoginModal({ onClose, forced = false }: LoginModalProps) {
   };
 
   return (
-    <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-      onClick={() => { if (!forced) onClose?.(); }}
+    <ModalShell
+      onClose={() => onClose?.()}
+      dismissOnBackdrop={!forced}
+      dismissOnEscape={!forced}
+      zIndex={60}
+      ariaLabel="Sign in"
     >
-      <div
-        className="w-full max-w-sm rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="w-full max-w-sm rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
           <div className="flex items-center gap-2">
             <Lock className="w-5 h-5 text-[var(--color-primary)]" />
@@ -114,6 +106,6 @@ export function LoginModal({ onClose, forced = false }: LoginModalProps) {
           </div>
         </form>
       </div>
-    </div>
+    </ModalShell>
   );
 }

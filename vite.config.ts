@@ -7,4 +7,12 @@ export default defineConfig({
     tailwindcss(),
     react(),
   ],
+  server: {
+    // Keep the browser on one origin during development, matching production.
+    proxy: {
+      '/api': 'http://localhost:3001',
+      '/icons': 'http://localhost:3001',
+      '/uploads': 'http://localhost:3001',
+    },
+  },
 })

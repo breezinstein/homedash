@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useDashboard } from '../../context/DashboardContext';
+import { useNotifications } from '../../context/NotificationsContext';
 
 /**
  * Bridges incoming ntfy messages to the native browser Notification API.
@@ -8,7 +8,7 @@ import { useDashboard } from '../../context/DashboardContext';
  * is requested lazily on the first eligible message.
  */
 export function useBrowserNotifications(enabled: boolean) {
-  const { latestNotification } = useDashboard();
+  const { latestNotification } = useNotifications();
   const lastNotifiedIdRef = useRef<string | null>(null);
 
   useEffect(() => {

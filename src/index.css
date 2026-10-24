@@ -289,6 +289,13 @@ select {
   animation: pulse 1.6s infinite;
 }
 
+/* Connection lost / not yet loaded — deliberately neutral, never green. */
+.status-pill--unknown {
+  color: var(--mon-text-dim);
+  background: color-mix(in srgb, var(--mon-text) 6%, transparent);
+  border-color: var(--mon-border);
+}
+
 /* ── Kiosk status strip (fixed height — never shifts layout) ── */
 
 .alert-strip {
@@ -434,7 +441,7 @@ select {
 }
 
 .summary-hero-label {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--mon-text-muted);
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -576,6 +583,16 @@ select {
   box-shadow: 0 0 6px var(--mon-ok);
 }
 
+/* Unconfigured data source — neutral, no health dot. */
+.status-muted {
+  color: var(--mon-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
 .status-warn {
   color: var(--mon-warn);
   font-size: 12px;
@@ -634,7 +651,7 @@ select {
 }
 
 .pump-dot {
-  font-size: 9px;
+  font-size: 10px;
   color: #38bdf8;
   font-weight: 700;
 }
@@ -647,13 +664,13 @@ select {
 }
 
 .pump-duration {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--mon-text-muted);
 }
 
 .pump-label {
-  font-size: 8px;
-  color: var(--mon-text-faint);
+  font-size: 10px;
+  color: var(--mon-text-muted);
   margin-top: 4px;
   font-weight: 700;
 }
@@ -1493,7 +1510,7 @@ select {
 
 .stream-paused {
   margin-left: 6px;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   color: var(--mon-warn);
   background: color-mix(in srgb, var(--mon-warn) 12%, transparent);
@@ -1694,8 +1711,33 @@ select {
   }
 }
 
+/* Short viewports (landscape phones, small kiosk windows) can overflow too. */
+@media (max-height: 720px) {
+  .monitor-shell {
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+}
+
+/* In scroll mode the shell no longer has a fixed height, so the flex:1
+   bottom grid needs an intrinsic height instead of collapsing to zero. */
+@media (max-width: 640px), (max-height: 720px) {
+  .monitor-shell .bottom-grid {
+    flex: 0 0 auto;
+    min-height: 60vh;
+  }
+}
+
 @media (max-width: 640px) {
   .monitor-shell {
+    /* Kiosk layout is pinned on big displays; small screens need to scroll
+       so stacked cards and the alerts rail remain reachable. */
+    height: auto;
+    min-height: 100dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding: 8px;
     gap: 10px;
   }

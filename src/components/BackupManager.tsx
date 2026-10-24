@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { useBackups } from '../context/BackupsContext';
 import { X, Download, Upload, Trash2, RotateCcw, Save, Plus, Image } from 'lucide-react';
 import { configApi } from '../api/configApi';
 import { ModalShell, useConfirm, useToast } from './ui';
@@ -22,7 +23,8 @@ interface BackupManagerProps {
 }
 
 export function BackupManager({ onClose }: BackupManagerProps) {
-  const { backups, createBackup, restoreBackup, deleteBackup, refreshBackups, importConfig, exportConfig } = useDashboard();
+  const { backups, createBackup, restoreBackup, deleteBackup, refreshBackups } = useBackups();
+  const { importConfig, exportConfig } = useDashboard();
   const confirm = useConfirm();
   const toast = useToast();
   const [iconCacheInfo, setIconCacheInfo] = useState<IconCacheInfo | null>(null);

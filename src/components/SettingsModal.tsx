@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo } from 'react';
 import { useDashboard } from '../context/DashboardContext';
+import { useBackups } from '../context/BackupsContext';
 import {
   X,
   GripVertical,
@@ -53,7 +54,8 @@ const NAV_SECTIONS: NavSectionItem[] = [
 ];
 
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const { config, setConfig, reorderCategories, addCategory, updateCategory, deleteCategory, backups } = useDashboard();
+  const { config, setConfig, reorderCategories, addCategory, updateCategory, deleteCategory } = useDashboard();
+  const { backups } = useBackups();
   const confirm = useConfirm();
   const [active, setActive] = useState<SectionKey>('categories');
   const [searchQuery, setSearchQuery] = useState('');
