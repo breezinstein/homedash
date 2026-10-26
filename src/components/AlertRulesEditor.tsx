@@ -85,9 +85,9 @@ const METRICS: Record<SourceKey, { value: string; label: string }[]> = {
 const OPERATORS = ['>', '>=', '<', '<=', '==', '!='] as const;
 
 const SEVERITIES: { value: Severity; label: string; color: string }[] = [
-  { value: 'critical', label: 'Critical', color: '#e74c3c' },
-  { value: 'warning', label: 'Warning', color: '#e67e22' },
-  { value: 'info', label: 'Info', color: '#6c5ce7' },
+  { value: 'critical', label: 'Critical', color: 'var(--color-error)' },
+  { value: 'warning', label: 'Warning', color: 'var(--color-warning)' },
+  { value: 'info', label: 'Info', color: 'var(--color-primary)' },
 ];
 
 function emptyRule(): AlertRule {

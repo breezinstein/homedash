@@ -8,8 +8,8 @@ interface ArrCardProps { arr: ArrSnapshot; }
 // Distinguishing accents so Sonarr vs Radarr is readable at a glance.
 const ARR_TYPE_LABEL: Record<string, string> = { sonarr: 'Sonarr', radarr: 'Radarr' };
 const ARR_TYPE_COLOR: Record<string, string> = {
-  sonarr: 'var(--mon-accent)',   // indigo
-  radarr: '#fb923c',   // orange
+  sonarr: 'var(--mon-accent)',
+  radarr: 'var(--mon-warn)',
 };
 
 // Kiosk: show only the top queue items (2 per row), then a "+N more" badge.

@@ -82,7 +82,9 @@ export function HomePanel({ homeAssistant: ha }: HomePanelProps) {
               <div
                 className="ha-metric"
                 key={m.key}
-                style={m.key === 'unavailable' && Number(m.value) > 0 ? { borderColor: 'rgba(239,68,68,0.4)' } : undefined}
+                style={m.key === 'unavailable' && Number(m.value) > 0
+                  ? { borderColor: 'color-mix(in srgb, var(--mon-danger) 40%, transparent)' }
+                  : undefined}
               >
                 <span className="ha-metric-icon"><Icon className="w-4 h-4" /></span>
                 <span className="ha-metric-value" style={m.key === batteryLow?.key ? { color: 'var(--mon-danger)' } : undefined}>

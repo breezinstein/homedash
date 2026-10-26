@@ -4,10 +4,54 @@ export interface ThemePreset {
   name: string;
   type: 'dark' | 'light';
   colors: Colors;
+  /**
+   * Optional scoped stylesheet id. Applied as `data-theme` on <html> so
+   * structural theme CSS (fonts, frames, panel styling) can activate alongside
+   * the colour tokens.
+   */
+  cssTheme?: string;
 }
 
 export const themePresets: ThemePreset[] = [
   // Dark Themes
+  // Keep these tokens in sync with src/themes/discovery.css.
+  {
+    name: 'Discovery',
+    type: 'dark',
+    cssTheme: 'discovery-dark',
+    colors: {
+      primary: '#2f9bff',
+      secondary: '#12314a',
+      background: '#02060d',
+      surface: '#061523',
+      textPrimary: '#dff6ff',
+      textSecondary: '#7fb8d0',
+      border: '#103a55',
+      accent: '#ff9f43',
+      success: '#3ce6b0',
+      warning: '#ffc247',
+      error: '#ff5f6d',
+    },
+  },
+  // Keep these tokens in sync with src/themes/stargate.css.
+  {
+    name: 'Stargate',
+    type: 'dark',
+    cssTheme: 'stargate-dark',
+    colors: {
+      primary: '#d4af37',
+      secondary: '#3b4a4f',
+      background: '#070d10',
+      surface: '#111a1e',
+      textPrimary: '#f4e7c3',
+      textSecondary: '#b9a77a',
+      border: '#3c4a4d',
+      accent: '#2dd4bf',
+      success: '#39d98a',
+      warning: '#f2b544',
+      error: '#ef5350',
+    },
+  },
   {
     name: 'Default Dark',
     type: 'dark',
@@ -214,6 +258,100 @@ export const themePresets: ThemePreset[] = [
   },
   // Light Themes
   {
+    name: 'Discovery Light',
+    type: 'light',
+    cssTheme: 'discovery-light',
+    colors: {
+      primary: '#006fbf',
+      secondary: '#4d6b7d',
+      background: '#eaf4fb',
+      surface: '#ffffff',
+      textPrimary: '#082235',
+      textSecondary: '#3f657a',
+      border: '#b9d9ea',
+      accent: '#b25c00',
+      success: '#0b7a63',
+      warning: '#9a5b00',
+      error: '#b3263a',
+    },
+  },
+  // Keep these tokens in sync with src/themes/stargate.css.
+  {
+    name: 'Stargate Light',
+    type: 'light',
+    cssTheme: 'stargate-light',
+    colors: {
+      primary: '#8a6d1f',
+      secondary: '#6b5a3e',
+      background: '#efe5cf',
+      surface: '#fbf5e6',
+      textPrimary: '#2b2418',
+      textSecondary: '#6b5a3e',
+      border: '#cdbb96',
+      accent: '#0f766e',
+      success: '#1f7a4d',
+      warning: '#a16207',
+      error: '#b3261e',
+    },
+  },
+  // Keep these tokens in sync with src/themes/win95.css.
+  {
+    name: 'Windows 95',
+    type: 'light',
+    cssTheme: 'win95',
+    colors: {
+      primary: '#000080',
+      secondary: '#404040',
+      background: '#008080',
+      surface: '#c0c0c0',
+      textPrimary: '#000000',
+      textSecondary: '#404040',
+      border: '#808080',
+      accent: '#008080',
+      success: '#008000',
+      warning: '#808000',
+      error: '#800000',
+    },
+  },
+  // Keep these tokens in sync with src/themes/winxp.css.
+  {
+    name: 'Windows XP',
+    type: 'light',
+    cssTheme: 'winxp',
+    colors: {
+      primary: '#0054e3',
+      secondary: '#003399',
+      background: '#3a6ea5',
+      surface: '#ece9d8',
+      textPrimary: '#000000',
+      textSecondary: '#003399',
+      border: '#7f9db9',
+      accent: '#2e7d32',
+      success: '#008000',
+      warning: '#c07f00',
+      error: '#c00000',
+    },
+  },
+  // Keep these tokens in sync with src/themes/liquid-glass.css.
+  {
+    name: 'Liquid Glass',
+    type: 'light',
+    cssTheme: 'liquid-glass',
+    colors: {
+      primary: '#3b82f6',
+      secondary: '#64748b',
+      background: '#e9f2ff',
+      surface: '#f8fbff',
+      textPrimary: '#0b1b33',
+      textSecondary: '#4b5f7a',
+      border: '#c7d8ee',
+      accent: '#8b5cf6',
+      success: '#10b981',
+      warning: '#f59e0b',
+      error: '#ef4444',
+    },
+  },
+  {
     name: 'Default Light',
     type: 'light',
     colors: {
@@ -335,5 +473,20 @@ export const themePresets: ThemePreset[] = [
 ];
 
 export function getThemeByName(name: string): ThemePreset | undefined {
-  return themePresets.find((theme) => theme.name === name);
+  const direct = themePresets.find((theme) => theme.name === name);
+  if (direct) return direct;
+
+  // Compatibility with pre-rename Discovery config names. Matching on the
+  // stable suffix avoids persisting the old display prefix in code/config.
+  if (name.includes('Discovery')) {
+    const renamed = name.includes('Light') ? 'Discovery Light' : 'Discovery';
+    return themePresets.find((theme) => theme.name === renamed);
+  }
+
+  return undefined;
+}
+
+/** The `data-theme` value for a preset, or undefined for plain colour themes. */
+export function getThemeCssId(name: string | null | undefined): string | undefined {
+  return name ? getThemeByName(name)?.cssTheme : undefined;
 }

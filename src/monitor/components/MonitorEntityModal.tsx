@@ -314,7 +314,7 @@ export function EntityModalDialog({
                 type="checkbox"
                 checked={form.insecureTls === true}
                 onChange={(e) => setField('insecureTls', e.target.checked)}
-                className="w-4 h-4 rounded bg-[var(--mon-panel)] border-[var(--mon-border)] text-indigo-600 focus:ring-0"
+                className="w-4 h-4 rounded bg-[var(--mon-panel)] border-[var(--mon-border)] text-[var(--mon-accent)] focus:ring-0"
               />
               <div>
                 <span className="font-semibold text-[var(--mon-text-dim)]">Allow Self-Signed TLS Certificates</span>
