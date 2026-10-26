@@ -31,6 +31,7 @@ import {
 import { configApi } from '../../api/configApi';
 import { refreshCertificates } from '../monitorApi';
 import { copyToClipboard as copyText } from '../../lib/clipboard';
+import { applyCustomCss } from '../../lib/customCss';
 import { newId } from '../../lib/id';
 import type {
   DashboardConfig,
@@ -126,6 +127,10 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
         if (cancelled) return;
         setDraft(config);
         setInitialJson(JSON.stringify(config));
+        // The monitor's theme hook normally handles this, but re-apply from the
+        // latest document when Settings opens so a just-saved custom stylesheet
+        // is reflected immediately instead of waiting for the next config poll.
+        applyCustomCss(config.settings?.customCSS);
         setLoading(false);
       })
       .catch((e) => {
