@@ -8,6 +8,7 @@ import type {
 } from '../types';
 import { configApi } from '../api/configApi';
 import { useToast } from '../components/ui';
+import { applyCustomCss } from '../lib/customCss';
 import { newId } from '../lib/id';
 import { useAuth } from './AuthContext';
 import { BackupsProvider } from './BackupsContext';
@@ -289,15 +290,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, [config.colors]);
 
   useEffect(() => {
-    // Inject user's custom CSS into the document so it overrides theme variables.
-    const css = config.settings?.customCSS ?? '';
-    let el = document.getElementById('homedash-custom-css') as HTMLStyleElement | null;
-    if (!el) {
-      el = document.createElement('style');
-      el.id = 'homedash-custom-css';
-      document.head.appendChild(el);
-    }
-    el.textContent = css;
+    // Inject the user's custom CSS into the document so it overrides theme
+    // variables. Shared with /monitor (see useMonitorTheme).
+    applyCustomCss(config.settings?.customCSS);
   }, [config.settings?.customCSS]);
 
   // All mutators below read the live config from `configRef` rather than the

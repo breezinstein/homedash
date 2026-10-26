@@ -660,7 +660,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       {showCustomCSS && (
                         <div className="mt-2 space-y-2">
                           <p className="text-xs text-[var(--color-text-secondary)]">
-                            Injected after theme styles. Changes apply live.
+                            Injected after theme styles. Changes apply live to the dashboard and
+                            the /monitor page, including its settings panel.
                           </p>
                           <textarea
                             value={config.settings?.customCSS ?? ''}
