@@ -9,6 +9,7 @@ import type {
 import { configApi } from '../api/configApi';
 import { useToast } from '../components/ui';
 import { applyCustomCss } from '../lib/customCss';
+import { applyThemeAttribute, applyThemeColors } from '../lib/theme';
 import { newId } from '../lib/id';
 import { useAuth } from './AuthContext';
 import { BackupsProvider } from './BackupsContext';
@@ -281,13 +282,16 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    // Apply colors to CSS variables
-    const root = document.documentElement;
-    Object.entries(config.colors).forEach(([key, value]) => {
-      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-      root.style.setProperty(`--color-${cssKey}`, value);
-    });
+    // Apply colours through a layered stylesheet so custom CSS can override
+    // them with normal :root declarations.
+    applyThemeColors(config.colors);
   }, [config.colors]);
+
+  useEffect(() => {
+    // Activate the selected theme's scoped stylesheet (if it has one). Plain
+    // colour presets and the "custom" theme leave the attribute unset.
+    applyThemeAttribute(config.theme);
+  }, [config.theme]);
 
   useEffect(() => {
     // Inject the user's custom CSS into the document so it overrides theme

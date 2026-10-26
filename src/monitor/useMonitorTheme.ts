@@ -1,7 +1,8 @@
 import { useEffect } from 'react';
 import { configApi } from '../api/configApi';
 import { applyCustomCss } from '../lib/customCss';
-import type { Colors, DashboardConfig } from '../types';
+import { applyThemeAttribute, applyThemeColors } from '../lib/theme';
+import type { DashboardConfig } from '../types';
 
 // The /monitor page is its own root tree (no DashboardProvider), so it must
 // apply the shared theme colours and custom CSS itself. The public /api/config
@@ -11,17 +12,10 @@ import type { Colors, DashboardConfig } from '../types';
 // Key DashboardContext mirrors every saved config into.
 const CONFIG_STORAGE_KEY = 'homedash-config';
 
-function applyColors(colors: Colors) {
-  const root = document.documentElement;
-  Object.entries(colors).forEach(([key, value]) => {
-    const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-    root.style.setProperty(`--color-${cssKey}`, value as string);
-  });
-}
-
 function applyAppearance(config?: Partial<DashboardConfig> | null) {
   if (!config) return;
-  if (config.colors) applyColors(config.colors);
+  if (config.colors) applyThemeColors(config.colors);
+  applyThemeAttribute(config.theme);
   applyCustomCss(config.settings?.customCSS);
 }
 

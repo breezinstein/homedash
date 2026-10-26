@@ -77,7 +77,7 @@ export function TypePicker({
               onClick={() => onChange(opt.value)}
               className={`p-2.5 rounded-lg border text-xs font-semibold transition-all text-center ${
                 isSelected
-                  ? 'bg-indigo-950/40 border-indigo-500 text-[var(--mon-text)] shadow-sm'
+                  ? 'bg-[var(--mon-surface-2)] border-[var(--mon-accent)] text-[var(--mon-text)] shadow-sm'
                   : 'bg-[var(--mon-surface-2)] border-[var(--mon-border)] text-[var(--mon-text-muted)] hover:text-[var(--mon-text-dim)]'
               }`}
             >

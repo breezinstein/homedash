@@ -76,9 +76,24 @@ const METRICS: Record<AlertRule['source'], { value: string; label: string }[]> =
 const OPERATORS = ['>', '>=', '<', '<=', '==', '!='] as const;
 
 const SEVERITIES: { value: Severity; label: string; color: string; bg: string }[] = [
-  { value: 'critical', label: 'Critical', color: 'var(--mon-danger)', bg: 'rgba(239, 68, 68, 0.16)' },
-  { value: 'warning', label: 'Warning', color: 'var(--mon-warn)', bg: 'rgba(245, 158, 11, 0.16)' },
-  { value: 'info', label: 'Info', color: 'var(--mon-accent)', bg: 'rgba(99, 102, 241, 0.16)' },
+  {
+    value: 'critical',
+    label: 'Critical',
+    color: 'var(--mon-danger)',
+    bg: 'color-mix(in srgb, var(--mon-danger) 16%, transparent)',
+  },
+  {
+    value: 'warning',
+    label: 'Warning',
+    color: 'var(--mon-warn)',
+    bg: 'color-mix(in srgb, var(--mon-warn) 16%, transparent)',
+  },
+  {
+    value: 'info',
+    label: 'Info',
+    color: 'var(--mon-accent)',
+    bg: 'color-mix(in srgb, var(--mon-accent) 16%, transparent)',
+  },
 ];
 
 function emptyRule(): AlertRule {
@@ -148,14 +163,14 @@ export function AlertsSection({
                 onClick={() => setFilter(sev)}
                 className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition-all flex items-center gap-1.5 ${
                   isSelected
-                    ? 'bg-indigo-600 border-indigo-500 text-[var(--mon-text)]'
+                    ? 'bg-[var(--mon-accent)] border-[var(--mon-accent)] text-white'
                     : 'bg-[var(--mon-surface-2)] border-[var(--mon-border)] text-[var(--mon-text-muted)] hover:text-[var(--mon-text-dim)]'
                 }`}
               >
                 <span className="capitalize">{sev}</span>
                 <span
                   className={`text-[10px] px-1.5 py-0.2 rounded-full ${
-                    isSelected ? 'bg-indigo-800 text-indigo-200' : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)]'
+                    isSelected ? 'bg-black/15' : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)]'
                   }`}
                 >
                   {count}
@@ -229,7 +244,7 @@ export function AlertsSection({
                     <p className="text-[11px] text-[var(--mon-text-muted)] mt-1 truncate">
                       <strong className="text-[var(--mon-text-dim)]">{SOURCE_LABELS[rule.source]}</strong> ·{' '}
                       {metricLabel}{' '}
-                      <span className="font-mono text-indigo-400 font-bold">
+                      <span className="font-mono text-[var(--mon-accent-hover)] font-bold">
                         {rule.operator} {rule.threshold}
                       </span>
                       {rule.forSeconds > 0 ? ` (sustained for ${rule.forSeconds}s)` : ''}
@@ -320,7 +335,7 @@ function AlertRuleEditModal({
       >
         <div className="ms-submodal-header">
           <div className="flex items-center gap-2">
-            <Bell className="w-4 h-4 text-indigo-400" />
+            <Bell className="w-4 h-4 text-[var(--mon-accent-hover)]" />
             <span id="alert-rule-dialog-title" className="text-sm font-bold text-[var(--mon-text)]">
               {isNew ? 'Create Alert Rule' : 'Edit Alert Rule'}
             </span>
@@ -450,7 +465,7 @@ function AlertRuleEditModal({
               type="checkbox"
               checked={form.notify}
               onChange={(e) => set({ notify: e.target.checked })}
-              className="w-4 h-4 rounded bg-[var(--mon-panel)] border-[var(--mon-border)] text-indigo-600 focus:ring-0"
+              className="w-4 h-4 rounded bg-[var(--mon-panel)] border-[var(--mon-border)] text-[var(--mon-accent)] focus:ring-0"
             />
             <div>
               <span className="font-semibold text-[var(--mon-text-dim)]">Push Browser / Webhook Notifications</span>

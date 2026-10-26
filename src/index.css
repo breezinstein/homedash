@@ -1,17 +1,24 @@
 @import "tailwindcss";
 
-:root {
-  --color-primary: #6366f1;
-  --color-secondary: #475569;
-  --color-background: #0a0a0a;
-  --color-surface: #1a1a1a;
-  --color-text-primary: #ffffff;
-  --color-text-secondary: #a1a1aa;
-  --color-border: #27272a;
-  --color-accent: #8b5cf6;
-  --color-success: #22c55e;
-  --color-warning: #eab308;
-  --color-error: #f87171;
+/* Layered so user custom CSS (unlayered) can override theme tokens with a
+   normal :root declaration, while built-in presets still beat plain config
+   colours. Order: base < config colours < theme defaults < theme tokens. */
+@layer homedash-base, homedash-config-colors, homedash-theme-defaults, homedash-theme-tokens;
+
+@layer homedash-base {
+  :root {
+    --color-primary: #6366f1;
+    --color-secondary: #475569;
+    --color-background: #0a0a0a;
+    --color-surface: #1a1a1a;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #a1a1aa;
+    --color-border: #27272a;
+    --color-accent: #8b5cf6;
+    --color-success: #22c55e;
+    --color-warning: #eab308;
+    --color-error: #f87171;
+  }
 }
 
 html {

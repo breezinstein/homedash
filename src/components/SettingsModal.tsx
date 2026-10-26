@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { useBackups } from '../context/BackupsContext';
 import {
@@ -27,9 +27,9 @@ import {
 import { CategoryModal } from './CategoryModal';
 import { BackupManager } from './BackupManager';
 import { NotificationsSettings } from './notifications/NotificationsSettings';
-import { themePresets } from '../themes';
+import { getThemeByName, themePresets } from '../themes';
 import type { ThemePreset } from '../themes';
-import type { Colors } from '../types';
+import { applyThemeAttribute, applyThemeColors } from '../lib/theme';
 import { ModalShell, useConfirm } from './ui';
 
 interface SettingsModalProps {
@@ -67,13 +67,21 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   const [themeFilter, setThemeFilter] = useState<'all' | 'dark' | 'light'>('all');
   const [showCustomCSS, setShowCustomCSS] = useState(false);
 
-  // Temporarily apply colors to CSS vars for hover preview without saving.
-  const applyColorsToCSSVars = useCallback((colors: Colors) => {
-    const root = document.documentElement;
-    Object.entries(colors).forEach(([key, value]) => {
-      const cssKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-      root.style.setProperty(`--color-${cssKey}`, value as string);
-    });
+  // Hovering a preset previews both its colour tokens and its scoped CSS
+  // (fonts, frames, panel styling), not just the colours.
+  const applyThemePreview = useCallback((theme?: ThemePreset | null) => {
+    const target = theme ?? config;
+    applyThemeColors(target.colors);
+    applyThemeAttribute(theme?.name ?? config.theme);
+  }, [config]);
+
+  // If the modal closes while a theme card is hovered, restore the saved
+  // appearance instead of leaving the preview active.
+  const latestAppearanceRef = useRef({ colors: config.colors, theme: config.theme });
+  latestAppearanceRef.current = { colors: config.colors, theme: config.theme };
+  useEffect(() => () => {
+    applyThemeColors(latestAppearanceRef.current.colors);
+    applyThemeAttribute(latestAppearanceRef.current.theme);
   }, []);
 
   const handleDragStart = (category: string) => {
@@ -142,17 +150,20 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     });
     setShowCustomColors(false);
     // Apply immediately so the UI doesn't flicker back from the hover preview
-    applyColorsToCSSVars(theme.colors);
+    applyThemeColors(theme.colors);
+    applyThemeAttribute(theme.name);
   };
 
   const handleCustomTheme = () => {
     setConfig({ ...config, theme: 'custom' });
     setShowCustomColors(true);
+    applyThemeAttribute('custom');
   };
 
   const filteredThemes = themePresets.filter(
     (theme) => themeFilter === 'all' || theme.type === themeFilter
   );
+  const activeThemeName = getThemeByName(config.theme)?.name;
 
   // Badge/dot per nav section
   const getBadgeForSection = (key: SectionKey): { count?: number; dot?: string } => {
@@ -526,10 +537,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                           <button
                             key={theme.name}
                             onClick={() => handleThemeSelect(theme)}
-                            onMouseEnter={() => applyColorsToCSSVars(theme.colors)}
-                            onMouseLeave={() => applyColorsToCSSVars(config.colors)}
+                            onMouseEnter={() => applyThemePreview(theme)}
+                            onMouseLeave={() => applyThemePreview(null)}
                             className={`relative p-2.5 sm:p-3 rounded-xl border transition-all text-left ${
-                              config.theme === theme.name
+                              activeThemeName === theme.name
                                 ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20'
                                 : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'
                             }`}
@@ -564,7 +575,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                                   {theme.type}
                                 </span>
                               </div>
-                              {config.theme === theme.name && (
+                              {activeThemeName === theme.name && (
                                 <div className="w-4 h-4 shrink-0 bg-[var(--color-primary)] rounded-full flex items-center justify-center mt-0.5">
                                   <Check className="w-2.5 h-2.5 text-white" />
                                 </div>
@@ -660,8 +671,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       {showCustomCSS && (
                         <div className="mt-2 space-y-2">
                           <p className="text-xs text-[var(--color-text-secondary)]">
-                            Injected after theme styles. Changes apply live to the dashboard and
-                            the /monitor page, including its settings panel.
+                            Injected after the selected theme. Custom CSS can override theme
+                            variables on :root without !important, including --color-* and the
+                            theme-specific --theme-* / --st-* tokens. Component rules may need
+                            matching specificity. Changes apply live to the dashboard and the
+                            /monitor page, including its settings panel. Clear this field if you
+                            previously pasted a full theme here.
                           </p>
                           <textarea
                             value={config.settings?.customCSS ?? ''}
@@ -671,7 +686,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                                 settings: { ...config.settings, customCSS: e.target.value },
                               })
                             }
-                            placeholder={`:root {\n  --color-primary: #ff6b6b;\n}\n\n.my-custom-style { ... }`}
+                            placeholder={`:root {\n  --color-primary: #ff6b6b;\n  --theme-primary: #ff6b6b;\n}\n\n.my-custom-style { ... }`}
                             spellCheck={false}
                             rows={8}
                             className="w-full bg-[var(--color-background)] text-[var(--color-text-primary)] border border-[var(--color-border)] rounded-xl p-3 text-xs font-mono resize-y focus:outline-none focus:border-[var(--color-primary)] placeholder:text-[var(--color-text-secondary)]/50"

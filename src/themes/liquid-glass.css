@@ -1,0 +1,127 @@
+/* ── Liquid Glass ─────────────────────────────────────────────────────── */
+@layer homedash-theme-tokens {
+html[data-theme="liquid-glass"] {
+  color-scheme: light;
+  --theme-primary: #3b82f6;
+  --theme-secondary: #64748b;
+  --theme-background: rgba(255, 255, 255, 0.22);
+  --theme-surface: rgba(255, 255, 255, 0.42);
+  --theme-text-primary: #0b1b33;
+  --theme-text-secondary: #4b5f7a;
+  --theme-border: rgba(120, 150, 190, 0.35);
+  --theme-accent: #8b5cf6;
+  --theme-success: #10b981;
+  --theme-warning: #f59e0b;
+  --theme-error: #ef4444;
+
+  --theme-text: #0b1b33;
+  --theme-text-dim: #334a66;
+  --theme-text-muted: #4b5f7a;
+  --theme-text-faint: #7287a3;
+  --theme-border-soft: rgba(255, 255, 255, 0.55);
+  --theme-border-faint: rgba(120, 150, 190, 0.18);
+  --theme-radius: 16px;
+  --theme-radius-sm: 10px;
+  --theme-radius-lg: 26px;
+  --theme-bevel-width: 1px;
+  --theme-bevel-light: rgba(255, 255, 255, 0.9);
+  --theme-bevel-dark: rgba(120, 150, 190, 0.3);
+  --theme-card-shadow: 0 18px 50px rgba(40, 80, 150, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.75);
+  --theme-modal-shadow: 0 30px 80px rgba(40, 80, 150, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.85);
+  --theme-hover-shadow: 0 0 0 1px rgba(255, 255, 255, 0.8), 0 22px 60px rgba(40, 80, 150, 0.2);
+  --theme-header-shadow: 0 10px 30px rgba(40, 80, 150, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  --theme-shell-shadow: none;
+  --theme-blur: blur(22px) saturate(150%);
+  --theme-body-font: "SF Pro Display", "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  --theme-display-font: var(--theme-body-font);
+  --theme-tracking: -0.01em;
+  --theme-transform: none;
+
+  --theme-panel: rgba(255, 255, 255, 0.4);
+  --theme-panel-2: rgba(255, 255, 255, 0.45);
+  --theme-panel-3: rgba(255, 255, 255, 0.3);
+  --theme-card-1: rgba(255, 255, 255, 0.62);
+  --theme-card-2: rgba(255, 255, 255, 0.28);
+  --theme-card-3: rgba(255, 255, 255, 0.35);
+  --theme-card-bg: rgba(255, 255, 255, 0.42);
+  --theme-card-image: linear-gradient(135deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.18));
+  --theme-modal-1: rgba(255, 255, 255, 0.7);
+  --theme-modal-2: rgba(255, 255, 255, 0.32);
+  --theme-modal-bg: rgba(255, 255, 255, 0.55);
+  --theme-modal-image: linear-gradient(180deg, var(--theme-modal-1), var(--theme-modal-2));
+  --theme-header-bg: rgba(255, 255, 255, 0.42);
+  --theme-header-image: linear-gradient(90deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.2));
+  --theme-header-text: #0b1b33;
+  --theme-header-muted: #4b5f7a;
+  --theme-nav-bg: rgba(255, 255, 255, 0.32);
+  --theme-input-bg: rgba(255, 255, 255, 0.68);
+  --theme-input-text: #0b1b33;
+  --theme-overlay: rgba(220, 232, 255, 0.35);
+  --theme-submodal-overlay: rgba(220, 232, 255, 0.4);
+  --theme-content-bg: rgba(255, 255, 255, 0.18);
+  --theme-body-bg: #e9f2ff;
+  --theme-body-image:
+    radial-gradient(900px 700px at 10% 0%, rgba(110, 231, 255, 0.5), transparent 60%),
+    radial-gradient(800px 700px at 100% 20%, rgba(167, 139, 250, 0.35), transparent 60%),
+    radial-gradient(900px 700px at 50% 100%, rgba(255, 180, 220, 0.35), transparent 60%),
+    linear-gradient(135deg, #e9f2ff, #f6f0ff 50%, #e6fbff);
+  --theme-shell-bg: rgba(255, 255, 255, 0.18);
+  --theme-shell-image:
+    radial-gradient(1200px 800px at 50% -10%, rgba(255, 255, 255, 0.7), transparent 60%),
+    radial-gradient(900px 700px at 100% 100%, rgba(167, 139, 250, 0.18), transparent 55%);
+  --theme-logo-bg: linear-gradient(135deg, #38bdf8, #6366f1 50%, #a855f7);
+  --theme-on-accent: #ffffff;
+  --theme-titlebar-bg: rgba(255, 255, 255, 0.7);
+  --theme-progress: linear-gradient(90deg, #6ee7ff, #6366f1, #a78bfa);
+  --theme-status-radius: 999px;
+}
+
+}
+
+/* Iridescent primary controls. */
+html[data-theme="liquid-glass"] .bg-\[var\(--color-primary\)\] {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6) !important;
+  color: #ffffff !important;
+}
+html[data-theme="liquid-glass"] .bg-\[var\(--color-primary\)\] svg {
+  color: #ffffff !important;
+}
+html[data-theme="liquid-glass"] .ms-btn-primary {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6) !important;
+  border-color: rgba(255, 255, 255, 0.65) !important;
+  color: #ffffff !important;
+}
+html[data-theme="liquid-glass"] .ms-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(135deg, #60a5fa, #a78bfa) !important;
+}
+
+html[data-theme="liquid-glass"] .monitor-shell .tab.active {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6) !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65) !important;
+}
+
+html[data-theme="liquid-glass"] .ms-nav-item.active {
+  background: linear-gradient(90deg, rgba(59, 130, 246, 0.35), rgba(139, 92, 246, 0.2)) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+  color: #0b1b33 !important;
+}
+html[data-theme="liquid-glass"] .ms-nav-item.active .ms-nav-icon-wrap,
+html[data-theme="liquid-glass"] .ms-nav-item.active .ms-nav-badge {
+  color: #0b1b33 !important;
+  background: rgba(255, 255, 255, 0.45) !important;
+  border-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+html[data-theme="liquid-glass"] .ms-toggle-track {
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.55) !important;
+  border-color: rgba(255, 255, 255, 0.8) !important;
+}
+html[data-theme="liquid-glass"] .ms-toggle-wrap[data-checked="true"] .ms-toggle-track {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6) !important;
+  border-color: rgba(255, 255, 255, 0.8) !important;
+}
+html[data-theme="liquid-glass"] .ms-toggle-thumb {
+  border-radius: 999px !important;
+  background: #ffffff !important;
+}

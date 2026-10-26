@@ -32,6 +32,7 @@ import { configApi } from '../../api/configApi';
 import { refreshCertificates } from '../monitorApi';
 import { copyToClipboard as copyText } from '../../lib/clipboard';
 import { applyCustomCss } from '../../lib/customCss';
+import { applyThemeAttribute, applyThemeColors } from '../../lib/theme';
 import { newId } from '../../lib/id';
 import type {
   DashboardConfig,
@@ -128,8 +129,11 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
         setDraft(config);
         setInitialJson(JSON.stringify(config));
         // The monitor's theme hook normally handles this, but re-apply from the
-        // latest document when Settings opens so a just-saved custom stylesheet
-        // is reflected immediately instead of waiting for the next config poll.
+        // latest document when Settings opens so a just-saved theme or custom
+        // stylesheet is reflected immediately instead of waiting for the next
+        // config poll.
+        if (config.colors) applyThemeColors(config.colors);
+        applyThemeAttribute(config.theme);
         applyCustomCss(config.settings?.customCSS);
         setLoading(false);
       })
@@ -429,7 +433,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
       <div className="ms-overlay">
         <div className="ms-dialog items-center justify-center p-8">
           <div className="ms-loading">
-            <div className="w-8 h-8 rounded-full border-2 border-indigo-500/20 border-t-indigo-500 animate-spin" />
+            <div className="w-8 h-8 rounded-full border-2 border-[var(--mon-accent)]/20 border-t-[var(--mon-accent)] animate-spin" />
             <span className="text-sm text-[var(--mon-text-dim)] font-medium">Loading monitor configuration…</span>
           </div>
         </div>
@@ -448,7 +452,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
         {/* Top Header */}
         <header className="ms-header">
           <div className="ms-logo">
-            <Activity className="w-5 h-5 text-indigo-400" />
+            <Activity className="w-5 h-5 text-[var(--mon-accent-hover)]" />
           </div>
           <div className="ms-title-block">
             <div className="flex items-center gap-2.5">
@@ -456,20 +460,20 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
               <span
                 className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10.5px] font-semibold tracking-wide uppercase ${
                   mon.enabled
-                    ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'
+                    ? 'bg-[var(--mon-ok)]/10 text-[var(--mon-ok)] border border-[var(--mon-ok)]/25'
                     : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)] border border-[var(--mon-border)]'
                 }`}
               >
                 <span
                   className={`w-1.5 h-1.5 rounded-full ${
-                    mon.enabled ? 'bg-emerald-400 animate-pulse' : 'bg-[var(--mon-border)]'
+                    mon.enabled ? 'bg-[var(--mon-ok)] animate-pulse' : 'bg-[var(--mon-border)]'
                   }`}
                 />
                 {mon.enabled ? `Live · ${mon.pollIntervalSeconds || 10}s` : 'Paused'}
               </span>
               {hasUnsavedChanges && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-[var(--mon-warn)]/15 text-[var(--mon-warn)] border border-[var(--mon-warn)]/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--mon-warn)]" />
                   Unsaved changes
                 </span>
               )}
@@ -538,8 +542,8 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
 
         {/* Global Toast */}
         {toastMsg && (
-          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-indigo-600 text-[var(--mon-text)] text-xs font-semibold rounded-lg shadow-lg shadow-black/50 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
-            <CheckCircle2 className="w-4 h-4 text-indigo-200" />
+          <div className="absolute top-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 bg-[var(--mon-accent)] text-white text-xs font-semibold rounded-lg shadow-lg shadow-black/50 flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-150">
+            <CheckCircle2 className="w-4 h-4 text-white/80" />
             {toastMsg}
           </div>
         )}
@@ -557,7 +561,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{ paddingLeft: '32px' }}
-                className="w-full bg-[var(--mon-surface-2)] border border-[var(--mon-border)] rounded-lg pr-2.5 py-1.5 text-xs text-[var(--mon-text-dim)] placeholder:text-[var(--mon-text-faint)] focus:outline-none focus:border-indigo-500"
+                className="w-full bg-[var(--mon-surface-2)] border border-[var(--mon-border)] rounded-lg pr-2.5 py-1.5 text-xs text-[var(--mon-text-dim)] placeholder:text-[var(--mon-text-faint)] focus:outline-none focus:border-[var(--mon-accent)]"
               />
             </div>
 
@@ -606,7 +610,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
             <div className="mt-auto pt-3 border-t border-[var(--mon-border-soft)] px-2 flex flex-col gap-2">
               <div className="flex items-center justify-between text-[11px] text-[var(--mon-text-muted)]">
                 <span>Telemetry Engine</span>
-                <span className={mon.enabled ? 'text-emerald-400 font-semibold' : 'text-[var(--mon-text-faint)]'}>
+                <span className={mon.enabled ? 'text-[var(--mon-ok)] font-semibold' : 'text-[var(--mon-text-faint)]'}>
                   {mon.enabled ? 'Enabled' : 'Disabled'}
                 </span>
               </div>
@@ -615,7 +619,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                 onClick={() => updateMonitoring({ enabled: !mon.enabled })}
                 className={`w-full py-1.5 px-3 rounded-lg text-xs font-semibold border transition-all flex items-center justify-center gap-2 ${
                   mon.enabled
-                    ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300 hover:bg-emerald-500/20'
+                    ? 'bg-[var(--mon-ok)]/10 border-[var(--mon-ok)]/25 text-[var(--mon-ok)] hover:bg-[var(--mon-ok)]/20'
                     : 'bg-[var(--mon-surface-2)]/80 border-[var(--mon-border)] text-[var(--mon-text-dim)] hover:bg-[var(--mon-surface-2)]'
                 }`}
               >
@@ -630,7 +634,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
             <div className="ms-content-inner">
               {error && (
                 <div className="ms-error mb-4">
-                  <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                  <AlertTriangle className="w-4 h-4 text-[var(--mon-danger)] flex-shrink-0" />
                   <span>{error}</span>
                 </div>
               )}
@@ -639,7 +643,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
               <div className="ms-section-header">
                 <div>
                   <div className="ms-section-title">
-                    <activeSectionMeta.icon className="w-5 h-5 text-indigo-400" />
+                    <activeSectionMeta.icon className="w-5 h-5 text-[var(--mon-accent-hover)]" />
                     <span>{activeSectionMeta.label}</span>
                   </div>
                   <div className="ms-section-desc">{activeSectionMeta.description}</div>
@@ -755,9 +759,9 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
               {active === 'general' && (
                 <div className="space-y-4">
                   {/* Hero Switch Card */}
-                  <div className="p-5 rounded-xl border border-indigo-500/30 bg-gradient-to-r from-indigo-950/30 via-[var(--mon-surface-2)] to-[var(--mon-surface)] flex items-center justify-between gap-4">
+                  <div className="p-5 rounded-xl border border-[var(--mon-accent)]/30 bg-gradient-to-r from-[var(--mon-surface-2)] via-[var(--mon-surface-2)] to-[var(--mon-surface)] flex items-center justify-between gap-4">
                     <div className="flex items-start gap-3.5">
-                      <div className="p-3 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-400">
+                      <div className="p-3 rounded-xl bg-[var(--mon-accent)]/15 border border-[var(--mon-accent)]/30 text-[var(--mon-accent-hover)]">
                         <Zap className="w-6 h-6" />
                       </div>
                       <div>
@@ -766,7 +770,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                           <span
                             className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${
                               mon.enabled
-                                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                ? 'bg-[var(--mon-ok)]/20 text-[var(--mon-ok)] border border-[var(--mon-ok)]/30'
                                 : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)] border border-[var(--mon-border)]'
                             }`}
                           >
@@ -788,7 +792,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                   {/* Polling & Rotation Settings */}
                   <div className="ms-card">
                     <div className="ms-card-title">
-                      <Sliders className="w-4 h-4 text-indigo-400" />
+                      <Sliders className="w-4 h-4 text-[var(--mon-accent-hover)]" />
                       Polling & Rotation Parameters
                     </div>
 
@@ -840,7 +844,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                   {/* Telemetry Source Matrix */}
                   <div className="ms-card">
                     <div className="ms-card-title">
-                      <Layers className="w-4 h-4 text-indigo-400" />
+                      <Layers className="w-4 h-4 text-[var(--mon-accent-hover)]" />
                       Connected Telemetry Matrix
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
@@ -909,7 +913,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
               {active === 'hosts' && (
                 <div className="space-y-4">
                   <div className="ms-info-box flex items-start gap-2.5">
-                    <Info className="w-4 h-4 text-indigo-400 mt-0.5 flex-shrink-0" />
+                    <Info className="w-4 h-4 text-[var(--mon-accent-hover)] mt-0.5 flex-shrink-0" />
                     <span>
                       Hosts selected here feed the <strong>Server</strong> tab (CPU, memory, storage, loads,
                       thermals and network IO). Add or edit the remote Glances endpoints themselves in <strong>Server Stats</strong> on the main dashboard.
@@ -934,7 +938,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                             onClick={() => toggleGlancesHost(srv)}
                             className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
                               isChecked
-                                ? 'bg-indigo-950/20 border-indigo-500/40 shadow-sm shadow-indigo-950/50'
+                                ? 'bg-[var(--mon-surface-2)] border-[var(--mon-accent)]/40 shadow-sm'
                                 : 'bg-[var(--mon-surface)] border-[var(--mon-border)] hover:border-[var(--mon-border)]'
                             }`}
                           >
@@ -942,7 +946,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                               <div
                                 className={`p-2.5 rounded-lg flex-shrink-0 ${
                                   isChecked
-                                    ? 'bg-indigo-500/20 text-indigo-300'
+                                    ? 'bg-[var(--mon-accent)]/20 text-[var(--mon-accent-hover)]'
                                     : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-faint)]'
                                 }`}
                               >
@@ -952,7 +956,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                                 <div className="text-xs font-semibold text-[var(--mon-text)] truncate flex items-center gap-2">
                                   {srv.name}
                                   {isChecked && (
-                                    <span className="text-[9px] font-bold px-1.5 py-0.2 bg-indigo-500/20 text-indigo-300 rounded">
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 bg-[var(--mon-accent)]/20 text-[var(--mon-accent-hover)] rounded">
                                       POLLED
                                     </span>
                                   )}
@@ -981,7 +985,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                   <div className="ms-card">
                     <div className="flex items-center justify-between gap-4">
                       <div className="flex items-start gap-3">
-                        <div className="p-3 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-400">
+                        <div className="p-3 rounded-xl bg-[var(--mon-warn)]/15 border border-[var(--mon-warn)]/30 text-[var(--mon-warn)]">
                           <Sun className="w-5 h-5" />
                         </div>
                         <div>
@@ -1000,7 +1004,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
 
                   {inverters.length === 0 ? (
                     <div className="ms-hint flex items-start gap-2.5">
-                      <Info className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+                      <Info className="w-4 h-4 text-[var(--mon-warn)] mt-0.5 flex-shrink-0" />
                       <span>
                         No inverter devices configured yet. Add a Solar Assistant device in the main dashboard settings under <strong>Inverter Monitor</strong> to feed solar data to the monitor hub.
                       </span>
@@ -1015,11 +1019,11 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                             className="p-3 rounded-lg bg-[var(--mon-panel)] border border-[var(--mon-border)] flex items-center justify-between text-xs"
                           >
                             <div className="flex items-center gap-2.5">
-                              <Zap className="w-4 h-4 text-amber-400" />
+                              <Zap className="w-4 h-4 text-[var(--mon-warn)]" />
                               <span className="font-semibold text-[var(--mon-text)]">{inv.name}</span>
                               <span className="text-[var(--mon-text-faint)] font-mono">({inv.url})</span>
                             </div>
-                            <span className="px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-400 text-[10px] font-bold uppercase">
+                            <span className="px-2 py-0.5 rounded bg-[var(--mon-ok)]/15 text-[var(--mon-ok)] text-[10px] font-bold uppercase">
                               Linked
                             </span>
                           </div>
@@ -1054,7 +1058,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                   </div>
 
                   <div className="ms-info-box flex items-start gap-2.5">
-                    <Info className="w-4 h-4 text-indigo-400 mt-0.5 flex-shrink-0" />
+                    <Info className="w-4 h-4 text-[var(--mon-accent-hover)] mt-0.5 flex-shrink-0" />
                     <span>
                       Docker telemetry works automatically through your configured Glances instances. Ensure Glances has Docker permissions or has the Docker socket mounted.
                     </span>
@@ -1285,7 +1289,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                   <div className="ms-card">
                     <div className="flex items-center justify-between mb-3">
                       <div className="ms-card-title mb-0">
-                        <Shield className="w-4 h-4 text-red-400" />
+                        <Shield className="w-4 h-4 text-[var(--mon-danger)]" />
                         OPNsense Firewall (Multi-WAN & Gateways)
                       </div>
                       <button
@@ -1357,7 +1361,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                   <div className="ms-card">
                     <div className="flex items-center justify-between mb-3">
                       <div className="ms-card-title mb-0">
-                        <Radio className="w-4 h-4 text-blue-400" />
+                        <Radio className="w-4 h-4 text-[var(--mon-accent-hover)]" />
                         ntopng (Network Traffic & Top Talkers)
                       </div>
                       <button
@@ -1501,7 +1505,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
                   <div className="ms-card">
                     <div className="flex items-center justify-between mb-3">
                       <div className="ms-card-title mb-0">
-                        <Lock className="w-4 h-4 text-emerald-400" />
+                        <Lock className="w-4 h-4 text-[var(--mon-ok)]" />
                         TLS Certificates (Expiry Watch)
                         {(mon.certificates ?? []).length > 0 && (
                           <span className="ml-2 text-[10px] font-medium text-[var(--mon-text-faint)]">
@@ -1648,7 +1652,7 @@ export function MonitorSettingsPanel({ onClose, certificates: liveCerts }: Monit
         <div className="ms-submodal-overlay">
           <div className="ms-submodal-dialog max-w-md animate-in zoom-in-95 duration-150">
             <div className="p-5">
-              <div className="flex items-center gap-3 text-red-400 mb-2">
+              <div className="flex items-center gap-3 text-[var(--mon-danger)] mb-2">
                 <AlertTriangle className="w-5 h-5 flex-shrink-0" />
                 <h3 className="text-sm font-bold text-[var(--mon-text)]">{confirmDialog.title}</h3>
               </div>
@@ -1715,7 +1719,7 @@ function PresetSlider({
           {detail && <div className="ms-row-detail">{detail}</div>}
         </div>
         <div className="flex items-baseline gap-1 bg-[var(--mon-panel)] px-3 py-1 rounded-lg border border-[var(--mon-border)]">
-          <span className="ms-slider-val text-indigo-400">{value}</span>
+          <span className="ms-slider-val text-[var(--mon-accent-hover)]">{value}</span>
           <span className="ms-slider-unit">{unit}</span>
         </div>
       </div>
@@ -1743,7 +1747,7 @@ function PresetSlider({
                 onClick={() => onChange(p.value)}
                 className={`text-[11px] font-medium px-2.5 py-1 rounded-md border transition-all ${
                   isSelected
-                    ? 'bg-indigo-600 text-[var(--mon-text)] border-indigo-500 shadow-sm'
+                    ? 'bg-[var(--mon-accent)] text-white border-[var(--mon-accent)] shadow-sm'
                     : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-muted)] border-[var(--mon-border)] hover:bg-[var(--mon-surface-2)] hover:text-[var(--mon-text-dim)]'
                 }`}
               >
@@ -1776,15 +1780,15 @@ function SourceMatrixChip({
       onClick={onClick}
       className={`p-3 rounded-xl border text-left transition-all flex flex-col justify-between ${
         active
-          ? 'bg-indigo-950/20 border-indigo-500/30 hover:border-indigo-500/50'
+          ? 'bg-[var(--mon-surface-2)] border-[var(--mon-accent)]/30 hover:border-[var(--mon-accent)]/50'
           : 'bg-[var(--mon-panel)] border-[var(--mon-border)] hover:border-[var(--mon-border)] opacity-75'
       }`}
     >
       <div className="flex items-center justify-between w-full mb-2">
-        <Icon className={`w-4 h-4 ${active ? 'text-indigo-400' : 'text-[var(--mon-text-faint)]'}`} />
+        <Icon className={`w-4 h-4 ${active ? 'text-[var(--mon-accent-hover)]' : 'text-[var(--mon-text-faint)]'}`} />
         <span
           className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${
-            active ? 'bg-indigo-500/25 text-indigo-300' : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-faint)]'
+            active ? 'bg-[var(--mon-accent)]/25 text-[var(--mon-accent-hover)]' : 'bg-[var(--mon-surface-2)] text-[var(--mon-text-faint)]'
           }`}
         >
           {count}
@@ -1810,7 +1814,7 @@ function EmptyState({
 }) {
   return (
     <div className="p-8 text-center bg-[var(--mon-panel)] border border-[var(--mon-border-soft)] rounded-xl flex flex-col items-center justify-center">
-      <div className="p-3.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 mb-3.5">
+      <div className="p-3.5 rounded-2xl bg-[var(--mon-accent)]/10 border border-[var(--mon-accent)]/20 text-[var(--mon-accent-hover)] mb-3.5">
         <Icon className="w-6 h-6" />
       </div>
       <h4 className="text-sm font-bold text-[var(--mon-text)] mb-1">{title}</h4>

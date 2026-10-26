@@ -67,7 +67,7 @@ export function HomeStatusCard({ homeAssistant: ha }: HomeStatusCardProps) {
             <div className="pump-box">
               <div
                 className="pump-dot"
-                style={{ color: ha.pump.running ? '#38bdf8' : 'var(--mon-text-muted)' }}
+                style={{ color: ha.pump.running ? 'var(--mon-accent)' : 'var(--mon-text-muted)' }}
               >
                 ● PUMP {ha.pump.running ? 'RUNNING' : 'OFF'}
               </div>

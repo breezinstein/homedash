@@ -1,0 +1,219 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&display=swap');
+
+/* ── Stargate ─────────────────────────────────────────────────────────── */
+@layer homedash-theme-tokens {
+html[data-theme="stargate-dark"] {
+  color-scheme: dark;
+  --theme-primary: #d4af37;
+  --theme-secondary: #3b4a4f;
+  --theme-background: #070d10;
+  --theme-surface: #111a1e;
+  --theme-text-primary: #f4e7c3;
+  --theme-text-secondary: #b9a77a;
+  --theme-border: #3c4a4d;
+  --theme-accent: #2dd4bf;
+  --theme-success: #39d98a;
+  --theme-warning: #f2b544;
+  --theme-error: #ef5350;
+
+  --theme-text: #f4e7c3;
+  --theme-text-dim: #cbbd95;
+  --theme-text-muted: #9b8f70;
+  --theme-text-faint: #7a7058;
+  --theme-border-soft: rgba(212, 175, 55, 0.22);
+  --theme-border-faint: rgba(212, 175, 55, 0.12);
+  --theme-radius: 2px;
+  --theme-radius-sm: 1px;
+  --theme-radius-lg: 4px;
+  --theme-bevel-width: 1px;
+  --theme-bevel-light: rgba(212, 175, 55, 0.55);
+  --theme-bevel-dark: rgba(45, 212, 191, 0.18);
+  --theme-card-shadow: 0 12px 30px rgba(0, 0, 0, 0.55), inset 0 0 30px rgba(212, 175, 55, 0.03);
+  --theme-modal-shadow: 0 28px 70px rgba(0, 0, 0, 0.65), inset 0 3px 0 rgba(212, 175, 55, 0.7);
+  --theme-hover-shadow: 0 0 0 1px rgba(212, 175, 55, 0.55), 0 0 24px rgba(45, 212, 191, 0.12);
+  --theme-header-shadow: inset 0 -2px 0 rgba(212, 175, 55, 0.5), 0 8px 24px rgba(0, 0, 0, 0.5);
+  --theme-shell-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.18);
+  --theme-blur: none;
+  --theme-body-font: "Rajdhani", "Segoe UI", sans-serif;
+  --theme-display-font: "Cinzel", "Trajan Pro", "Palatino Linotype", Georgia, serif;
+  --theme-tracking: 0.08em;
+  --theme-transform: uppercase;
+
+  --theme-card-1: rgba(17, 26, 30, 0.96);
+  --theme-card-2: rgba(7, 13, 16, 0.98);
+  --theme-card-3: rgba(17, 26, 30, 0.8);
+  --theme-card-bg: #111a1e;
+  --theme-card-image: linear-gradient(180deg, var(--theme-card-1), var(--theme-card-2));
+  --theme-modal-1: rgba(17, 26, 30, 0.99);
+  --theme-modal-2: rgba(7, 13, 16, 0.99);
+  --theme-modal-bg: #111a1e;
+  --theme-modal-image: linear-gradient(180deg, var(--theme-modal-1), var(--theme-modal-2));
+  --theme-header-bg: #0a1215;
+  --theme-header-image: linear-gradient(90deg, rgba(10, 18, 21, 0.98), rgba(7, 13, 16, 0.98));
+  --theme-header-text: #f4e7c3;
+  --theme-header-muted: #b9a77a;
+  --theme-nav-bg: rgba(10, 18, 21, 0.98);
+  --theme-input-bg: #0b1519;
+  --theme-input-text: #f4e7c3;
+  --theme-overlay: rgba(2, 5, 6, 0.82);
+  --theme-submodal-overlay: rgba(2, 5, 6, 0.78);
+  --theme-content-bg: #0b1519;
+  --theme-body-bg: #070d10;
+  --theme-body-image:
+    radial-gradient(1000px 600px at 50% -10%, rgba(212, 175, 55, 0.12), transparent 60%),
+    radial-gradient(800px 600px at 100% 100%, rgba(45, 212, 191, 0.08), transparent 55%),
+    repeating-linear-gradient(45deg, rgba(212, 175, 55, 0.025) 0 1px, transparent 1px 26px);
+  --theme-shell-bg: #070d10;
+  --theme-shell-image:
+    radial-gradient(1200px 800px at 50% -10%, rgba(212, 175, 55, 0.1), transparent 60%),
+    repeating-linear-gradient(90deg, rgba(45, 212, 191, 0.02) 0 1px, transparent 1px 48px);
+  --theme-logo-bg: linear-gradient(135deg, #d4af37, #8a6d1f 48%, #2dd4bf);
+  --theme-on-accent: #1a1408;
+  --theme-titlebar-bg: rgba(212, 175, 55, 0.7);
+  --theme-progress: linear-gradient(90deg, #2dd4bf, #d4af37);
+  --theme-status-radius: 2px;
+}
+
+html[data-theme="stargate-light"] {
+  color-scheme: light;
+  --theme-primary: #8a6d1f;
+  --theme-secondary: #6b5a3e;
+  --theme-background: #efe5cf;
+  --theme-surface: #fbf5e6;
+  --theme-text-primary: #2b2418;
+  --theme-text-secondary: #6b5a3e;
+  --theme-border: #cdbb96;
+  --theme-accent: #0f766e;
+  --theme-success: #1f7a4d;
+  --theme-warning: #a16207;
+  --theme-error: #b3261e;
+
+  --theme-text: #2b2418;
+  --theme-text-dim: #4b3f2a;
+  --theme-text-muted: #6b5a3e;
+  --theme-text-faint: #8a7858;
+  --theme-border-soft: rgba(138, 109, 31, 0.35);
+  --theme-border-faint: rgba(138, 109, 31, 0.2);
+  --theme-radius: 2px;
+  --theme-radius-sm: 1px;
+  --theme-radius-lg: 4px;
+  --theme-bevel-width: 1px;
+  --theme-bevel-light: rgba(255, 250, 235, 0.9);
+  --theme-bevel-dark: rgba(138, 109, 31, 0.35);
+  --theme-card-shadow: 0 10px 26px rgba(60, 45, 20, 0.16);
+  --theme-modal-shadow: 0 24px 60px rgba(60, 45, 20, 0.22), inset 0 3px 0 rgba(138, 109, 31, 0.7);
+  --theme-hover-shadow: 0 0 0 1px rgba(138, 109, 31, 0.45), 0 0 20px rgba(15, 118, 110, 0.12);
+  --theme-header-shadow: inset 0 -2px 0 rgba(138, 109, 31, 0.55), 0 6px 18px rgba(60, 45, 20, 0.12);
+  --theme-shell-shadow: inset 0 0 0 1px rgba(138, 109, 31, 0.25);
+  --theme-blur: none;
+  --theme-body-font: "Rajdhani", "Segoe UI", sans-serif;
+  --theme-display-font: "Cinzel", "Trajan Pro", "Palatino Linotype", Georgia, serif;
+  --theme-tracking: 0.08em;
+  --theme-transform: uppercase;
+
+  --theme-card-1: rgba(251, 245, 230, 0.98);
+  --theme-card-2: rgba(242, 231, 208, 0.98);
+  --theme-card-3: rgba(251, 245, 230, 0.9);
+  --theme-card-bg: #fbf5e6;
+  --theme-card-image: linear-gradient(180deg, var(--theme-card-1), var(--theme-card-2));
+  --theme-modal-1: rgba(251, 245, 230, 0.99);
+  --theme-modal-2: rgba(242, 231, 208, 0.99);
+  --theme-modal-bg: #fbf5e6;
+  --theme-modal-image: linear-gradient(180deg, var(--theme-modal-1), var(--theme-modal-2));
+  --theme-header-bg: #f3e8d1;
+  --theme-header-image: linear-gradient(90deg, rgba(243, 232, 209, 0.98), rgba(239, 229, 207, 0.98));
+  --theme-header-text: #2b2418;
+  --theme-header-muted: #6b5a3e;
+  --theme-nav-bg: rgba(243, 232, 209, 0.98);
+  --theme-input-bg: #fffdf5;
+  --theme-input-text: #2b2418;
+  --theme-overlay: rgba(239, 229, 207, 0.8);
+  --theme-submodal-overlay: rgba(239, 229, 207, 0.82);
+  --theme-content-bg: #efe5cf;
+  --theme-body-bg: #efe5cf;
+  --theme-body-image:
+    radial-gradient(1000px 600px at 50% -10%, rgba(138, 109, 31, 0.12), transparent 60%),
+    radial-gradient(800px 600px at 100% 100%, rgba(15, 118, 110, 0.08), transparent 55%),
+    repeating-linear-gradient(45deg, rgba(138, 109, 31, 0.04) 0 1px, transparent 1px 26px);
+  --theme-shell-bg: #efe5cf;
+  --theme-shell-image:
+    radial-gradient(1200px 800px at 50% -10%, rgba(138, 109, 31, 0.1), transparent 60%),
+    repeating-linear-gradient(90deg, rgba(15, 118, 110, 0.03) 0 1px, transparent 1px 48px);
+  --theme-logo-bg: linear-gradient(135deg, #b8860b, #8a6d1f 48%, #0f766e);
+  --theme-on-accent: #ffffff;
+  --theme-titlebar-bg: rgba(138, 109, 31, 0.7);
+  --theme-progress: linear-gradient(90deg, #0f766e, #8a6d1f);
+  --theme-status-radius: 2px;
+}
+
+}
+
+/* Gold/teal corner brackets on the main card surfaces. */
+html[data-theme^="stargate"] main .grid > div > a,
+html[data-theme^="stargate"] main .grid > div > div[draggable="true"],
+html[data-theme^="stargate"] .card,
+html[data-theme^="stargate"] .node-card,
+html[data-theme^="stargate"] .net-v2-card,
+html[data-theme^="stargate"] .streams-panel,
+html[data-theme^="stargate"] .media-card,
+html[data-theme^="stargate"] .solar-summary-card,
+html[data-theme^="stargate"] .alerts-card,
+html[data-theme^="stargate"] .ms-card,
+html[data-theme^="stargate"] .ms-entity-card {
+  position: relative;
+}
+
+html[data-theme^="stargate"] main .grid > div > a::before,
+html[data-theme^="stargate"] main .grid > div > div[draggable="true"]::before,
+html[data-theme^="stargate"] .card::before,
+html[data-theme^="stargate"] .node-card::before,
+html[data-theme^="stargate"] .net-v2-card::before,
+html[data-theme^="stargate"] .streams-panel::before,
+html[data-theme^="stargate"] .media-card::before,
+html[data-theme^="stargate"] .solar-summary-card::before,
+html[data-theme^="stargate"] .alerts-card::before,
+html[data-theme^="stargate"] .ms-card::before,
+html[data-theme^="stargate"] .ms-entity-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 14px;
+  height: 14px;
+  border-top: 2px solid var(--theme-accent);
+  border-left: 2px solid var(--theme-accent);
+  pointer-events: none;
+  z-index: 1;
+}
+
+html[data-theme^="stargate"] main .grid > div > a::after,
+html[data-theme^="stargate"] main .grid > div > div[draggable="true"]::after,
+html[data-theme^="stargate"] .card::after,
+html[data-theme^="stargate"] .node-card::after,
+html[data-theme^="stargate"] .net-v2-card::after,
+html[data-theme^="stargate"] .streams-panel::after,
+html[data-theme^="stargate"] .media-card::after,
+html[data-theme^="stargate"] .solar-summary-card::after,
+html[data-theme^="stargate"] .alerts-card::after,
+html[data-theme^="stargate"] .ms-card::after,
+html[data-theme^="stargate"] .ms-entity-card::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 14px;
+  height: 14px;
+  border-right: 2px solid var(--theme-primary);
+  border-bottom: 2px solid var(--theme-primary);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* The active monitor tab reads as an illuminated chevron. */
+html[data-theme^="stargate"] .monitor-shell .tab.active {
+  box-shadow: inset 0 -2px 0 var(--theme-accent) !important;
+}
+html[data-theme^="stargate"] .monitor-shell .status-pill {
+  border-radius: 2px !important;
+  letter-spacing: 0.12em;
+}

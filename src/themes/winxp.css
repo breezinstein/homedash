@@ -1,0 +1,130 @@
+/* ── Windows XP (Luna) ────────────────────────────────────────────────── */
+@layer homedash-theme-tokens {
+html[data-theme="winxp"] {
+  color-scheme: light;
+  --theme-primary: #0054e3;
+  --theme-secondary: #003399;
+  --theme-background: #ece9d8;
+  --theme-surface: #ece9d8;
+  --theme-text-primary: #000000;
+  --theme-text-secondary: #003399;
+  --theme-border: #7f9db9;
+  --theme-accent: #2e7d32;
+  --theme-success: #008000;
+  --theme-warning: #c07f00;
+  --theme-error: #c00000;
+
+  --theme-text: #000000;
+  --theme-text-dim: #1f3d5c;
+  --theme-text-muted: #3a5a73;
+  --theme-text-faint: #5f7f96;
+  --theme-border-soft: #a9c0d4;
+  --theme-border-faint: #c7d7e5;
+  --theme-radius: 4px;
+  --theme-radius-sm: 2px;
+  --theme-radius-lg: 6px;
+  --theme-bevel-width: 1px;
+  --theme-bevel-light: #ffffff;
+  --theme-bevel-dark: #7f9db9;
+  --theme-card-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  --theme-modal-shadow: 0 12px 30px rgba(0, 0, 0, 0.3), inset 0 4px 0 #0054e3;
+  --theme-hover-shadow: 0 0 0 1px #0054e3;
+  --theme-header-shadow: inset 0 4px 0 #0054e3, 0 2px 8px rgba(0, 0, 0, 0.25);
+  --theme-shell-shadow: inset 0 0 0 1px #7f9db9;
+  --theme-blur: none;
+  --theme-body-font: "Tahoma", "Segoe UI", sans-serif;
+  --theme-display-font: var(--theme-body-font);
+  --theme-tracking: 0;
+  --theme-transform: none;
+
+  --theme-panel: #ece9d8;
+  --theme-panel-2: #e6e1d2;
+  --theme-panel-3: #f6f3e8;
+  --theme-card-1: #fbf9f3;
+  --theme-card-2: #e6e1d2;
+  --theme-card-3: #f6f3e8;
+  --theme-card-bg: #f6f3e8;
+  --theme-card-image: linear-gradient(180deg, var(--theme-card-1), var(--theme-card-2));
+  --theme-modal-1: #f6f3e8;
+  --theme-modal-2: #ece9d8;
+  --theme-modal-bg: #ece9d8;
+  --theme-modal-image: linear-gradient(180deg, var(--theme-modal-1), var(--theme-modal-2));
+  --theme-header-bg: #ece9d8;
+  --theme-header-image: linear-gradient(180deg, #f6f3e8, #dcd6c4);
+  --theme-header-text: #000000;
+  --theme-header-muted: #003399;
+  --theme-nav-bg: #e6e1d2;
+  --theme-input-bg: #ffffff;
+  --theme-input-text: #000000;
+  --theme-overlay: rgba(58, 110, 165, 0.5);
+  --theme-submodal-overlay: rgba(58, 110, 165, 0.45);
+  --theme-main-bg: rgba(236, 233, 216, 0.94);
+  --theme-main-border: 1px solid #7f9db9;
+  --theme-main-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  --theme-content-bg: #ece9d8;
+  --theme-body-bg: #3a6ea5;
+  --theme-body-image:
+    radial-gradient(ellipse at 50% 120%, #6fbf3f 0 32%, transparent 33%),
+    linear-gradient(180deg, #2a6fb0, #8fc7ff);
+  --theme-shell-bg: #ece9d8;
+  --theme-shell-image: none;
+  --theme-logo-bg: linear-gradient(135deg, #7fce3a, #3c9b39 45%, #0054e3);
+  --theme-on-accent: #ffffff;
+  --theme-titlebar-bg: #0054e3;
+  --theme-progress: linear-gradient(90deg, #3a93ff, #0054e3);
+  --theme-status-radius: 3px;
+}
+
+}
+
+/* Sunken Luna fields. */
+html[data-theme="winxp"] input:not([type="range"]),
+html[data-theme="winxp"] select,
+html[data-theme="winxp"] textarea {
+  border-width: 1px !important;
+  border-style: solid !important;
+  border-color: #7f9db9 #ffffff #ffffff #7f9db9 !important;
+  background: #ffffff !important;
+  color: #000000 !important;
+}
+
+/* Luna-style controls in Monitor Settings. */
+html[data-theme="winxp"] .ms-btn,
+html[data-theme="winxp"] .ms-icon-btn,
+html[data-theme="winxp"] .ms-add-btn {
+  border: 1px solid #7f9db9 !important;
+  border-radius: 3px !important;
+  background: linear-gradient(180deg, #ffffff, #ece9d8) !important;
+  color: #000000 !important;
+  box-shadow: inset 0 1px 0 #ffffff !important;
+}
+html[data-theme="winxp"] .ms-btn-primary {
+  background: linear-gradient(180deg, #3a93ff, #0054e3) !important;
+  border-color: #0054e3 !important;
+  color: #ffffff !important;
+}
+html[data-theme="winxp"] .ms-btn-primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #5aaaff, #1a6ae8) !important;
+}
+
+html[data-theme="winxp"] .monitor-shell .tab.active {
+  background: linear-gradient(180deg, #3a93ff, #0054e3) !important;
+  box-shadow: inset 0 1px 0 #8fc7ff !important;
+}
+
+html[data-theme="winxp"] .ms-toggle-track {
+  border-radius: 3px !important;
+  background: #ffffff !important;
+  border-color: #7f9db9 !important;
+}
+html[data-theme="winxp"] .ms-toggle-wrap[data-checked="true"] .ms-toggle-track {
+  background: linear-gradient(180deg, #7fce3a, #3c9b39) !important;
+  border-color: #2e7d32 !important;
+}
+html[data-theme="winxp"] .ms-toggle-thumb {
+  border-radius: 2px !important;
+}
+
+html[data-theme="winxp"] .monitor-shell .status-pill {
+  border-radius: 3px !important;
+}
