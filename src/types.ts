@@ -520,6 +520,9 @@ export interface OpnsenseSnapshot {
   wanInterfaces: OpnsenseInterfaceStats[];
   lanInterfaces: OpnsenseInterfaceStats[];
   netflowTalkers: NetFlowTalker[];
+  /** Why the NetFlow list is empty; omitted by older cached snapshots. */
+  netflowStatus?: 'ok' | 'empty' | 'unavailable' | 'error';
+  netflowError?: string;
   firewallStates: number | null;
   dhcpLeases: number | null;
   totalLinkCapacityBps: number | null; // sum of negotiated link speeds, bits/sec

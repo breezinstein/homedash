@@ -10,6 +10,7 @@ import {
   estimateBatteryRuntime,
   resolveMetric,
   pickHostTemp,
+  fetchOpnsense,
   fetchNtopng,
   fetchHomeAssistant,
   fetchCertificates,
@@ -613,6 +614,193 @@ test('fetchNtopng ranks top talkers by live throughput, not bytes', async () => 
     assert.equal(out.topTalkers[0].address, '10.0.0.1', 'higher live throughput ranks first');
     assert.equal(out.topTalkers[0].throughputBps, 5000000);
     assert.equal(out.topTalkers[1].address, '10.0.0.2');
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchOpnsense distinguishes NetFlow empty, unavailable, and error states', async () => {
+  let insightMode = 'empty';
+  const server = createServer((req, res) => {
+    if (req.url === '/api/insight/service/top') {
+      if (insightMode === 'missing') {
+        res.statusCode = 404;
+        res.end();
+        return;
+      }
+      if (insightMode === 'error') {
+        res.statusCode = 500;
+        res.end();
+        return;
+      }
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ rows: [] }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end();
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const cfg = [{ id: 'o1', url: `http://127.0.0.1:${port}`, apiKey: 'k', apiSecret: 's' }];
+
+    const empty = await fetchOpnsense(cfg);
+    assert.equal(empty.netflowStatus, 'empty');
+    assert.deepEqual(empty.netflowTalkers, []);
+
+    insightMode = 'missing';
+    const missing = await fetchOpnsense(cfg);
+    assert.equal(missing.netflowStatus, 'unavailable');
+    assert.match(missing.netflowError, /not found/);
+
+    insightMode = 'error';
+    const errored = await fetchOpnsense(cfg);
+    assert.equal(errored.netflowStatus, 'error');
+    assert.match(errored.netflowError, /HTTP 500/);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng reuses the authenticated interface probe', async () => {
+  let ifaceCalls = 0;
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      ifaceCalls += 1;
+      if (ifaceCalls > 1) {
+        // A transient failure on the redundant second lookup used to leave
+        // ifaceList empty and silently query ifid 0.
+        res.statusCode = 500;
+        res.end();
+        return;
+      }
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ ifid: 1, ifname: 'br0' }] }));
+    } else if (req.url.includes('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      // Only the correctly resolved interface has talkers.
+      const ifid = new URL(req.url, 'http://localhost').searchParams.get('ifid');
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: ifid === '1' ? [{ address: '10.0.0.7', value: 1234 }] : [] }));
+    } else if (req.url.startsWith('/lua/rest/v2/get/host/active.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: { data: [] } }));
+    } else {
+      res.statusCode = 404;
+      res.end();
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{ id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}` }]);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.ifid, 1);
+    assert.equal(ifaceCalls, 1, 'interface list should come from the successful auth probe');
+    assert.equal(out.topTalkers.length, 1);
+    assert.equal(out.topTalkers[0].address, '10.0.0.7');
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng surfaces API-level errors instead of returning an empty ok snapshot', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ ifid: 0, ifname: 'eth0' }] }));
+    } else if (req.url.includes('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      res.end(JSON.stringify({ rc: 1, rc_str: 'Pro endpoint unavailable', rsp: [] }));
+    } else if (req.url.startsWith('/lua/rest/v2/get/host/active.lua')) {
+      res.end(JSON.stringify({ rc: 1, rc_str: 'No active hosts data', rsp: [] }));
+    } else {
+      res.statusCode = 404;
+      res.end();
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{ id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}` }]);
+    assert.equal(out.status, 'down');
+    assert.match(out.error, /No active hosts data/);
+    assert.deepEqual(out.topTalkers, []);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng keeps an empty-but-successful response as ok', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ ifid: 0, ifname: 'eth0' }] }));
+    } else if (req.url.includes('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [] }));
+    } else if (req.url.startsWith('/lua/rest/v2/get/host/active.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: { data: [] } }));
+    } else {
+      res.statusCode = 404;
+      res.end();
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{ id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}` }]);
+    assert.equal(out.status, 'ok');
+    assert.equal(out.error, undefined);
+    assert.deepEqual(out.topTalkers, []);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng reports an undetermined interface rather than querying ifid 0 blindly', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [] }));
+    } else if (req.url.includes('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [] }));
+    } else if (req.url.startsWith('/lua/rest/v2/get/host/active.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: { data: [] } }));
+    } else {
+      res.statusCode = 404;
+      res.end();
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{ id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}` }]);
+    assert.equal(out.status, 'degraded');
+    assert.match(out.error, /Interface ID/);
+  } finally {
+    await new Promise(r => server.close(r));
+  }
+});
+
+test('fetchNtopng reports the community fallback failure when the Pro endpoint is empty but ok', async () => {
+  const server = createServer((req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url.startsWith('/lua/rest/v2/get/ntopng/interfaces.lua')) {
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [{ ifid: 1, ifname: 'br0' }] }));
+    } else if (req.url.includes('/lua/pro/rest/v2/get/interface/top/local/talkers.lua')) {
+      // Pro endpoint reachable and happy, just no talkers in this window.
+      res.end(JSON.stringify({ rc: 0, rc_str: 'OK', rsp: [] }));
+    } else if (req.url.startsWith('/lua/rest/v2/get/host/active.lua')) {
+      res.end(JSON.stringify({ rc: 1, rc_str: 'Active host query failed', rsp: [] }));
+    } else {
+      res.statusCode = 404;
+      res.end();
+    }
+  });
+  await new Promise(r => server.listen(0, '127.0.0.1', r));
+  try {
+    const { port } = server.address();
+    const out = await fetchNtopng([{ id: 'n1', name: 'ntop', url: `http://127.0.0.1:${port}` }]);
+    assert.equal(out.status, 'down');
+    assert.match(out.error, /Active host query failed/);
+    assert.deepEqual(out.topTalkers, []);
   } finally {
     await new Promise(r => server.close(r));
   }

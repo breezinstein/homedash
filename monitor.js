@@ -44,6 +44,10 @@ const glancesApiMajor = new Map(); // `${host.url}|${user}` → 3 | 4 (last know
 // ntopng credential scheme that authenticated successfully, keyed by
 // `url|username` so we don't re-probe every poll. Values: 'token' | 'basic'.
 const ntopngAuthSchemes = new Map();
+// Last resolved interface id per ntopng endpoint. Reused when the interfaces
+// list request fails transiently so we don't silently fall back to ifid 0
+// (which may be a different interface with no local talkers).
+const ntopngIfids = new Map();
 // Per-host cumulative byte counters (keyed by `url|ifid|address`) used to
 // derive per-direction live TX/RX rates between polls.
 const ntopngTalkerSamples = new Map();
@@ -908,7 +912,7 @@ export async function fetchSeerr(seerrConfigs) {
 // Endpoints vary by plugin; we try the most common ones and degrade gracefully.
 // ---------------------------------------------------------------------------
 
-async function fetchOpnsense(opnConfigs) {
+export async function fetchOpnsense(opnConfigs) {
   if (!Array.isArray(opnConfigs) || opnConfigs.length === 0) return null;
   const o = opnConfigs[0];
   if (!o || !o.url || !o.apiKey || !o.apiSecret) return null;
@@ -926,17 +930,51 @@ async function fetchOpnsense(opnConfigs) {
     } catch { return null; }
   }
 
-  // Insight POST helper — the top-talkers endpoint expects JSON body
+  // Insight POST helper — the top-talkers endpoint expects JSON body.
+  // Returns a structured result so the UI can distinguish "os-insight is not
+  // available" from "enabled but no data" from a genuine request failure.
   async function fetchInsightTopTalkers() {
-    try {
-      const url = `${String(o.url).replace(/\/+$/, '')}/api/insight/service/top`;
-      const body = JSON.stringify({ type: 'talker', time: 3600, max: 10 });
-      const reqHeaders = { ...headers, 'Content-Type': 'application/json' };
-      if (!o.insecureTls) {
-        const res = await fetch(url, { method: 'POST', headers: reqHeaders, body, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
-        return res.ok ? res.json() : null;
+    const url = `${String(o.url).replace(/\/+$/, '')}/api/insight/service/top`;
+    const body = JSON.stringify({ type: 'talker', time: 3600, max: 10 });
+    const reqHeaders = { ...headers, 'Content-Type': 'application/json' };
+    const parse = async res => {
+      if (res.status === 404) {
+        return { ok: false, status: 'unavailable', error: 'os-insight endpoint not found' };
       }
-      return new Promise(resolve => {
+      if (!res.ok) {
+        return { ok: false, status: 'error', error: `HTTP ${res.status}` };
+      }
+      try {
+        return { ok: true, status: 'ok', data: await res.json() };
+      } catch {
+        return { ok: false, status: 'error', error: 'Invalid JSON from Insight endpoint' };
+      }
+    };
+
+    if (!o.insecureTls) {
+      try {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: reqHeaders,
+          body,
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        return await parse(res);
+      } catch (err) {
+        const timedOut = err.name === 'TimeoutError' || err.name === 'AbortError';
+        return { ok: false, status: 'error', error: timedOut ? 'Request timed out' : (err.message || 'Request failed') };
+      }
+    }
+
+    return new Promise(resolve => {
+      let settled = false;
+      const finish = result => {
+        if (settled) return;
+        settled = true;
+        resolve(result);
+      };
+      let timedOut = false;
+      try {
         const u = new URL(url);
         const req = https.request({
           hostname: u.hostname,
@@ -951,19 +989,49 @@ async function fetchOpnsense(opnConfigs) {
           res.setEncoding('utf8');
           res.on('data', c => { data += c; });
           res.on('end', () => {
-            if (res.statusCode < 200 || res.statusCode >= 300) return resolve(null);
-            try { resolve(JSON.parse(data)); } catch { resolve(null); }
+            if (res.statusCode === 404) {
+              return finish({ ok: false, status: 'unavailable', error: 'os-insight endpoint not found' });
+            }
+            if (res.statusCode < 200 || res.statusCode >= 300) {
+              return finish({ ok: false, status: 'error', error: `HTTP ${res.statusCode}` });
+            }
+            try {
+              finish({ ok: true, status: 'ok', data: JSON.parse(data) });
+            } catch {
+              finish({ ok: false, status: 'error', error: 'Invalid JSON from Insight endpoint' });
+            }
           });
+          // A stalled or truncated body fires neither 'end' nor a request
+          // 'error'; without these the promise would never settle.
+          res.on('aborted', () => finish({
+            ok: false,
+            status: 'error',
+            error: timedOut ? 'Request timed out' : 'Response aborted',
+          }));
+          res.on('error', err => finish({
+            ok: false,
+            status: 'error',
+            error: timedOut ? 'Request timed out' : (err.message || 'Response failed'),
+          }));
         });
-        req.on('timeout', () => req.destroy());
-        req.on('error', () => resolve(null));
+        req.on('timeout', () => {
+          timedOut = true;
+          req.destroy();
+        });
+        req.on('error', err => finish({
+          ok: false,
+          status: 'error',
+          error: timedOut || err.code === 'ETIMEDOUT' ? 'Request timed out' : (err.message || 'Request failed'),
+        }));
         req.write(body);
         req.end();
-      });
-    } catch { return null; }
+      } catch (err) {
+        finish({ ok: false, status: 'error', error: err.message || 'Request failed' });
+      }
+    });
   }
 
-  const [info, resources, activity, traffic, pfStates, dnsmasqLeases, gwStatus, ifConfig, insightTalkers] = await Promise.all([
+  const [info, resources, activity, traffic, pfStates, dnsmasqLeases, gwStatus, ifConfig, insightResult] = await Promise.all([
     fetchOpn('/api/diagnostics/system/systemInformation'),
     fetchOpn('/api/diagnostics/system/systemResources'),
     fetchOpn('/api/diagnostics/activity/getActivity'),
@@ -1095,30 +1163,43 @@ async function fetchOpnsense(opnConfigs) {
     if (v.timestamp < sampleCutoff) opnsenseInterfaceSamples.delete(k);
   }
 
-  // Parse Insight NetFlow top talkers
+  // Parse Insight NetFlow top talkers, retaining why the list is empty so
+  // callers can distinguish "plugin unavailable" from "no data in window".
   const netflowTalkers = [];
-  if (insightTalkers && Array.isArray(insightTalkers.rows)) {
-    for (const row of insightTalkers.rows) {
-      if (!row || !row.address) continue;
-      const bytesIn = Number.isFinite(Number(row.bytes_in)) ? Number(row.bytes_in) : 0;
-      const bytesOut = Number.isFinite(Number(row.bytes_out)) ? Number(row.bytes_out) : 0;
-      const totalBytes = bytesIn + bytesOut || Number(row.bytes) || 0;
-      const pct = Number.isFinite(Number(row.percent)) ? Number(row.percent)
-        : Number.isFinite(Number(row.percentage)) ? Number(row.percentage) : 0;
-      netflowTalkers.push({
-        address: String(row.address),
-        hostname: row.hostname && typeof row.hostname === 'string' ? row.hostname : null,
-        bytes: totalBytes,
-        percentage: pct,
-      });
+  let netflowStatus = 'unavailable';
+  let netflowError;
+  if (insightResult?.ok) {
+    if (Array.isArray(insightResult.data?.rows)) {
+      for (const row of insightResult.data.rows) {
+        if (!row || !row.address) continue;
+        const bytesIn = Number.isFinite(Number(row.bytes_in)) ? Number(row.bytes_in) : 0;
+        const bytesOut = Number.isFinite(Number(row.bytes_out)) ? Number(row.bytes_out) : 0;
+        const totalBytes = bytesIn + bytesOut || Number(row.bytes) || 0;
+        const pct = Number.isFinite(Number(row.percent)) ? Number(row.percent)
+          : Number.isFinite(Number(row.percentage)) ? Number(row.percentage) : 0;
+        netflowTalkers.push({
+          address: String(row.address),
+          hostname: row.hostname && typeof row.hostname === 'string' ? row.hostname : null,
+          bytes: totalBytes,
+          percentage: pct,
+        });
+      }
+      netflowTalkers.sort((a, b) => b.bytes - a.bytes);
+      netflowStatus = netflowTalkers.length > 0 ? 'ok' : 'empty';
+    } else {
+      netflowStatus = 'error';
+      netflowError = 'Unexpected Insight response shape';
     }
-    netflowTalkers.sort((a, b) => b.bytes - a.bytes);
+  } else if (insightResult) {
+    netflowStatus = insightResult.status || 'error';
+    netflowError = insightResult.error;
   }
 
   if (!hostname && !resources && !activity && !traffic && !pfStates) {
     return { status: 'down', error: 'No data from OPNSense API — check URL, API key, and API secret',
       hostname: null, version: null, uptime: null, cpuPercent: null, memPercent: null, diskPercent: null,
-      wanInterfaces: [], lanInterfaces: [], netflowTalkers: [], firewallStates: null, dhcpLeases: null, totalLinkCapacityBps: null };
+      wanInterfaces: [], lanInterfaces: [], netflowTalkers: [], netflowStatus, netflowError,
+      firewallStates: null, dhcpLeases: null, totalLinkCapacityBps: null };
   }
 
   return {
@@ -1127,6 +1208,8 @@ async function fetchOpnsense(opnConfigs) {
     wanInterfaces: wanIfaces,
     lanInterfaces: lanIfaces,
     netflowTalkers,
+    netflowStatus,
+    netflowError,
     firewallStates: Number.isFinite(Number(pfStates?.current)) ? Number(pfStates.current) : null,
     dhcpLeases: dhcpLeaseCount,
     totalLinkCapacityBps,
@@ -1207,6 +1290,10 @@ export async function fetchNtopng(ntopConfigs) {
             try { resolve({ ok: true, status, data: JSON.parse(body) }); }
             catch { resolve({ ok: false, status }); }
           });
+          // A stalled/truncated body emits neither 'end' nor a request error,
+          // which would leave this promise pending and freeze the poll cycle.
+          res.on('aborted', () => resolve({ ok: false, status: 0 }));
+          res.on('error', () => resolve({ ok: false, status: 0 }));
         });
         req.on('timeout', () => req.destroy());
         req.on('error', () => resolve({ ok: false, status: 0 }));
@@ -1215,43 +1302,113 @@ export async function fetchNtopng(ntopConfigs) {
   }
 
   const unwrap = d => (d && typeof d === 'object' && 'rsp' in d ? d.rsp : d);
+
+  // ntopng REST v2 returns HTTP 200 with { rc, rc_str } for API-level errors.
+  // Treating those as successful empty responses was why the UI intermittently
+  // fell back to "configure ntopng" even though ntopng was reachable.
+  const readRsp = res => {
+    if (!res?.ok) {
+      // doGet reports transport failures (timeout, DNS, TLS, non-JSON body)
+      // with status 0, which would otherwise surface as "HTTP 0" in the UI.
+      const error = !res ? 'Request failed'
+        : res.status ? `HTTP ${res.status}`
+          : 'Request failed (network error or timeout)';
+      return { ok: false, data: null, error };
+    }
+    const body = res.data;
+    if (body && typeof body === 'object' && !Array.isArray(body) && 'rc' in body) {
+      const rc = Number(body.rc);
+      if (Number.isFinite(rc) && rc !== 0) {
+        return {
+          ok: false,
+          data: null,
+          error: typeof body.rc_str === 'string' && body.rc_str ? body.rc_str : `ntopng error ${rc}`,
+        };
+      }
+    }
+    return { ok: true, data: unwrap(body), error: undefined };
+  };
+
   const IFACES_PATH = '/lua/rest/v2/get/ntopng/interfaces.lua';
 
-  // Pick the first scheme that authenticates.
+  // Pick the first scheme that authenticates. Reuse the successful probe
+  // response as the interface list instead of immediately re-fetching it — a
+  // transient failure on that second call used to leave ifaceList empty and
+  // silently query ifid 0 (often the wrong interface / no top talkers).
   let chosen = null;
+  let ifaceRes = null;
+  let httpOkCandidate = null;
   for (const s of schemes) {
     const probe = await doGet(IFACES_PATH, s.headers);
-    if (probe.ok) { chosen = s; break; }
+    if (!probe.ok) continue;
+    if (!httpOkCandidate) httpOkCandidate = { scheme: s, probe };
+    if (readRsp(probe).ok) { chosen = s; ifaceRes = probe; break; }
+  }
+  if (!chosen && httpOkCandidate) {
+    // The endpoint answered with HTTP 200 but an API-level error (e.g. a
+    // transient permission/interface error). Keep it as the auth candidate so
+    // a configured Interface ID can still be used.
+    chosen = httpOkCandidate.scheme;
+    ifaceRes = httpOkCandidate.probe;
   }
   if (!chosen) {
+    // One retry covers transient network failures without re-probing every
+    // scheme on every poll.
     const probe = await doGet(IFACES_PATH, schemes[0].headers);
-    const authIssue = probe.status === 302 || probe.status === 401 || probe.status === 403;
-    return {
-      status: 'down',
-      error: authIssue
-        ? 'ntopng authentication failed — check the username and API token'
-        : 'No data from ntopng API — check URL and credentials',
-      ifid: n.ifid != null ? Number(n.ifid) : null,
-      ifname: null, source: null, topTalkers: [],
-    };
+    const parsed = readRsp(probe);
+    if (parsed.ok) {
+      chosen = schemes[0];
+      ifaceRes = probe;
+    } else {
+      const authIssue = probe.status === 302 || probe.status === 401 || probe.status === 403;
+      return {
+        status: 'down',
+        error: authIssue
+          ? 'ntopng authentication failed — check the username and API token'
+          : parsed.error
+            ? `ntopng API error — ${parsed.error}`
+            : 'No data from ntopng API — check URL and credentials',
+        ifid: n.ifid != null ? Number(n.ifid) : null,
+        ifname: null, source: null, topTalkers: [],
+      };
+    }
   }
   ntopngAuthSchemes.set(cacheKey, chosen.label);
   const hdrs = chosen.headers;
 
   // Resolve the monitored interface → ifid / ifname.
-  const ifaceRes = await doGet(IFACES_PATH, hdrs);
-  const ifaceList = Array.isArray(unwrap(ifaceRes.data)) ? unwrap(ifaceRes.data) : [];
-  let ifid = n.ifid != null ? Number(n.ifid) : (ifaceList[0]?.ifid ?? 0);
-  if (ifaceList.length > 0 && !ifaceList.some(i => Number(i.ifid) === ifid)) ifid = ifaceList[0].ifid;
+  const ifaceParsed = readRsp(ifaceRes);
+  const ifaceList = ifaceParsed.ok && Array.isArray(ifaceParsed.data) ? ifaceParsed.data : [];
+  const configuredIfid = n.ifid != null && Number.isFinite(Number(n.ifid)) ? Number(n.ifid) : null;
+  const cachedIfid = ntopngIfids.get(cacheKey);
+  const firstIfid = Number.isFinite(Number(ifaceList[0]?.ifid)) ? Number(ifaceList[0].ifid) : 0;
+  let ifid = configuredIfid;
+  if (ifaceList.length > 0) {
+    if (ifid === null) {
+      const cachedStillPresent = cachedIfid != null
+        && ifaceList.some(i => Number(i.ifid) === cachedIfid);
+      ifid = cachedStillPresent ? cachedIfid : firstIfid;
+    } else if (!ifaceList.some(i => Number(i.ifid) === ifid)) {
+      ifid = firstIfid;
+    }
+  } else if (ifid === null) {
+    // Interfaces list unavailable: prefer the last known interface over 0.
+    ifid = cachedIfid ?? 0;
+  }
+  // Only cache an interface that actually came from the interface list; never
+  // cache the ifid-0 guess, or the diagnostic above would be lost next poll.
+  if (ifaceList.length > 0 && Number.isFinite(ifid)) ntopngIfids.set(cacheKey, ifid);
   const iface = ifaceList.find(i => Number(i.ifid) === ifid);
   const ifname = iface?.name || iface?.ifname || null;
 
   // 1) Pro: dedicated top local talkers endpoint.
   let talkers = [];
   let source = null;
+  let proError = null;
   const proRes = await doGet(`/lua/pro/rest/v2/get/interface/top/local/talkers.lua?ifid=${ifid}`, hdrs);
-  if (proRes.ok) {
-    const proTalkers = unwrap(proRes.data);
+  const proParsed = readRsp(proRes);
+  if (proParsed.ok) {
+    const proTalkers = proParsed.data;
     if (Array.isArray(proTalkers) && proTalkers.length > 0) {
       talkers = proTalkers.map(e => {
         const address = String(e.address ?? e.ip ?? e.key ?? '').trim();
@@ -1272,14 +1429,18 @@ export async function fetchNtopng(ntopConfigs) {
       }).filter(Boolean);
       source = 'pro';
     }
+  } else {
+    proError = proParsed.error;
   }
 
   // 2) Community fallback: active hosts sorted by live throughput.
+  let actError = null;
   if (talkers.length === 0) {
     const actRes = await doGet(
       `/lua/rest/v2/get/host/active.lua?ifid=${ifid}&mode=local&sortColumn=thpt&sortOrder=desc&perPage=10`, hdrs);
-    if (actRes.ok) {
-      const active = unwrap(actRes.data);
+    const actParsed = readRsp(actRes);
+    if (actParsed.ok) {
+      const active = actParsed.data;
       const data = Array.isArray(active) ? active : active?.data;
       if (Array.isArray(data)) {
         const now = Date.now();
@@ -1315,6 +1476,8 @@ export async function fetchNtopng(ntopConfigs) {
         }).filter(Boolean);
         source = 'community';
       }
+    } else {
+      actError = actParsed.error;
     }
   }
 
@@ -1338,6 +1501,31 @@ export async function fetchNtopng(ntopConfigs) {
   } else {
     talkers.sort((a, b) => b.bytes - a.bytes);
   }
+
+  // No configured interface, no cached one, and the interface list was empty:
+  // querying ifid 0 is a guess that often targets the wrong interface and
+  // produces a silently empty top-talkers list.
+  if (talkers.length === 0 && ifaceList.length === 0 && configuredIfid === null && cachedIfid == null) {
+    return {
+      status: 'degraded',
+      error: 'Could not determine the ntopng interface — set the Interface ID in Monitor Settings',
+      ifid, ifname, source: null, topTalkers: [],
+    };
+  }
+
+  // The community fallback is always attempted when the Pro endpoint yields no
+  // talkers, so its error alone means we know nothing about this window. A Pro
+  // endpoint that succeeded but returned an empty list still leaves the
+  // community call as the only source, so gate on actError rather than on both.
+  if (talkers.length === 0 && actError) {
+    const proDetail = proError && proError !== actError ? ` (pro endpoint: ${proError})` : '';
+    return {
+      status: 'down',
+      error: `ntopng top talkers unavailable — ${actError}${proDetail}`,
+      ifid, ifname, source: null, topTalkers: [],
+    };
+  }
+
   return { status: 'ok', error: undefined, ifid, ifname, source, topTalkers: talkers.slice(0, 10) };
 }
 

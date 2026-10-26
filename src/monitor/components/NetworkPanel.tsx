@@ -40,15 +40,13 @@ export function NetworkPanel({ opnsense, ntopng, certificates }: NetworkPanelPro
         )}
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
           <div className="net-section-title">
-            Top Talkers · ntopng
+            Top Talkers{ntopng ? ' · ntopng' : ''}
             {ntopng?.ifname && <span className="net-talker-source">{ntopng.ifname}</span>}
           </div>
           {ntopngTalkers.length > 0 ? (
             <NtopTalkersTable talkers={ntopngTalkers} />
           ) : (
-            <div className="text-[var(--mon-text-muted)] text-[12px] py-3 px-1">
-              Configure ntopng in Monitor Settings for per-host top talkers.
-            </div>
+            <TopTalkersEmpty ntopng={ntopng} opnsense={null} />
           )}
         </div>
       </div>
@@ -136,16 +134,81 @@ export function NetworkPanel({ opnsense, ntopng, certificates }: NetworkPanelPro
         </div>
       )}
 
-      {/* Fallback: interface-based talkers when neither source is available */}
+      {/* Fallback: explain why per-host talkers are unavailable */}
       {ntopngTalkers.length === 0 && netflowTalkers.length === 0 && (
         <div className="net-v2-card" style={{ gridColumn: '1 / -1' }}>
           <div className="net-section-title">Top Talkers</div>
-          <div className="text-[var(--mon-text-muted)] text-[12px] py-3 px-1">
-            Configure ntopng in Monitor Settings for per-host top talkers, or enable the os-insight
-            (NetFlow) plugin on OPNsense.
-          </div>
+          <TopTalkersEmpty ntopng={ntopng} opnsense={opnsense} />
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Contextual empty state. The old copy always said "configure ntopng", even
+ * when ntopng was configured but down or simply had no active hosts.
+ */
+function TopTalkersEmpty({
+  ntopng,
+  opnsense,
+}: {
+  ntopng?: NtopngSnapshot | null;
+  opnsense?: OpnsenseSnapshot | null;
+}) {
+  const netflowStatus = opnsense?.netflowStatus;
+  const netflowDetail = opnsense
+    ? netflowStatus === 'error'
+      ? ` OPNsense NetFlow query failed${opnsense.netflowError ? `: ${opnsense.netflowError}` : ''}.`
+      : netflowStatus === 'empty'
+        ? ' OPNsense returned no NetFlow top talkers in the current window.'
+        : netflowStatus === 'unavailable'
+          ? ' The os-insight (NetFlow) endpoint is unavailable on OPNsense.'
+          : ''
+    : '';
+
+  if (ntopng) {
+    const unavailable = ntopng.status === 'down' || Boolean(ntopng.error);
+    if (unavailable) {
+      return (
+        <div className="text-[var(--mon-warn)] text-[12px] py-3 px-1">
+          ntopng unavailable{ntopng.error ? `: ${ntopng.error}` : '.'}
+          {opnsense
+            ? `${netflowDetail}${netflowStatus === 'unavailable' ? ' Enable the os-insight (NetFlow) plugin on OPNsense for a fallback.' : ''}`
+            : ' Check the ntopng URL and credentials in Monitor Settings.'}
+        </div>
+      );
+    }
+    return (
+      <div className="text-[var(--mon-text-muted)] text-[12px] py-3 px-1">
+        ntopng is connected{ntopng.ifname ? ` (interface ${ntopng.ifname})` : ''} but returned no
+        active hosts in the current window.
+        {opnsense
+          ? `${netflowDetail}${netflowStatus === 'unavailable' ? ' Enable the os-insight (NetFlow) plugin on OPNsense for a fallback.' : ''}`
+          : ''}
+      </div>
+    );
+  }
+
+  if (opnsense) {
+    return (
+      <div
+        className={`text-[12px] py-3 px-1 ${
+          netflowStatus === 'error' ? 'text-[var(--mon-warn)]' : 'text-[var(--mon-text-muted)]'
+        }`}
+      >
+        No per-host top talkers are available.
+        {netflowDetail}
+        {netflowStatus === 'unavailable' || !netflowStatus
+          ? ' Enable the os-insight (NetFlow) plugin on OPNsense, or configure ntopng in Monitor Settings.'
+          : ' You can also configure ntopng in Monitor Settings for a second source.'}
+      </div>
+    );
+  }
+
+  return (
+    <div className="text-[var(--mon-text-muted)] text-[12px] py-3 px-1">
+      Configure ntopng in Monitor Settings for per-host top talkers.
     </div>
   );
 }
