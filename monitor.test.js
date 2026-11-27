@@ -251,8 +251,8 @@ test('resolveMetric supports homeassistant and ntopng sources', () => {
 
 test('ensureAutoAlertRules adds sensible rules for configured services and dedupes', () => {
   const config = {
+    servers: [{ id: 'h1', name: 'one', url: 'http://x', monitor: true }],
     monitoring: {
-      glancesHosts: [{ id: 'h1', name: 'one', url: 'http://x' }],
       docker: { enabled: true },
       solar: { enabled: true },
       media: [{ id: 'm1' }],

@@ -17,6 +17,7 @@ import {
   startupLogLine as authStartupLogLine,
 } from './auth.js';
 import { redactConfigForPublic, mergePrivateSections } from './configRedaction.js';
+import { mergeServerLists } from './serverMerge.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -259,10 +260,25 @@ refreshConfigCache();
 (async () => {
   await notificationManager.load();
   if (configCache.config === null) await refreshConfigCache();
-  // Auto-create sensible alert rules for whatever services are configured.
-  if (configCache.config && ensureAutoAlertRules(configCache.config)) {
-    await persistConfig(configCache.config);
+  let dirty = false;
+  if (configCache.config && Array.isArray(configCache.config.monitoring?.glancesHosts)) {
+    // One-time merge of the monitor's Glances hosts into `servers`. Keep the
+    // pre-merge document as a backup so the old layout can be restored.
+    try {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      writeFileSync(join(BACKUPS_DIR, `pre-server-merge-${stamp}.json`), JSON.stringify(configCache.config, null, 2));
+    } catch (err) {
+      console.error('Warning: could not write the pre-merge backup:', err.message);
+    }
+    const merge = mergeServerLists(configCache.config);
+    console.log(`Servers: merged ${merge.merged} and added ${merge.added} monitor hosts${merge.conflicts.length ? `; kept the monitor login for ${merge.conflicts.join(', ')}` : ''}`);
+    dirty = merge.changed;
+  } else if (configCache.config && mergeServerLists(configCache.config).changed) {
+    dirty = true;
   }
+  // Auto-create sensible alert rules for whatever services are configured.
+  if (configCache.config && ensureAutoAlertRules(configCache.config)) dirty = true;
+  if (dirty) await persistConfig(configCache.config);
   notificationManager.reconfigure(configCache.config?.notifications);
   monitorManager.start();
 })();
@@ -304,6 +320,8 @@ app.put('/api/config', requireAuth, async (req, res) => {
         lastModified: new Date().toISOString()
       }
     };
+    // A client built before the server-list merge can still send glancesHosts.
+    mergeServerLists(config);
     // Auto-create sensible alert rules for newly configured services.
     ensureAutoAlertRules(config);
     await persistConfig(config);
@@ -391,11 +409,14 @@ app.post('/api/backups/restore/:filename', requireAuth, (req, res) => {
     if (!existsSync(backupPath)) {
       return res.status(404).json({ error: 'Backup not found' });
     }
-    const backup = readFileSync(backupPath, 'utf-8');
-    writeFileSync(CONFIG_PATH, backup);
+    const restored = JSON.parse(readFileSync(backupPath, 'utf-8'));
+    // Backups from before the server-list merge are brought forward on restore.
+    mergeServerLists(restored);
+    writeFileSync(CONFIG_PATH, JSON.stringify(restored, null, 2));
     updateLastModified();
     refreshConfigCache().then(() => {
       notificationManager.reconfigure(configCache.config?.notifications);
+      monitorManager.reconfigure();
     });
     res.json({ success: true });
   } catch (error) {

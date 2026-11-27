@@ -15,6 +15,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import https from 'https';
 import tls from 'tls';
+import { monitoredHosts } from './serverMerge.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -2130,14 +2131,14 @@ function buildAlertMessage(rule, value, host) {
 // explicitly deleted.
 // ---------------------------------------------------------------------------
 
-export function buildAutoAlertRules(mon) {
+export function buildAutoAlertRules(mon, hosts = []) {
   const rules = [];
   const add = (id, name, source, metric, operator, threshold, severity, forSeconds, notify, host) => {
     rules.push({ id, name, enabled: true, source, metric, operator, threshold, severity, forSeconds, notify: !!notify, host });
   };
   const has = arr => Array.isArray(arr) && arr.length > 0;
 
-  if (has(mon?.glancesHosts)) {
+  if (has(hosts)) {
     add('auto-host-down', 'Host down', 'reachability', 'reachable', '==', 0, 'critical', 120, true);
     add('auto-host-cpu', 'High CPU', 'glances', 'cpu.percent', '>=', 90, 'warning', 300);
     add('auto-host-memory', 'High memory', 'glances', 'memory.percent', '>=', 95, 'warning', 300);
@@ -2192,7 +2193,7 @@ export function ensureAutoAlertRules(config) {
   const alerts = Array.isArray(mon.alerts) ? mon.alerts : [];
   const suppressed = new Set(Array.isArray(mon.suppressedAutoAlerts) ? mon.suppressedAutoAlerts : []);
   const existingKeys = new Set(alerts.map(a => `${a.source}|${a.metric}|${a.host || ''}`));
-  const toAdd = buildAutoAlertRules(mon).filter(r => {
+  const toAdd = buildAutoAlertRules(mon, monitoredHosts(config)).filter(r => {
     if (suppressed.has(r.id)) return false;
     const key = `${r.source}|${r.metric}|${r.host || ''}`;
     return !existingKeys.has(key);
@@ -2330,7 +2331,7 @@ export class MonitorManager {
     const interval = Math.max(2, Math.min(60, Number(mon.pollIntervalSeconds) || 10)) * 1000;
 
     // Fan out
-    const hostCfgs = Array.isArray(mon.glancesHosts) ? mon.glancesHosts : [];
+    const hostCfgs = monitoredHosts(cfg);
     const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult, homeAssistantResult, certificateResult] = await Promise.all([
       Promise.all(hostCfgs.map(h => fetchGlancesHost(h))),
       fetchSolar(cfg),
