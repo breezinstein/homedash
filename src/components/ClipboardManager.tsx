@@ -257,7 +257,7 @@ export function ClipboardManager() {
           </SegmentedControl>
         </div>
 
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1" aria-label="Saved clips">
           <ScrollAreaViewport className="p-4">
             <div className="ui-clip-grid">
               {filteredClips.length === 0 && (

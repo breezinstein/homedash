@@ -195,7 +195,7 @@ export function NotificationsPanel({ onManage }: NotificationsPanelProps) {
                   </Button>
                 )}
               </div>
-              <ScrollArea className="min-h-0 flex-1">
+              <ScrollArea className="min-h-0 flex-1" aria-label="Messages">
                 <ScrollAreaViewport className="p-4">
                   {days.map((day) => (
                     <section key={day.label} className="mb-4 last:mb-0">

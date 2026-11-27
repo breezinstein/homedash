@@ -28,7 +28,7 @@ export function AlertsRail({ firing, resolved }: { firing: AlertInstance[]; reso
           {firing.length ? <Chip tone="danger">{firing.length} firing</Chip> : <Chip tone="success">All clear</Chip>}
         </span>
       </header>
-      <ScrollArea className="mv-rail-scroll">
+      <ScrollArea className="mv-rail-scroll" aria-label="Alert list">
         <ScrollAreaViewport>
           {sorted.length > 0 && (
             <>

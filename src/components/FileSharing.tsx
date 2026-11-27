@@ -409,7 +409,7 @@ function ScopePane({ scope }: ScopePaneProps) {
       )}
 
       <Dropzone enabled={authenticated} folder={breadcrumbs[breadcrumbs.length - 1] ?? scopeRootLabel}>
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1" aria-label="Folder contents">
         <ScrollAreaViewport className="p-3">
           {loading && !listing && (
             <div className="px-3 py-6">
