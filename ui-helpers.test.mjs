@@ -44,3 +44,61 @@ test('themeType infers from the background when no preset matches', () => {
   assert.equal(themeType('custom', lightColors), 'light');
   assert.equal(themeType(undefined, { ...darkColors, background: '#fff' }), 'light');
 });
+
+import { usageLevel, reserveLevel, cellSpreadLevel, temperatureLevel, expiryLevel, worstLevel } from './src/lib/levels.ts';
+import { parseRoute, formatRoute } from './src/lib/route.ts';
+import { pushSample, sparkPoints } from './src/lib/history.ts';
+
+test('usage levels switch at 75% and 90%', () => {
+  assert.equal(usageLevel(74), 'ok');
+  assert.equal(usageLevel(75), 'warn');
+  assert.equal(usageLevel(89), 'warn');
+  assert.equal(usageLevel(90), 'critical');
+  assert.equal(usageLevel(null), undefined);
+  assert.equal(usageLevel(Number.NaN), undefined);
+});
+
+test('reserve, cell spread, temperature and expiry levels', () => {
+  assert.equal(reserveLevel(31), 'ok');
+  assert.equal(reserveLevel(30), 'warn');
+  assert.equal(reserveLevel(15), 'critical');
+  assert.equal(cellSpreadLevel(29), 'ok');
+  assert.equal(cellSpreadLevel(34), 'warn');
+  assert.equal(cellSpreadLevel(50), 'critical');
+  assert.equal(temperatureLevel(71, 70, 85), 'warn');
+  assert.equal(temperatureLevel(71, null, null), 'ok');
+  assert.equal(expiryLevel(-1), 'critical');
+  assert.equal(expiryLevel(9), 'warn');
+  assert.equal(expiryLevel(61), 'ok');
+  assert.equal(worstLevel('ok', undefined, 'warn'), 'warn');
+  assert.equal(worstLevel(undefined), undefined);
+});
+
+test('routes map views to paths and back, under a sub-path too', () => {
+  assert.deepEqual(parseRoute('/'), { view: 'dashboard', base: '' });
+  assert.deepEqual(parseRoute('/monitor'), { view: 'monitor', base: '' });
+  assert.deepEqual(parseRoute('/monitor/'), { view: 'monitor', base: '' });
+  assert.deepEqual(parseRoute('/settings/monitor-hosts'), { view: 'settings', section: 'monitor-hosts', base: '' });
+  assert.deepEqual(parseRoute('/settings'), { view: 'settings', base: '' });
+  assert.deepEqual(parseRoute('/proxy/hd/files'), { view: 'files', base: '/proxy/hd' });
+  assert.equal(formatRoute({ view: 'dashboard' }), '/');
+  assert.equal(formatRoute({ view: 'monitor' }, '/proxy/hd'), '/proxy/hd/monitor');
+  assert.equal(formatRoute({ view: 'settings', section: 'servers' }), '/settings/servers');
+  for (const path of ['/monitor', '/files', '/settings/appearance', '/']) {
+    const r = parseRoute(path);
+    assert.equal(formatRoute(r, r.base), path);
+  }
+});
+
+test('rolling history keeps one window and one sample per timestamp', () => {
+  let s = [];
+  s = pushSample(s, { t: 0, v: 1 }, 1000);
+  s = pushSample(s, { t: 500, v: 2 }, 1000);
+  s = pushSample(s, { t: 500, v: 3 }, 1000);
+  assert.deepEqual(s.map((x) => x.v), [1, 3]);
+  s = pushSample(s, { t: 1600, v: 4 }, 1000);
+  assert.deepEqual(s.map((x) => x.t), [1600]);
+  const { points, last } = sparkPoints([{ t: 0, v: 0 }, { t: 10, v: 10 }], 100, 20);
+  assert.equal(points, '0.0,20.0 100.0,0.0');
+  assert.deepEqual(last, [100, 0]);
+});
