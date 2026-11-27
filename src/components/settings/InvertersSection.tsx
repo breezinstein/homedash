@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Pencil, Plus, Sun, Trash2 } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
-import { Button } from '../ui/Button';
-import { FieldRow, Input } from '../ui/Field';
+import { Button } from '@ui-sdk/react/button';
+import { Field, FieldDescription, FieldLabel } from '@ui-sdk/react/field';
+import { Input } from '@ui-sdk/react/input';
 import { useConfirm, useToast } from '../ui';
 
 function InverterForm({
@@ -38,29 +39,31 @@ function InverterForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--surface-sunken)] p-4">
-      <FieldRow label="Name">
-        <Input value={name} onValueChange={setName} placeholder="Home inverter" autoFocus required />
-      </FieldRow>
-      <FieldRow
-        label="Solar Assistant URL"
-        description="Base URL of the device. Its /api/v1/metrics endpoint is read for live PV, load, grid and battery data."
-      >
-        <Input value={url} onValueChange={setUrl} placeholder="http://10.1.2.14" required />
-      </FieldRow>
+      <Field className="ui-field">
+        <FieldLabel className="ui-label">Name</FieldLabel>
+        <Input className="ui-input" value={name} onValueChange={setName} placeholder="Home inverter" autoFocus required />
+      </Field>
+      <Field className="ui-field">
+        <FieldLabel className="ui-label">Solar Assistant URL</FieldLabel>
+        <Input className="ui-input" value={url} onValueChange={setUrl} placeholder="http://10.1.2.14" required />
+        <FieldDescription className="ui-description">Base URL of the device. Its /api/v1/metrics endpoint is read for live PV, load, grid and battery data.</FieldDescription>
+      </Field>
       <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Username">
-          <Input value={username} onValueChange={setUsername} placeholder="admin" autoComplete="off" />
-        </FieldRow>
-        <FieldRow label="Password">
-          <Input value={password} onValueChange={setPassword} type="password" placeholder="••••••••" autoComplete="new-password" />
-        </FieldRow>
+        <Field className="ui-field">
+        <FieldLabel className="ui-label">Username</FieldLabel>
+        <Input className="ui-input" value={username} onValueChange={setUsername} placeholder="admin" autoComplete="off" />
+      </Field>
+        <Field className="ui-field">
+        <FieldLabel className="ui-label">Password</FieldLabel>
+        <Input className="ui-input" value={password} onValueChange={setPassword} type="password" placeholder="••••••••" autoComplete="new-password" />
+      </Field>
       </div>
       {error ? <p className="text-xs text-[var(--color-error)]">{error}</p> : null}
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+        <Button type="button" className="ui-btn" data-variant="ghost" data-size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" size="sm">
+        <Button type="submit" className="ui-btn" data-variant="primary" data-size="sm">
           {initial ? 'Save' : 'Add inverter'}
         </Button>
       </div>
@@ -125,10 +128,10 @@ export function InvertersSection() {
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <Button variant="ghost" size="sm" onClick={() => { setEditingId(inverter.id); setAdding(false); }} aria-label={`Edit ${inverter.name}`}>
+                <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={() => { setEditingId(inverter.id); setAdding(false); }} aria-label={`Edit ${inverter.name}`}>
                   <Pencil className="size-3.5" />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { void handleDelete(inverter.id, inverter.name); }} aria-label={`Remove ${inverter.name}`}>
+                <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={() => { void handleDelete(inverter.id, inverter.name); }} aria-label={`Remove ${inverter.name}`}>
                   <Trash2 className="size-3.5" />
                 </Button>
               </div>
@@ -147,7 +150,7 @@ export function InvertersSection() {
           onCancel={() => setAdding(false)}
         />
       ) : (
-        <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
+        <Button className="ui-btn" data-variant="secondary" data-size="sm" onClick={() => setAdding(true)}>
           <Plus className="size-3.5" /> Add inverter
         </Button>
       )}

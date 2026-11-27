@@ -1,5 +1,10 @@
 import { useState } from 'react';
-import { X, Eye, EyeOff, Plug } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Plug, X } from 'lucide-react';
+import { Button } from '@ui-sdk/react/button';
+import { Field, FieldLabel } from '@ui-sdk/react/field';
+import { Input } from '@ui-sdk/react/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@ui-sdk/react/select';
+import { Switch, SwitchThumb } from '@ui-sdk/react/switch';
 import { useDashboard } from '../../context/DashboardContext';
 import { useToast } from '../ui';
 import type { NotificationBackfill, NotificationsConfig } from '../../types';
@@ -91,169 +96,183 @@ export function NotificationsSettings() {
 
   return (
     <div className="space-y-4">
-      <p className="text-xs sm:text-sm text-[var(--color-text-secondary)]">
+      <p className="text-xs text-[var(--color-text-secondary)] sm:text-sm">
         Subscribe to a self-hosted ntfy server to receive notifications from your services.
       </p>
 
       {/* Enable toggle */}
-      <label className="flex items-center justify-between p-3 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)]">
-        <span className="text-sm text-[var(--color-text-primary)]">Enable notifications</span>
-        <input
-          type="checkbox"
-          checked={current.enabled}
-          onChange={(e) => patch({ enabled: e.target.checked })}
-          className="w-4 h-4 accent-[var(--color-primary)]"
-        />
-      </label>
-
-      {/* Server URL */}
-      <div>
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-          Server URL
-        </label>
-        <input
-          type="url"
-          value={current.serverUrl}
-          onChange={(e) => patch({ serverUrl: e.target.value })}
-          placeholder="https://ntfy.sh"
-          className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-        />
+      <div className="ui-panel-section">
+        <div className="ui-row justify-between">
+          <span>Enable notifications</span>
+          <Switch
+            className="ui-switch"
+            checked={current.enabled}
+            onCheckedChange={(next) => patch({ enabled: next })}
+            aria-label="Enable notifications"
+          >
+            <SwitchThumb />
+          </Switch>
+        </div>
       </div>
 
+      {/* Server URL */}
+      <Field className="ui-field">
+        <FieldLabel className="ui-label">Server URL</FieldLabel>
+        <Input
+          className="ui-input"
+          type="url"
+          value={current.serverUrl}
+          onValueChange={(value) => patch({ serverUrl: value })}
+          placeholder="https://ntfy.sh"
+        />
+      </Field>
+
       {/* Topics */}
-      <div>
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-          Topics
-        </label>
+      <Field className="ui-field">
+        <FieldLabel className="ui-label">Topics</FieldLabel>
         {current.topics.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 mb-2">
+          <div className="flex flex-wrap gap-1.5">
             {current.topics.map((topic) => (
-              <span
-                key={topic}
-                className="inline-flex items-center gap-1 px-2 py-1 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-xs text-[var(--color-text-primary)]"
-              >
+              <span key={topic} className="ui-chip">
                 {topic}
-                <button
+                <Button
+                  type="button"
+                  className="ui-btn"
+                  data-variant="ghost"
+                  data-size="icon"
+                  style={{ width: 16, height: 16 }}
                   onClick={() => removeTopic(topic)}
-                  className="text-[var(--color-text-secondary)] hover:text-[var(--color-error)]"
                   aria-label={`Remove ${topic}`}
                 >
-                  <X className="w-3 h-3" />
-                </button>
+                  <X className="size-3" aria-hidden="true" />
+                </Button>
               </span>
             ))}
           </div>
         )}
-        <input
+        <Input
+          className="ui-input"
           type="text"
           value={topicDraft}
-          onChange={(e) => setTopicDraft(e.target.value)}
+          onValueChange={setTopicDraft}
           onKeyDown={handleTopicKeyDown}
           onBlur={addTopic}
           placeholder="Type a topic and press Enter"
-          className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
         />
-      </div>
+      </Field>
 
       {/* Auth */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-            Username (optional)
-          </label>
-          <input
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field className="ui-field">
+          <FieldLabel className="ui-label">Username (optional)</FieldLabel>
+          <Input
+            className="ui-input"
             type="text"
             autoComplete="off"
             value={current.username ?? ''}
-            onChange={(e) => patch({ username: e.target.value || undefined })}
-            className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+            onValueChange={(value) => patch({ username: value || undefined })}
           />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-            Password (optional)
-          </label>
+        </Field>
+        <Field className="ui-field">
+          <FieldLabel className="ui-label">Password (optional)</FieldLabel>
           <div className="relative">
-            <input
+            <Input
+              className="ui-input"
+              style={{ paddingRight: 40 }}
               type={showPassword ? 'text' : 'password'}
               autoComplete="new-password"
               value={current.password ?? ''}
-              onChange={(e) => patch({ password: e.target.value || undefined })}
-              className="w-full px-3 py-2 pr-10 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+              onValueChange={(value) => patch({ password: value || undefined })}
             />
-            <button
+            <Button
               type="button"
+              className="ui-btn"
+              data-variant="ghost"
+              data-size="icon"
+              style={{ position: 'absolute', right: 4, top: '50%', translate: '0 -50%', width: 26, height: 26 }}
               onClick={() => setShowPassword((s) => !s)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
-              {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
+              {showPassword ? (
+                <EyeOff className="size-4" aria-hidden="true" />
+              ) : (
+                <Eye className="size-4" aria-hidden="true" />
+              )}
+            </Button>
           </div>
-        </div>
+        </Field>
       </div>
 
       {/* Backfill + max history */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-            History on connect
-          </label>
-          <select
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field className="ui-field">
+          <FieldLabel className="ui-label">History on connect</FieldLabel>
+          <Select
             value={current.backfill}
-            onChange={(e) => patch({ backfill: e.target.value as NotificationBackfill })}
-            className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+            onValueChange={(next) => {
+              if (next) patch({ backfill: next });
+            }}
+            items={BACKFILL_OPTIONS}
           >
-            {BACKFILL_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-            Max history ({current.maxHistory})
-          </label>
-          <input
+            <SelectTrigger className="ui-select-trigger" aria-label="History on connect">
+              <SelectValue />
+              <ChevronDown className="size-4 shrink-0 opacity-60" aria-hidden="true" />
+            </SelectTrigger>
+            <SelectContent className="ui-popup">
+              {BACKFILL_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value} className="ui-menu-item">
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field className="ui-field">
+          <FieldLabel className="ui-label">Max history ({current.maxHistory})</FieldLabel>
+          <Input
+            className="ui-input"
             type="number"
             min={20}
             max={1000}
-            value={current.maxHistory}
-            onChange={(e) => {
-              const n = Number(e.target.value);
+            value={String(current.maxHistory)}
+            onValueChange={(next) => {
+              const n = Number(next);
               patch({ maxHistory: Number.isFinite(n) ? Math.min(1000, Math.max(20, n)) : 200 });
             }}
-            className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
           />
-        </div>
+        </Field>
       </div>
 
       {/* Browser notifications */}
-      <label className="flex items-center justify-between p-3 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)]">
-        <span className="text-sm text-[var(--color-text-primary)]">
-          Desktop notifications
-          <span className="block text-xs text-[var(--color-text-secondary)]">
-            Shows a system notification when the tab is in the background. Requires browser permission.
-          </span>
-        </span>
-        <input
-          type="checkbox"
-          checked={current.browserNotifications}
-          onChange={(e) => patch({ browserNotifications: e.target.checked })}
-          className="w-4 h-4 accent-[var(--color-primary)] flex-shrink-0"
-        />
-      </label>
+      <div className="ui-panel-section">
+        <div className="ui-row justify-between">
+          <div className="min-w-0">
+            <div>Desktop notifications</div>
+            <div className="ui-row-dim">
+              Shows a system notification when the tab is in the background. Requires browser permission.
+            </div>
+          </div>
+          <Switch
+            className="ui-switch"
+            checked={current.browserNotifications}
+            onCheckedChange={(next) => patch({ browserNotifications: next })}
+            aria-label="Desktop notifications"
+          >
+            <SwitchThumb />
+          </Switch>
+        </div>
+      </div>
 
       {/* Test connection */}
-      <button
+      <Button
+        className="ui-btn"
+        data-variant="primary"
         onClick={handleTest}
         disabled={testing}
-        className="flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm disabled:opacity-60"
       >
-        <Plug className="w-4 h-4" />
+        <Plug className="size-4" aria-hidden="true" />
         {testing ? 'Testing…' : 'Test connection'}
-      </button>
+      </Button>
     </div>
   );
 }

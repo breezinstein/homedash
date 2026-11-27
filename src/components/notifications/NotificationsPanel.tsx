@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Trash2, RefreshCw, BellOff, ChevronDown, ChevronRight, Settings2 } from 'lucide-react';
+import { BellOff, ChevronRight, RefreshCw, Settings2, Trash2 } from 'lucide-react';
+import { Button } from '@ui-sdk/react/button';
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible';
+import { ScrollArea, ScrollAreaScrollbar, ScrollAreaThumb, ScrollAreaViewport } from '@ui-sdk/react/scroll-area';
+import { Separator } from '@ui-sdk/react/separator';
 import { useNotifications } from '../../context/NotificationsContext';
 import { useConfirm } from '../ui';
-import { Button, IconButton } from '../ui/Button';
 import { PageHeader, PagePanel } from '../shell/PageHeader';
 import { NotificationCard } from './NotificationCard';
 
@@ -98,71 +101,92 @@ export function NotificationsPanel({ onManage }: NotificationsPanelProps) {
         actions={
           <>
             {notificationsStatus === 'error' && (
-              <Button variant="ghost" size="sm" onClick={reconnectNotifications}>
-                <RefreshCw className="size-3.5" /> Reconnect
+              <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={reconnectNotifications}>
+                <RefreshCw className="size-3.5" aria-hidden="true" /> Reconnect
               </Button>
             )}
             {notifications.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={handleClearAll}>
-                <Trash2 className="size-3.5" /> Clear all
+              <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={handleClearAll}>
+                <Trash2 className="size-3.5" aria-hidden="true" /> Clear all
               </Button>
             )}
             {onManage && (
-              <IconButton label="Notification settings" onClick={onManage}>
-                <Settings2 className="size-4" />
-              </IconButton>
+              <Button
+                className="ui-btn"
+                data-variant="ghost"
+                data-size="icon"
+                onClick={onManage}
+                aria-label="Notification settings"
+              >
+                <Settings2 className="size-4" aria-hidden="true" />
+              </Button>
             )}
           </>
         }
       />
       <PagePanel>
         {notificationsError && (
-          <div className="border-b border-[var(--color-border)] bg-[var(--color-error)]/10 px-4 py-2 text-xs text-[var(--color-error)]">
+          <div className="border-b border-[color-mix(in_srgb,var(--color-error)_35%,transparent)] bg-[var(--danger-soft)] px-4 py-2 text-xs text-[var(--color-error)]">
             {notificationsError}
           </div>
         )}
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-          {notifications.length === 0 ? (
-            <div className="py-12 text-center">
-              <div className="mx-auto mb-3 grid size-14 place-items-center rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--surface-sunken)]">
-                <BellOff className="size-6 text-[var(--color-text-secondary)]" aria-hidden="true" />
-              </div>
-              <p className="text-sm text-[var(--color-text-secondary)]">No notifications yet</p>
-            </div>
-          ) : (
-            groups.map((group) => (
-              <div key={group.topic} className="space-y-2">
-                <div className="sticky top-0 z-10 flex items-center gap-2 bg-[var(--color-surface)] px-1 py-1">
-                  <button
-                    onClick={() => toggleTopic(group.topic)}
-                    className="flex min-w-0 items-center gap-1.5 text-[var(--color-text-secondary)] transition-colors hover:text-[var(--color-text-primary)]"
-                    aria-expanded={!collapsedTopics.has(group.topic)}
-                    title={collapsedTopics.has(group.topic) ? 'Expand topic' : 'Collapse topic'}
-                  >
-                    {collapsedTopics.has(group.topic) ? (
-                      <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
-                    ) : (
-                      <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
-                    )}
-                    <h3 className="truncate text-xs font-semibold uppercase tracking-wide">{group.topic}</h3>
-                    <span className="shrink-0 rounded-full border border-[var(--color-border)] px-1.5 py-0.5 text-[10px] font-medium text-[var(--color-text-secondary)]">
-                      {group.items.length}
-                    </span>
-                  </button>
-                  <div className="h-px flex-1 bg-[var(--color-border)]" />
-                  <IconButton label={`Clear ${group.topic}`} onClick={() => handleClearTopic(group.topic)}>
-                    <Trash2 className="size-3.5" />
-                  </IconButton>
+        <ScrollArea className="min-h-0 flex-1">
+          <ScrollAreaViewport className="p-4">
+            {notifications.length === 0 ? (
+              <div className="py-12 text-center">
+                <div className="mx-auto mb-3 grid size-14 place-items-center rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--surface-sunken)]">
+                  <BellOff className="size-6 text-[var(--color-text-secondary)]" aria-hidden="true" />
                 </div>
-                {!collapsedTopics.has(group.topic) &&
-                  group.items.map((item) => (
-                    <NotificationCard key={item.id} item={item} onDismiss={dismissNotification} />
-                  ))}
+                <p className="text-sm text-[var(--color-text-secondary)]">No notifications yet</p>
               </div>
-            ))
-          )}
-        </div>
+            ) : (
+              <div className="space-y-5">
+                {groups.map((group) => {
+                  const collapsed = collapsedTopics.has(group.topic);
+                  return (
+                    <Collapsible key={group.topic} open={!collapsed} onOpenChange={() => toggleTopic(group.topic)}>
+                      <div className="mb-2 flex items-center gap-2">
+                        <CollapsibleTrigger
+                          className="ui-btn"
+                          data-variant="ghost"
+                          data-size="sm"
+                          title={collapsed ? 'Expand topic' : 'Collapse topic'}
+                        >
+                          <ChevronRight
+                            className={`size-3.5 transition-transform ${collapsed ? '' : 'rotate-90'}`}
+                            aria-hidden="true"
+                          />
+                          <span className="text-[0.6875rem] font-semibold uppercase tracking-wider">{group.topic}</span>
+                          <span className="ui-chip tabular-nums">{group.items.length}</span>
+                        </CollapsibleTrigger>
+                        <Separator className="flex-1" />
+                        <Button
+                          className="ui-btn"
+                          data-variant="ghost"
+                          data-size="icon"
+                          onClick={() => { void handleClearTopic(group.topic); }}
+                          aria-label={`Clear ${group.topic}`}
+                          title={`Clear ${group.topic}`}
+                        >
+                          <Trash2 className="size-3.5" aria-hidden="true" />
+                        </Button>
+                      </div>
+                      <CollapsiblePanel className="space-y-2">
+                        {group.items.map((item) => (
+                          <NotificationCard key={item.id} item={item} onDismiss={dismissNotification} />
+                        ))}
+                      </CollapsiblePanel>
+                    </Collapsible>
+                  );
+                })}
+              </div>
+            )}
+          </ScrollAreaViewport>
+          <ScrollAreaScrollbar orientation="vertical">
+            <ScrollAreaThumb />
+          </ScrollAreaScrollbar>
+        </ScrollArea>
       </PagePanel>
     </div>
   );

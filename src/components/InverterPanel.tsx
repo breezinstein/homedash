@@ -1,23 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Settings2,
-  Sun,
-  Zap,
+  AlertTriangle,
   Battery,
   BatteryCharging,
   BatteryFull,
+  ChevronDown,
+  CircuitBoard,
   Gauge,
   Plug,
-  AlertTriangle,
-  CircuitBoard,
-  ChevronDown,
+  Settings2,
+  Sun,
+  Zap,
 } from 'lucide-react';
+import { Button } from '@ui-sdk/react/button';
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible';
+import { Meter, MeterIndicator, MeterTrack, MeterValue } from '@ui-sdk/react/meter';
+import {
+  SegmentedControl,
+  SegmentedControlIndicator,
+  SegmentedControlItem,
+} from '@ui-sdk/react/segmented-control';
 import { configApi } from '../api/configApi';
 import { useDashboard } from '../context/DashboardContext';
 import type { InverterStats, InverterMetric, InverterDevice, BatteryRuntime } from '../types';
 import { PageHeader, PagePanel } from './shell/PageHeader';
-import { Button } from './ui/Button';
-import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control';
 
 interface InverterPanelProps {
   /** Jumps to Settings → Inverters. */
@@ -50,7 +56,8 @@ function formatValue(value: number | string | null, unit = ''): string {
 const asNumber = (v: number | string | null): number | null =>
   typeof v === 'number' ? v : (typeof v === 'string' && Number.isFinite(parseFloat(v)) ? parseFloat(v) : null);
 
-function barColor(percent: number | null): string {
+/** The reported percentage decides the meter colour: SOC falls as it drains, load rises. */
+function chargeColor(percent: number | null): string {
   if (percent === null) return 'var(--color-text-secondary)';
   if (percent <= 20) return 'var(--color-error)';
   if (percent <= 40) return 'var(--color-warning)';
@@ -91,82 +98,52 @@ function formatEta(minsFromNow: number): string {
   return `${date} ${time}`;
 }
 
+interface RuntimeSummary {
+  accent: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  headline: string;
+  detail: string | null;
+}
 
-function BatteryRuntimeBanner({ runtime }: { runtime: BatteryRuntime }) {
+function runtimeSummary(runtime: BatteryRuntime): RuntimeSummary {
   const { state, minutes, floorSoc, soc } = runtime;
   const nowSuffix = soc !== null ? ` · ${Math.round(soc)}% now` : '';
   const eta = minutes !== null ? formatEta(minutes) : '';
 
-  let accent = 'var(--color-text-primary)';
-  let Icon: React.ComponentType<{ className?: string }> = Battery;
-  let headline: string;
-  let detail: string | null;
-
   if (state === 'full') {
-    accent = 'var(--color-success)';
-    Icon = BatteryFull;
-    headline = 'Battery full';
-    detail = 'Fully charged';
-  } else if (state === 'charging') {
-    accent = 'var(--color-success)';
-    Icon = BatteryCharging;
-    headline = minutes !== null ? `Full in ~${formatDuration(minutes)}` : 'Charging';
-    detail = minutes !== null ? `Full ${eta}${nowSuffix}` : `Estimating charge rate…${nowSuffix}`;
-  } else if (state === 'discharging') {
-    const target = floorSoc <= 0 ? 'empty' : `${Math.round(floorSoc)}%`;
-    if (minutes !== null && minutes <= 30) accent = 'var(--color-error)';
-    else if (minutes !== null && minutes <= 120) accent = 'var(--color-warning)';
-    headline = minutes !== null ? `~${formatDuration(minutes)} until ${target}` : 'Discharging';
-    detail = minutes !== null ? `To shutdown (${target}) ${eta}${nowSuffix}` : `Estimating drain rate…${nowSuffix}`;
-  } else if (state === 'idle') {
-    accent = 'var(--color-text-secondary)';
-    headline = 'Battery idle';
-    detail = `Holding steady${nowSuffix}`;
-  } else {
-    accent = 'var(--color-text-secondary)';
-    headline = 'Estimating runtime…';
-    detail = soc !== null ? `${Math.round(soc)}% now` : null;
+    return { accent: 'var(--color-success)', Icon: BatteryFull, headline: 'Battery full', detail: 'Fully charged' };
   }
-
-  return (
-    <div
-      className="mb-3 flex items-center gap-3 p-3 rounded-xl border"
-      style={{ borderColor: accent, backgroundColor: 'var(--color-background)' }}
-    >
-      <div
-        className="flex items-center justify-center w-10 h-10 rounded-lg shrink-0 bg-[var(--color-surface)]"
-        style={{ color: accent }}
-      >
-        <Icon className="w-5 h-5" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-base font-semibold leading-tight" style={{ color: accent }}>{headline}</p>
-        {detail && <p className="text-xs text-[var(--color-text-secondary)] mt-0.5 break-words">{detail}</p>}
-      </div>
-    </div>
-  );
-}
-
-
-interface TileProps {
-  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
-  label: string;
-  value: string;
-  sub?: string;
-  accent?: string;
-}
-
-function Tile({ icon: Icon, label, value, sub, accent }: TileProps) {
-  return (
-    <div className="bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] p-4">
-      <div className="flex items-center gap-2 mb-1 text-[var(--color-text-secondary)]">
-        <Icon className="w-4 h-4" style={accent ? { color: accent } : undefined} />
-        <span className="text-xs font-medium">{label}</span>
-      </div>
-      <p className="text-xl font-semibold text-[var(--color-text-primary)] tabular-nums">{value}</p>
-      {sub && <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{sub}</p>}
-    </div>
-  );
+  if (state === 'charging') {
+    return {
+      accent: 'var(--color-success)',
+      Icon: BatteryCharging,
+      headline: minutes !== null ? `Full in ~${formatDuration(minutes)}` : 'Charging',
+      detail: minutes !== null ? `Full ${eta}${nowSuffix}` : `Estimating charge rate…${nowSuffix}`,
+    };
+  }
+  if (state === 'discharging') {
+    const target = floorSoc <= 0 ? 'empty' : `${Math.round(floorSoc)}%`;
+    const accent = minutes !== null && minutes <= 30
+      ? 'var(--color-error)'
+      : minutes !== null && minutes <= 120
+        ? 'var(--color-warning)'
+        : 'var(--color-text-primary)';
+    return {
+      accent,
+      Icon: Battery,
+      headline: minutes !== null ? `~${formatDuration(minutes)} until ${target}` : 'Discharging',
+      detail: minutes !== null ? `To shutdown (${target}) ${eta}${nowSuffix}` : `Estimating drain rate…${nowSuffix}`,
+    };
+  }
+  if (state === 'idle') {
+    return { accent: 'var(--color-text-secondary)', Icon: Battery, headline: 'Battery idle', detail: `Holding steady${nowSuffix}` };
+  }
+  return {
+    accent: 'var(--color-text-secondary)',
+    Icon: Battery,
+    headline: 'Estimating runtime…',
+    detail: soc !== null ? `${Math.round(soc)}% now` : null,
+  };
 }
 
 // Choose the metrics to display for a device card: prefer the live "Status"
@@ -174,62 +151,57 @@ function Tile({ icon: Icon, label, value, sub, accent }: TileProps) {
 function displayMetrics(device: InverterDevice): [string, InverterMetric][] {
   const entries = Object.entries(device.metrics);
   const status = entries.filter(([, m]) => m.group === 'Status');
-  return (status.length ? status : entries);
+  return status.length ? status : entries;
 }
 
-function DeviceCard({ device, icon: Icon }: { device: InverterDevice; icon: React.ComponentType<{ className?: string }> }) {
-  const [open, setOpen] = useState(true);
+function DeviceSection({ device, kind }: { device: InverterDevice; kind: 'inverter' | 'battery' }) {
   const metrics = displayMetrics(device);
-  // Surface a SOC bar for batteries when available.
   const soc = device.metrics['state_of_charge'];
   const socNum = soc && typeof soc.value === 'number' ? soc.value : null;
-  const contentId = `device-card-${device.id}`;
+  const Icon = kind === 'battery' ? Battery : Zap;
 
   return (
-    <div className="bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        aria-controls={contentId}
-        className="w-full flex items-center gap-2 p-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface)]/50 transition-colors"
-      >
-        <Icon className="w-4 h-4 shrink-0 text-[var(--color-text-secondary)]" />
-        <span className="text-sm font-semibold flex-1 min-w-0 truncate">{device.label}</span>
+    <Collapsible defaultOpen>
+      <CollapsibleTrigger className="ui-panel-section-head w-full justify-between text-left">
+        <span className="flex min-w-0 items-center gap-2">
+          <Icon className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
+          <span className="truncate text-[0.8125rem] font-semibold">{device.label}</span>
+        </span>
+        <span className="flex items-center gap-2">
+          {socNum !== null && <span className="ui-chip tabular-nums">{socNum.toFixed(1)}%</span>}
+          <span data-chevron className="text-[var(--color-text-secondary)]">
+            <ChevronDown className="size-3.5" aria-hidden="true" />
+          </span>
+        </span>
+      </CollapsibleTrigger>
+      <CollapsiblePanel className="p-3">
         {socNum !== null && (
-          <span className="text-xs font-semibold tabular-nums text-[var(--color-text-secondary)]">{socNum.toFixed(1)}%</span>
+          <Meter
+            value={socNum}
+            min={0}
+            max={100}
+            format={{ style: 'percent', maximumFractionDigits: 1 }}
+            className="mb-3"
+            aria-label="State of charge"
+          >
+            <MeterValue>{`${socNum.toFixed(1)}%`}</MeterValue>
+            <MeterTrack>
+              <MeterIndicator style={{ backgroundColor: chargeColor(socNum) }} />
+            </MeterTrack>
+          </Meter>
         )}
-        <ChevronDown
-          className={`w-4 h-4 shrink-0 text-[var(--color-text-secondary)] transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-        />
-      </button>
-      {open && (
-        <div id={contentId} className="px-4 pb-4">
-          {socNum !== null && (
-            <div className="mb-3">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-[var(--color-text-secondary)]">State of charge</span>
-                <span className="text-xs font-semibold text-[var(--color-text-primary)] tabular-nums">{socNum.toFixed(1)}%</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-[var(--color-surface)] overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{ width: `${Math.min(100, Math.max(0, socNum))}%`, backgroundColor: barColor(socNum) }}
-                />
-              </div>
+        <div className="grid grid-cols-1 gap-x-6 gap-y-1 sm:grid-cols-2">
+          {metrics.map(([key, metric]) => (
+            <div key={key} className="flex items-baseline justify-between gap-3 py-0.5">
+              <span className="min-w-0 break-words text-xs text-[var(--color-text-secondary)]">{metric.name}</span>
+              <span className="break-words text-right text-xs font-medium tabular-nums text-[var(--color-text-primary)]">
+                {formatMetric(metric)}
+              </span>
             </div>
-          )}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2">
-            {metrics.map(([key, m]) => (
-              <div key={key} className="flex items-baseline justify-between gap-3 min-w-0">
-                <span className="text-xs text-[var(--color-text-secondary)] min-w-0 break-words">{m.name}</span>
-                <span className="text-xs font-medium text-[var(--color-text-primary)] tabular-nums text-right break-words">{formatMetric(m)}</span>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
-      )}
-    </div>
+      </CollapsiblePanel>
+    </Collapsible>
   );
 }
 
@@ -266,12 +238,9 @@ function InverterStatsView({ url, username, password }: { url: string; username?
 
   if (loading && !stats) {
     return (
-      <div className="space-y-3" aria-hidden="true">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-[92px] rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] animate-pulse"
-          />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden="true">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-[104px] animate-pulse rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--surface-sunken)]" />
         ))}
       </div>
     );
@@ -279,8 +248,8 @@ function InverterStatsView({ url, username, password }: { url: string; username?
 
   if (error && !stats) {
     return (
-      <div className="flex items-center gap-2 p-3 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/30 text-[var(--color-error)]">
-        <AlertTriangle className="w-4 h-4 shrink-0" />
+      <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-error)_35%,transparent)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--color-error)]">
+        <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
         <span className="text-sm">{error}</span>
       </div>
     );
@@ -292,93 +261,184 @@ function InverterStatsView({ url, username, password }: { url: string; username?
   const batteryPower = asNumber(o.batteryPower);
   const gridPower = asNumber(o.gridPower);
   const socNum = asNumber(o.batterySoc);
+  const loadPercent = asNumber(o.loadPercentage);
+  const runtime = stats.overview.batteryRuntime ?? null;
 
   // Solar Assistant convention: battery power positive = charging, negative =
   // discharging (battery current sign matches); grid power negative = exporting.
   const batterySub = batteryPower === null
-    ? (socNum !== null ? `${formatValue(o.batterySoc, '%')}` : undefined)
+    ? (socNum !== null ? formatValue(o.batterySoc, '%') : undefined)
     : `${batteryPower > 0 ? 'Charging' : 'Discharging'} ${formatValue(Math.abs(batteryPower), 'W')}`;
   const gridSub = gridPower === null
     ? undefined
     : (gridPower < 0 ? `Exporting ${formatValue(Math.abs(gridPower), 'W')}` : gridPower > 0 ? 'Importing' : 'Idle');
 
-  // The runtime estimate is computed server-side and arrives in the payload.
-  const runtime = stats.overview.batteryRuntime ?? null;
+  const runtimeInfo = runtime && runtime.soc !== null ? runtimeSummary(runtime) : null;
+  const RuntimeIcon = runtimeInfo?.Icon;
+
+  const secondary = [
+    { icon: Gauge, label: 'AC output', value: formatValue(o.acOutputVoltage, 'V'), sub: o.acOutputFrequency !== null ? formatValue(o.acOutputFrequency, 'Hz') : '' },
+    { icon: Battery, label: 'Battery voltage', value: formatValue(o.batteryVoltage, 'V'), sub: o.batteryCurrent !== null ? formatValue(o.batteryCurrent, 'A') : '' },
+    { icon: Gauge, label: 'Grid voltage', value: formatValue(o.gridVoltage, 'V'), sub: o.gridFrequency !== null ? formatValue(o.gridFrequency, 'Hz') : '' },
+    { icon: Zap, label: 'Generator', value: formatValue(o.generatorPower, 'W'), sub: '' },
+  ];
 
   return (
-    <>
+    <div className="space-y-4">
       {error && (
-        <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/30 text-[var(--color-warning)]">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+        <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] px-3 py-2 text-[var(--color-warning)]">
+          <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="text-xs">{error} (showing last known values)</span>
         </div>
       )}
 
-      {/* Headline: estimated time until the battery is full or depleted. */}
-      {runtime && runtime.soc !== null && <BatteryRuntimeBanner runtime={runtime} />}
-
-      {o.inverterMode && (
-        <div className="mb-3 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)]">
-          <CircuitBoard className="w-4 h-4 text-[var(--color-primary)]" />
-          <span className="text-sm font-medium text-[var(--color-text-primary)]">{o.inverterMode}</span>
+      {runtimeInfo && RuntimeIcon && (
+        <div className="ui-stat">
+          <div className="flex items-center gap-3">
+            <span
+              className="grid size-9 shrink-0 place-items-center rounded-[var(--radius-sm)] bg-[var(--color-surface)]"
+              style={{ color: runtimeInfo.accent }}
+            >
+              <RuntimeIcon className="size-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[0.9375rem] font-semibold leading-tight" style={{ color: runtimeInfo.accent }}>
+                {runtimeInfo.headline}
+              </p>
+              {runtimeInfo.detail && (
+                <p className="mt-0.5 break-words text-xs text-[var(--color-text-secondary)]">{runtimeInfo.detail}</p>
+              )}
+            </div>
+            {o.inverterMode && (
+              <span className="ui-chip shrink-0">
+                <CircuitBoard className="size-3" aria-hidden="true" /> {o.inverterMode}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Overview tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Tile icon={Sun} label="Solar (PV)" value={formatValue(o.pvPower, 'W')} accent="var(--color-warning)" />
-        <Tile icon={Plug} label="Load" value={formatValue(o.loadPower, 'W')}
-          sub={o.loadPercentage !== null ? `${formatValue(o.loadPercentage, '%')} of capacity` : undefined} />
-        <Tile icon={Battery} label="Battery" value={socNum !== null ? `${formatValue(o.batterySoc, '%')}` : formatValue(o.batteryPower, 'W')}
-          sub={batterySub} accent="var(--color-success)" />
-        <Tile icon={Zap} label="Grid" value={formatValue(o.gridPower, 'W')} sub={gridSub} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="ui-stat">
+          <div className="ui-stat-head">
+            <Sun className="size-4" style={{ color: 'var(--color-warning)' }} aria-hidden="true" />
+            <span className="text-[0.8125rem] font-semibold">Solar (PV)</span>
+          </div>
+          <p className="text-xl font-semibold tabular-nums">{formatValue(o.pvPower, 'W')}</p>
+          <p className="ui-stat-detail">Array output right now</p>
+        </div>
+
+        <div className="ui-stat">
+          <div className="ui-stat-head">
+            <Plug className="size-4 text-[var(--color-text-secondary)]" aria-hidden="true" />
+            <span className="text-[0.8125rem] font-semibold">Load</span>
+          </div>
+          <p className="text-xl font-semibold tabular-nums">{formatValue(o.loadPower, 'W')}</p>
+          {loadPercent !== null ? (
+            <Meter
+              value={loadPercent}
+              min={0}
+              max={100}
+              format={{ style: 'percent', maximumFractionDigits: 0 }}
+              aria-label="Load"
+            >
+              <MeterValue>{`${formatValue(o.loadPercentage, '%')} of capacity`}</MeterValue>
+              <MeterTrack>
+                <MeterIndicator style={{ backgroundColor: loadPercent >= 90 ? 'var(--color-error)' : 'var(--color-primary)' }} />
+              </MeterTrack>
+            </Meter>
+          ) : (
+            <p className="ui-stat-detail">Consumption now</p>
+          )}
+        </div>
+
+        <div className="ui-stat">
+          <div className="ui-stat-head">
+            <Battery className="size-4" style={{ color: 'var(--color-success)' }} aria-hidden="true" />
+            <span className="text-[0.8125rem] font-semibold">Battery</span>
+          </div>
+          <p className="text-xl font-semibold tabular-nums">
+            {socNum !== null ? formatValue(o.batterySoc, '%') : formatValue(o.batteryPower, 'W')}
+          </p>
+          {socNum !== null ? (
+            <Meter
+              value={socNum}
+              min={0}
+              max={100}
+              format={{ style: 'percent', maximumFractionDigits: 0 }}
+              aria-label="State of charge"
+            >
+              <MeterValue>{batterySub ?? `${Math.round(socNum)}%`}</MeterValue>
+              <MeterTrack>
+                <MeterIndicator style={{ backgroundColor: chargeColor(socNum) }} />
+              </MeterTrack>
+            </Meter>
+          ) : (
+            <p className="ui-stat-detail">{batterySub ?? 'State of charge'}</p>
+          )}
+        </div>
+
+        <div className="ui-stat">
+          <div className="ui-stat-head">
+            <Zap className="size-4 text-[var(--color-text-secondary)]" aria-hidden="true" />
+            <span className="text-[0.8125rem] font-semibold">Grid</span>
+          </div>
+          <p className="text-xl font-semibold tabular-nums">{formatValue(o.gridPower, 'W')}</p>
+          <p className="ui-stat-detail">{gridSub ?? 'Not reporting'}</p>
+        </div>
       </div>
 
-      {/* Secondary readouts */}
-      <div className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Tile icon={Gauge} label="AC Output" value={formatValue(o.acOutputVoltage, 'V')}
-          sub={o.acOutputFrequency !== null ? `${formatValue(o.acOutputFrequency, 'Hz')}` : undefined} />
-        <Tile icon={Battery} label="Battery Voltage" value={formatValue(o.batteryVoltage, 'V')}
-          sub={o.batteryCurrent !== null ? `${formatValue(o.batteryCurrent, 'A')}` : undefined} />
-        <Tile icon={Gauge} label="Grid Voltage" value={formatValue(o.gridVoltage, 'V')}
-          sub={o.gridFrequency !== null ? `${formatValue(o.gridFrequency, 'Hz')}` : undefined} />
-        <Tile icon={Zap} label="Generator" value={formatValue(o.generatorPower, 'W')} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {secondary.map(({ icon: Icon, label, value, sub }) => (
+          <div key={label} className="ui-stat">
+            <div className="ui-stat-head">
+              <Icon className="size-4 text-[var(--color-text-secondary)]" aria-hidden="true" />
+              <span className="text-[0.75rem] font-semibold">{label}</span>
+            </div>
+            <p className="text-base font-semibold tabular-nums">{value}</p>
+            {sub ? <p className="ui-stat-detail">{sub}</p> : null}
+          </div>
+        ))}
       </div>
 
-      {/* Inverters */}
       {stats.inverters.length > 0 && (
-        <div className="mt-4">
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-2 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-[var(--color-text-secondary)]" />
-            Inverters <span className="text-xs font-normal text-[var(--color-text-secondary)]">({stats.inverters.length})</span>
-          </h3>
-          <div className="grid grid-cols-1 gap-3">
-            {stats.inverters.map((d) => (
-              <DeviceCard key={d.id} device={d} icon={Zap} />
+        <section className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Zap className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
+            <h3 className="text-[0.8125rem] font-semibold">Inverters</h3>
+            <span className="ui-chip tabular-nums">{stats.inverters.length}</span>
+          </div>
+          <div className="space-y-2">
+            {stats.inverters.map((device) => (
+              <div key={device.id} className="ui-panel-section overflow-hidden">
+                <DeviceSection device={device} kind="inverter" />
+              </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      {/* Batteries */}
       {stats.batteries.length > 0 && (
-        <div className="mt-4">
-          <h3 className="text-sm font-semibold text-[var(--color-text-primary)] mb-2 flex items-center gap-2">
-            <Battery className="w-4 h-4 text-[var(--color-text-secondary)]" />
-            Batteries <span className="text-xs font-normal text-[var(--color-text-secondary)]">({stats.batteries.length})</span>
-          </h3>
-          <div className="grid grid-cols-1 gap-3">
-            {stats.batteries.map((d) => (
-              <DeviceCard key={d.id} device={d} icon={Battery} />
+        <section className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Battery className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
+            <h3 className="text-[0.8125rem] font-semibold">Batteries</h3>
+            <span className="ui-chip tabular-nums">{stats.batteries.length}</span>
+          </div>
+          <div className="space-y-2">
+            {stats.batteries.map((device) => (
+              <div key={device.id} className="ui-panel-section overflow-hidden">
+                <DeviceSection device={device} kind="battery" />
+              </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
-      <p className="mt-3 text-center text-[10px] text-[var(--color-text-secondary)]">
+      <p className="pb-1 text-center text-[10px] text-[var(--color-text-secondary)]">
         Updated {new Date(stats.timestamp).toLocaleTimeString()} · refreshing every {POLL_INTERVAL_MS / 1000}s
       </p>
-    </>
+    </div>
   );
 }
 
@@ -397,7 +457,6 @@ export function InverterPanel({ onManage }: InverterPanelProps) {
 
   const selected = inverters.find(s => s.id === selectedId);
 
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
@@ -405,13 +464,13 @@ export function InverterPanel({ onManage }: InverterPanelProps) {
         description="Live PV, load, grid and battery metrics from Solar Assistant."
         actions={
           onManage ? (
-            <Button variant="ghost" size="sm" onClick={onManage}>
-              <Settings2 className="size-3.5" /> Manage inverters
+            <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={onManage}>
+              <Settings2 className="size-3.5" aria-hidden="true" /> Manage inverters
             </Button>
           ) : null
         }
       />
-      <PagePanel>
+      <PagePanel fill={false}>
         {inverters.length > 1 && (
           <div className="ui-panel-head gap-2 overflow-x-auto">
             <SegmentedControl
@@ -430,7 +489,7 @@ export function InverterPanel({ onManage }: InverterPanelProps) {
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="p-4">
           {selected ? (
             // Remount per device so polling resets cleanly.
             <InverterStatsView
@@ -441,12 +500,10 @@ export function InverterPanel({ onManage }: InverterPanelProps) {
             />
           ) : (
             <div className="py-16 text-center">
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                No inverter configured yet.
-              </p>
+              <p className="text-sm text-[var(--color-text-secondary)]">No inverter configured yet.</p>
               {onManage ? (
-                <Button variant="primary" size="sm" className="mt-4" onClick={onManage}>
-                  <Settings2 className="size-3.5" /> Add one in Settings
+                <Button className="ui-btn mt-4" data-variant="primary" data-size="sm" onClick={onManage}>
+                  <Settings2 className="size-3.5" aria-hidden="true" /> Add one in Settings
                 </Button>
               ) : null}
             </div>

@@ -11,7 +11,6 @@ import {
   Database,
   Check,
   ChevronDown,
-  ChevronUp,
   Sun,
   Server,
   Moon,
@@ -23,6 +22,18 @@ import {
   ShieldAlert,
   Monitor,
 } from 'lucide-react';
+import { Button } from '@ui-sdk/react/button';
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from '@ui-sdk/react/collapsible';
+import { Field, FieldLabel } from '@ui-sdk/react/field';
+import { Input } from '@ui-sdk/react/input';
+import { Radio, RadioGroup } from '@ui-sdk/react/radio';
+import {
+  SegmentedControl,
+  SegmentedControlIndicator,
+  SegmentedControlItem,
+} from '@ui-sdk/react/segmented-control';
+import { Separator } from '@ui-sdk/react/separator';
+import { Textarea } from '@ui-sdk/react/textarea';
 import { CategoryModal } from './CategoryModal';
 import { BackupManager } from './BackupManager';
 import { NotificationsSettings } from './notifications/NotificationsSettings';
@@ -232,14 +243,14 @@ export function SettingsView({ initialSection }: SettingsViewProps) {
   // above the content on mobile where that footer is hidden — so the pointer
   // that says where Servers/hosts are configured never disappears.
   const monitoringPointer = (
-    <div className="p-3 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)] leading-relaxed">
-      <div className="flex items-center gap-1.5 mb-1 font-semibold text-[var(--color-text-primary)]">
-        <ShieldAlert className="w-3.5 h-3.5 text-[var(--color-primary)]" />
+    <div className="ui-panel-section p-3 text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+      <div className="mb-1 flex items-center gap-1.5 font-semibold text-[var(--color-text-primary)]">
+        <ShieldAlert className="size-3.5 text-[var(--color-primary)]" aria-hidden="true" />
         Monitoring & hosts
       </div>
       Monitoring preferences (hosts, solar, docker, media, alerts…) live on the{' '}
       <a href="/monitor" target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] hover:underline">
-        <Monitor className="inline w-3 h-3 -mt-0.5" /> monitor page
+        <Monitor className="inline size-3 -mt-0.5" aria-hidden="true" /> monitor page
       </a>.
       Remote Glances endpoints are managed in{' '}
       <button
@@ -278,20 +289,21 @@ export function SettingsView({ initialSection }: SettingsViewProps) {
         />
         <PagePanel>
           {/* Body layout */}
-          <div className="flex flex-1 min-h-0 flex-col sm:flex-row">
+          <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
 
             {/* Left Navigation Sidebar */}
-            <nav className="sm:w-60 sm:flex-shrink-0 sm:border-r border-[var(--color-border)] bg-[var(--color-background)]/50 sm:overflow-y-auto p-3 sm:p-4 flex sm:flex-col gap-1.5 border-t sm:border-t-0 overflow-x-auto">
+            <nav className="flex gap-1.5 overflow-x-auto border-t border-[var(--color-border)] bg-[var(--color-background)]/50 p-3 sm:w-60 sm:flex-shrink-0 sm:flex-col sm:overflow-y-auto sm:border-t-0 sm:border-r sm:p-4">
               {/* Search Input */}
-              <div className="relative mb-1 sm:px-1 flex-shrink-0">
-                <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)] pointer-events-none" />
-                <input
+              <div className="relative mb-1 flex-shrink-0 sm:px-1">
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-text-secondary)]" aria-hidden="true" />
+                <Input
+                  className="ui-input"
                   type="text"
+                  aria-label="Filter settings"
                   placeholder="Filter settings…"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  style={{ paddingLeft: '32px' }}
-                  className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg pr-2.5 py-1.5 text-xs text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
+                  onValueChange={setSearchQuery}
+                  style={{ paddingLeft: 32, fontSize: '0.75rem', minHeight: 32 }}
                 />
               </div>
 
@@ -301,7 +313,7 @@ export function SettingsView({ initialSection }: SettingsViewProps) {
                 if (groupItems.length === 0) return null;
                 return (
                   <div key={groupName} className="flex flex-col gap-0.5">
-                    <div className="hidden sm:block text-[10px] font-bold uppercase tracking-[0.8px] text-[var(--color-text-secondary)] px-2 pt-2 pb-1">
+                    <div className="hidden px-2 pt-2 pb-1 text-[10px] font-bold uppercase tracking-[0.8px] text-[var(--color-text-secondary)] sm:block">
                       {groupName}
                     </div>
                     {groupItems.map((item) => {
@@ -309,33 +321,40 @@ export function SettingsView({ initialSection }: SettingsViewProps) {
                       const isActive = section?.key === item.key;
                       const Icon = item.icon;
                       return (
-                        <button
+                        <Button
                           key={item.key}
                           type="button"
+                          className="ui-btn flex-shrink-0 whitespace-nowrap sm:w-full"
+                          data-variant="ghost"
+                          data-size="sm"
+                          data-nav
+                          data-active={isActive || undefined}
+                          aria-current={isActive ? 'page' : undefined}
                           onClick={() => setActive(item.key)}
-                          className={`flex items-center gap-2.5 py-2 px-3 rounded-lg text-sm font-medium transition-all text-left flex-shrink-0 whitespace-nowrap ${
-                            isActive
-                              ? 'bg-[var(--color-primary)]/10 text-[var(--color-text-primary)] border border-[var(--color-primary)]/40'
-                              : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] border border-transparent'
-                          }`}
                         >
-                          <span className={`p-1.5 rounded-md flex-shrink-0 transition-colors ${
-                            isActive
-                              ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
-                              : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
-                          }`}>
-                            <Icon className="w-3.5 h-3.5" />
+                          <span
+                            className={`flex-shrink-0 rounded-md p-1.5 transition-colors ${
+                              isActive
+                                ? 'bg-[var(--color-primary)]/20 text-[var(--color-primary)]'
+                                : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)]'
+                            }`}
+                          >
+                            <Icon className="size-3.5" />
                           </span>
-                          <span className="truncate">{item.label}</span>
+                          <span className="min-w-0 truncate">{item.label}</span>
                           {count != null && count > 0 && (
-                            <span className="ml-auto text-[10.5px] font-bold text-[var(--color-text-secondary)] bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full px-1.5 py-0.5 tabular-nums">
+                            <span className="ml-auto rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] px-1.5 py-0.5 text-[10.5px] font-bold tabular-nums text-[var(--color-text-secondary)]">
                               {count}
                             </span>
                           )}
                           {dot && (
-                            <span className="ml-auto w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dot, color: dot }} />
+                            <span
+                              className="ml-auto size-1.5 rounded-full"
+                              style={{ backgroundColor: dot, color: dot }}
+                              aria-hidden="true"
+                            />
                           )}
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
@@ -343,408 +362,407 @@ export function SettingsView({ initialSection }: SettingsViewProps) {
               })}
 
               {/* Nav footer: monitoring pointer (desktop; mobile gets it above content) */}
-              <div className="hidden sm:block mt-auto pt-3 border-t border-[var(--color-border)] px-1">
+              <div className="mt-auto hidden px-1 pt-3 sm:block">
+                <Separator className="mb-3" />
                 {monitoringPointer}
               </div>
             </nav>
 
             {/* Main Content Area */}
-            <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-[var(--color-surface)]">
+            <main className="flex-1 overflow-y-auto bg-[var(--color-surface)] p-4 sm:p-6">
               {/* Monitoring pointer — above the content on mobile where the
                   sidebar footer is hidden, so it never disappears. */}
               {!!section && (
-                <div className="sm:hidden mb-5">{monitoringPointer}</div>
+                <div className="mb-5 sm:hidden">{monitoringPointer}</div>
               )}
 
               {!section ? (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
-                  <Search className="w-10 h-10 text-[var(--color-text-secondary)] mb-3 opacity-50" />
+                  <Search className="mb-3 size-10 text-[var(--color-text-secondary)] opacity-50" aria-hidden="true" />
                   <p className="text-sm font-medium text-[var(--color-text-primary)]">
                     No settings match "{searchQuery}"
                   </p>
-                  <p className="text-xs text-[var(--color-text-secondary)] mt-1">Try a different search term</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-secondary)]">Try a different search term</p>
                 </div>
               ) : (
                 <>
                   {/* Section Header */}
-                  <div className="mb-5 pb-4 border-b border-[var(--color-border)] flex items-start justify-between gap-4">
+                  <div className="mb-5 flex items-start justify-between gap-4 border-b border-[var(--color-border)] pb-4">
                     <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-base sm:text-lg font-semibold text-[var(--color-text-primary)]">
-                        <section.icon className="w-5 h-5 text-[var(--color-primary)] flex-shrink-0" />
+                      <div className="flex items-center gap-2 text-base font-semibold text-[var(--color-text-primary)] sm:text-lg">
+                        <section.icon className="size-5 flex-shrink-0 text-[var(--color-primary)]" />
                         <span>{section.label}</span>
                       </div>
-                      <div className="text-xs text-[var(--color-text-secondary)] mt-1">
+                      <div className="mt-1 text-xs text-[var(--color-text-secondary)]">
                         {section.description}
                       </div>
                     </div>
 
                     {/* Quick actions */}
                     {section.key === 'categories' && (
-                      <button
+                      <Button
+                        className="ui-btn flex-shrink-0"
+                        data-variant="primary"
+                        data-size="sm"
                         onClick={() => { setEditingCategory(null); setShowCategoryModal(true); }}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm flex-shrink-0"
                       >
-                        <Plus className="w-4 h-4" />
+                        <Plus className="size-4" aria-hidden="true" />
                         Add Category
-                      </button>
+                      </Button>
                     )}
                     {section.key === 'backups' && (
-                      <button
+                      <Button
+                        className="ui-btn flex-shrink-0"
+                        data-variant="primary"
+                        data-size="sm"
                         onClick={() => setShowBackupManager(true)}
-                        className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm flex-shrink-0"
                       >
-                        <Database className="w-4 h-4" />
+                        <Database className="size-4" aria-hidden="true" />
                         Open Backup Manager
-                      </button>
+                      </Button>
                     )}
                   </div>
 
                   <div className="max-w-3xl">
-                {/* ── CATEGORIES ── */}
-                {section.key === 'categories' && (
-                  <div className="space-y-2">
-                    {config.categoryOrder.length === 0 ? (
-                      <div className="text-center py-12 text-[var(--color-text-secondary)]">
-                        <Layout className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                        <p className="text-sm font-medium text-[var(--color-text-primary)]">No categories yet</p>
-                        <p className="text-xs mt-1">Add a category to start grouping your services</p>
-                      </div>
-                    ) : (
-                      config.categoryOrder.map((category, idx) => {
-                        const isFirst = idx === 0;
-                        const isLast = idx === config.categoryOrder.length - 1;
-                        return (
-                          <div
-                            key={category}
-                            draggable
-                            onDragStart={() => handleDragStart(category)}
-                            onDragOver={(e) => handleDragOver(e, category)}
-                            onDragEnd={() => setDraggedCategory(null)}
-                            className={`flex items-center justify-between p-3 bg-[var(--color-background)] rounded-xl border sm:cursor-move transition-all ${
-                              draggedCategory === category ? 'opacity-50 border-[var(--color-primary)]' : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/40'
-                            }`}
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <GripVertical className="hidden sm:block w-4 h-4 text-[var(--color-text-secondary)] flex-shrink-0" />
-                              <span className="text-sm text-[var(--color-text-primary)] truncate">{category}</span>
-                              <span className="text-xs text-[var(--color-text-secondary)] flex-shrink-0">
-                                ({config.services.filter(s => s.category === category).length})
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
-                              <button
-                                onClick={() => moveCategory(category, -1)}
-                                disabled={isFirst}
-                                className="p-2 sm:p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                aria-label={`Move ${category} up`}
+                    {/* ── CATEGORIES ── */}
+                    {section.key === 'categories' && (
+                      config.categoryOrder.length === 0 ? (
+                        <div className="py-12 text-center text-[var(--color-text-secondary)]">
+                          <Layout className="mx-auto mb-3 size-10 opacity-50" aria-hidden="true" />
+                          <p className="text-sm font-medium text-[var(--color-text-primary)]">No categories yet</p>
+                          <p className="mt-1 text-xs">Add a category to start grouping your services</p>
+                        </div>
+                      ) : (
+                        <div className="ui-panel-section">
+                          {config.categoryOrder.map((category, idx) => {
+                            const isFirst = idx === 0;
+                            const isLast = idx === config.categoryOrder.length - 1;
+                            return (
+                              <div
+                                key={category}
+                                draggable
+                                onDragStart={() => handleDragStart(category)}
+                                onDragOver={(e) => handleDragOver(e, category)}
+                                onDragEnd={() => setDraggedCategory(null)}
+                                className={`ui-row justify-between transition-opacity sm:cursor-move ${
+                                  draggedCategory === category ? 'opacity-50' : ''
+                                }`}
                               >
-                                <ArrowUp className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => moveCategory(category, 1)}
-                                disabled={isLast}
-                                className="p-2 sm:p-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] rounded-lg transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                                aria-label={`Move ${category} down`}
-                              >
-                                <ArrowDown className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => { setEditingCategory(category); setShowCategoryModal(true); }}
-                                className="p-2 sm:p-1.5 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 rounded-lg transition-colors"
-                                aria-label={`Edit ${category}`}
-                              >
-                                <Edit2 className="w-4 h-4" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteCategory(category)}
-                                className="p-2 sm:p-1.5 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 rounded-lg transition-colors"
-                                aria-label={`Delete ${category}`}
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <GripVertical className="hidden size-4 flex-shrink-0 text-[var(--color-text-secondary)] sm:block" aria-hidden="true" />
+                                  <span className="truncate">{category}</span>
+                                  <span className="flex-shrink-0 text-xs text-[var(--color-text-secondary)]">
+                                    ({config.services.filter((s) => s.category === category).length})
+                                  </span>
+                                </div>
+                                <div className="flex flex-shrink-0 items-center gap-0.5 sm:gap-1">
+                                  <Button
+                                    className="ui-btn"
+                                    data-variant="ghost"
+                                    data-size="icon"
+                                    onClick={() => moveCategory(category, -1)}
+                                    disabled={isFirst}
+                                    aria-label={`Move ${category} up`}
+                                  >
+                                    <ArrowUp className="size-4" aria-hidden="true" />
+                                  </Button>
+                                  <Button
+                                    className="ui-btn"
+                                    data-variant="ghost"
+                                    data-size="icon"
+                                    onClick={() => moveCategory(category, 1)}
+                                    disabled={isLast}
+                                    aria-label={`Move ${category} down`}
+                                  >
+                                    <ArrowDown className="size-4" aria-hidden="true" />
+                                  </Button>
+                                  <Button
+                                    className="ui-btn"
+                                    data-variant="ghost"
+                                    data-size="icon"
+                                    style={{ color: 'var(--color-primary)' }}
+                                    onClick={() => { setEditingCategory(category); setShowCategoryModal(true); }}
+                                    aria-label={`Edit ${category}`}
+                                  >
+                                    <Edit2 className="size-4" aria-hidden="true" />
+                                  </Button>
+                                  <Button
+                                    className="ui-btn"
+                                    data-variant="ghost"
+                                    data-size="icon"
+                                    style={{ color: 'var(--color-error)' }}
+                                    onClick={() => handleDeleteCategory(category)}
+                                    aria-label={`Delete ${category}`}
+                                  >
+                                    <Trash2 className="size-4" aria-hidden="true" />
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )
                     )}
-                  </div>
-                )}
 
-                {/* ── APPEARANCE ── */}
-                {section.key === 'appearance' && (
-                  <div className="space-y-6">
-                    {/* Grid Columns */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                        Grid Columns
-                      </label>
-                      <div className="flex flex-wrap gap-2">
-                        {['2', '3', '4', '5', '6'].map((cols) => (
-                          <button
-                            key={cols}
-                            onClick={() => handleGridChange(cols)}
-                            className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-sm font-medium transition-colors ${
-                              config.gridColumns === cols
-                                ? 'bg-[var(--color-primary)] text-white'
-                                : 'bg-[var(--color-background)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                            }`}
+                    {/* ── APPEARANCE ── */}
+                    {section.key === 'appearance' && (
+                      <div className="space-y-6">
+                        {/* Grid Columns */}
+                        <Field className="ui-field">
+                          <FieldLabel className="ui-label">Grid Columns</FieldLabel>
+                          <SegmentedControl
+                            className="ui-seg justify-self-start"
+                            value={config.gridColumns}
+                            onValueChange={(next) => {
+                              if (next) handleGridChange(next);
+                            }}
+                            aria-label="Grid Columns"
                           >
-                            {cols}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
+                            <SegmentedControlIndicator />
+                            {['2', '3', '4', '5', '6'].map((cols) => (
+                              <SegmentedControlItem key={cols} value={cols} className="ui-seg-item">
+                                {cols}
+                              </SegmentedControlItem>
+                            ))}
+                          </SegmentedControl>
+                        </Field>
 
-                    {/* Theme Selection */}
-                    <div>
-                      <label className="block text-xs sm:text-sm font-medium text-[var(--color-text-secondary)] mb-3">
-                        Theme
-                      </label>
-                      <div className="flex gap-2 mb-3">
-                        <button
-                          onClick={() => setThemeFilter('all')}
-                          className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-                            themeFilter === 'all'
-                              ? 'bg-[var(--color-primary)] text-white'
-                              : 'bg-[var(--color-background)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                          }`}
-                        >
-                          All
-                        </button>
-                        <button
-                          onClick={() => setThemeFilter('dark')}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-                            themeFilter === 'dark'
-                              ? 'bg-[var(--color-primary)] text-white'
-                              : 'bg-[var(--color-background)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                          }`}
-                        >
-                          <Moon className="w-3.5 h-3.5" />
-                          Dark
-                        </button>
-                        <button
-                          onClick={() => setThemeFilter('light')}
-                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors ${
-                            themeFilter === 'light'
-                              ? 'bg-[var(--color-primary)] text-white'
-                              : 'bg-[var(--color-background)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                          }`}
-                        >
-                          <Sun className="w-3.5 h-3.5" />
-                          Light
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 max-h-64 overflow-y-auto">
-                        {filteredThemes.map((theme) => (
-                          <button
-                            key={theme.name}
-                            onClick={() => handleThemeSelect(theme)}
-                            onMouseEnter={() => applyThemePreview(theme)}
-                            onMouseLeave={() => applyThemePreview(null)}
-                            className={`relative p-2.5 sm:p-3 rounded-xl border transition-all text-left ${
-                              activeThemeName === theme.name
-                                ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20'
-                                : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'
-                            }`}
-                            style={{ backgroundColor: theme.colors.background }}
-                            title={`Preview ${theme.name}`}
-                          >
-                            <div
-                              className="w-full rounded-lg mb-2 overflow-hidden"
-                              style={{
-                                backgroundColor: theme.colors.surface,
-                                border: `1px solid ${theme.colors.border}`,
+                        {/* Theme Selection */}
+                        <div>
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <span className="ui-label">Theme</span>
+                            <SegmentedControl
+                              className="ui-seg"
+                              value={themeFilter}
+                              onValueChange={(next) => {
+                                if (next) setThemeFilter(next);
                               }}
+                              aria-label="Filter themes"
                             >
-                              <div className="h-1.5 w-full" style={{ backgroundColor: theme.colors.primary }} />
-                              <div className="p-1.5 space-y-1">
-                                <div className="h-1.5 w-3/4 rounded-full" style={{ backgroundColor: theme.colors.textPrimary, opacity: 0.8 }} />
-                                <div className="h-1 w-1/2 rounded-full" style={{ backgroundColor: theme.colors.textSecondary, opacity: 0.6 }} />
-                                <div className="flex gap-1 pt-0.5">
-                                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.colors.primary }} />
-                                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.colors.accent }} />
-                                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: theme.colors.success }} />
+                              <SegmentedControlIndicator />
+                              <SegmentedControlItem value="all" className="ui-seg-item">All</SegmentedControlItem>
+                              <SegmentedControlItem value="dark" className="ui-seg-item">
+                                <Moon className="size-3.5" aria-hidden="true" />
+                                Dark
+                              </SegmentedControlItem>
+                              <SegmentedControlItem value="light" className="ui-seg-item">
+                                <Sun className="size-3.5" aria-hidden="true" />
+                                Light
+                              </SegmentedControlItem>
+                            </SegmentedControl>
+                          </div>
+
+                          <RadioGroup
+                            className="grid max-h-64 grid-cols-2 gap-2 overflow-y-auto sm:grid-cols-3 sm:gap-3"
+                            name="theme"
+                            value={config.theme}
+                            onValueChange={(next) => {
+                              if (!next) return;
+                              const theme = getThemeByName(next);
+                              if (theme) handleThemeSelect(theme);
+                            }}
+                            aria-label="Theme"
+                          >
+                            {filteredThemes.map((theme) => (
+                              <Radio
+                                key={theme.name}
+                                value={theme.name}
+                                onMouseEnter={() => applyThemePreview(theme)}
+                                onMouseLeave={() => applyThemePreview(null)}
+                                title={`Preview ${theme.name}`}
+                                className={`relative rounded-xl border p-2.5 text-left transition-all sm:p-3 ${
+                                  activeThemeName === theme.name
+                                    ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20'
+                                    : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'
+                                }`}
+                                style={{ backgroundColor: theme.colors.background }}
+                              >
+                                <div
+                                  className="mb-2 w-full overflow-hidden rounded-lg"
+                                  style={{
+                                    backgroundColor: theme.colors.surface,
+                                    border: `1px solid ${theme.colors.border}`,
+                                  }}
+                                >
+                                  <div className="h-1.5 w-full" style={{ backgroundColor: theme.colors.primary }} />
+                                  <div className="space-y-1 p-1.5">
+                                    <div className="h-1.5 w-3/4 rounded-full" style={{ backgroundColor: theme.colors.textPrimary, opacity: 0.8 }} />
+                                    <div className="h-1 w-1/2 rounded-full" style={{ backgroundColor: theme.colors.textSecondary, opacity: 0.6 }} />
+                                    <div className="flex gap-1 pt-0.5">
+                                      <div className="size-2.5 rounded-full" style={{ backgroundColor: theme.colors.primary }} />
+                                      <div className="size-2.5 rounded-full" style={{ backgroundColor: theme.colors.accent }} />
+                                      <div className="size-2.5 rounded-full" style={{ backgroundColor: theme.colors.success }} />
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                            <div className="flex items-start justify-between gap-1">
-                              <div className="min-w-0">
-                                <span className="text-xs font-medium block truncate" style={{ color: theme.colors.textPrimary }}>
-                                  {theme.name}
-                                </span>
-                                <span className="text-xs capitalize flex items-center gap-0.5" style={{ color: theme.colors.textSecondary }}>
-                                  {theme.type === 'dark' ? <Moon className="w-2.5 h-2.5" /> : <Sun className="w-2.5 h-2.5" />}
-                                  {theme.type}
-                                </span>
-                              </div>
-                              {activeThemeName === theme.name && (
-                                <div className="w-4 h-4 shrink-0 bg-[var(--color-primary)] rounded-full flex items-center justify-center mt-0.5">
-                                  <Check className="w-2.5 h-2.5 text-white" />
+                                <div className="flex items-start justify-between gap-1">
+                                  <div className="min-w-0">
+                                    <span className="block truncate text-xs font-medium" style={{ color: theme.colors.textPrimary }}>
+                                      {theme.name}
+                                    </span>
+                                    <span className="flex items-center gap-0.5 text-xs capitalize" style={{ color: theme.colors.textSecondary }}>
+                                      {theme.type === 'dark' ? <Moon className="size-2.5" aria-hidden="true" /> : <Sun className="size-2.5" aria-hidden="true" />}
+                                      {theme.type}
+                                    </span>
+                                  </div>
+                                  {activeThemeName === theme.name && (
+                                    <div className="mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)]">
+                                      <Check className="size-2.5 text-white" aria-hidden="true" />
+                                    </div>
+                                  )}
                                 </div>
+                              </Radio>
+                            ))}
+                          </RadioGroup>
+                        </div>
+
+                        {/* Custom Theme */}
+                        <Collapsible
+                          className="ui-panel-section"
+                          open={showCustomColors}
+                          onOpenChange={(open) => {
+                            setShowCustomColors(open);
+                            if (open) handleCustomTheme();
+                          }}
+                        >
+                          <CollapsibleTrigger
+                            className="ui-panel-section-head w-full justify-between text-left"
+                            style={{ borderBottomWidth: showCustomColors ? undefined : 0 }}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Palette className="size-4 text-[var(--color-primary)]" aria-hidden="true" />
+                              Custom Theme
+                              {config.theme === 'custom' && (
+                                <Check className="size-4 text-[var(--color-primary)]" aria-hidden="true" />
                               )}
-                            </div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Custom Theme Toggle */}
-                    <div>
-                      <button
-                        onClick={handleCustomTheme}
-                        className={`flex items-center justify-between w-full p-3 rounded-xl border transition-colors ${
-                          config.theme === 'custom'
-                            ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10'
-                            : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Palette className="w-4 h-4 text-[var(--color-primary)]" />
-                          <span className="text-sm text-[var(--color-text-primary)]">Custom Theme</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {config.theme === 'custom' && (
-                            <Check className="w-4 h-4 text-[var(--color-primary)]" />
-                          )}
-                          {showCustomColors ? (
-                            <ChevronUp className="w-4 h-4 text-[var(--color-text-secondary)]" />
-                          ) : (
-                            <ChevronDown className="w-4 h-4 text-[var(--color-text-secondary)]" />
-                          )}
-                        </div>
-                      </button>
-                    </div>
-
-                    {/* Custom Colors (collapsible) */}
-                    {showCustomColors && (
-                      <div className="space-y-3 p-3 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)]">
-                        <label className="block text-xs sm:text-sm font-medium text-[var(--color-text-secondary)]">
-                          Custom Colors
-                        </label>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                          {colorOptions.map((option) => (
-                            <div key={option.key} className="flex items-center gap-2">
-                              <input
-                                type="color"
-                                value={config.colors[option.key]}
-                                onChange={(e) => handleColorChange(option.key, e.target.value)}
-                                className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg border border-[var(--color-border)] cursor-pointer bg-transparent flex-shrink-0"
-                              />
-                              <div className="min-w-0">
-                                <span className="text-xs sm:text-sm text-[var(--color-text-primary)] block truncate">
-                                  {option.label}
-                                </span>
-                                <span className="text-xs text-[var(--color-text-secondary)] hidden sm:block">
-                                  {config.colors[option.key]}
-                                </span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Custom CSS */}
-                    <div>
-                      <button
-                        onClick={() => setShowCustomCSS((v) => !v)}
-                        className={`flex items-center justify-between w-full p-3 rounded-xl border transition-colors ${
-                          showCustomCSS
-                            ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/10'
-                            : 'border-[var(--color-border)] hover:border-[var(--color-primary)]/50'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Code2 className="w-4 h-4 text-[var(--color-primary)]" />
-                          <span className="text-sm text-[var(--color-text-primary)]">Custom CSS</span>
-                          {config.settings?.customCSS?.trim() && (
-                            <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--color-primary)]/20 text-[var(--color-primary)]">
-                              active
                             </span>
-                          )}
-                        </div>
-                        {showCustomCSS ? (
-                          <ChevronUp className="w-4 h-4 text-[var(--color-text-secondary)]" />
-                        ) : (
-                          <ChevronDown className="w-4 h-4 text-[var(--color-text-secondary)]" />
-                        )}
-                      </button>
+                            <span data-chevron className="text-[var(--color-text-secondary)]">
+                              <ChevronDown className="size-4" aria-hidden="true" />
+                            </span>
+                          </CollapsibleTrigger>
+                          <CollapsiblePanel className="space-y-3 p-3">
+                            <div className="ui-label">Custom Colors</div>
+                            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                              {colorOptions.map((option) => (
+                                <div key={option.key} className="flex items-center gap-2">
+                                  <Input
+                                    type="color"
+                                    className="ui-input flex-shrink-0 cursor-pointer"
+                                    style={{ width: 34, height: 34, minHeight: 34, padding: 0 }}
+                                    value={config.colors[option.key]}
+                                    onValueChange={(value) => handleColorChange(option.key, value)}
+                                    aria-label={option.label}
+                                  />
+                                  <div className="min-w-0">
+                                    <span className="block truncate text-xs text-[var(--color-text-primary)]">
+                                      {option.label}
+                                    </span>
+                                    <span className="hidden text-xs text-[var(--color-text-secondary)] sm:block">
+                                      {config.colors[option.key]}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CollapsiblePanel>
+                        </Collapsible>
 
-                      {showCustomCSS && (
-                        <div className="mt-2 space-y-2">
-                          <p className="text-xs text-[var(--color-text-secondary)]">
-                            Injected after the selected theme. Custom CSS can override theme
-                            variables on :root without !important, including --color-* and the
-                            theme-specific --theme-* / --st-* tokens. Component rules may need
-                            matching specificity. Changes apply live to the dashboard and the
-                            /monitor page, including its settings panel. Clear this field if you
-                            previously pasted a full theme here.
-                          </p>
-                          <textarea
-                            value={config.settings?.customCSS ?? ''}
-                            onChange={(e) =>
-                              setConfig({
-                                ...config,
-                                settings: { ...config.settings, customCSS: e.target.value },
-                              })
-                            }
-                            placeholder={`:root {\n  --color-primary: #ff6b6b;\n  --theme-primary: #ff6b6b;\n}\n\n.my-custom-style { ... }`}
-                            spellCheck={false}
-                            rows={8}
-                            className="w-full bg-[var(--color-background)] text-[var(--color-text-primary)] border border-[var(--color-border)] rounded-xl p-3 text-xs font-mono resize-y focus:outline-none focus:border-[var(--color-primary)] placeholder:text-[var(--color-text-secondary)]/50"
-                          />
-                          {config.settings?.customCSS?.trim() && (
-                            <button
-                              onClick={() =>
+                        {/* Custom CSS */}
+                        <Collapsible
+                          className="ui-panel-section"
+                          open={showCustomCSS}
+                          onOpenChange={setShowCustomCSS}
+                        >
+                          <CollapsibleTrigger
+                            className="ui-panel-section-head w-full justify-between text-left"
+                            style={{ borderBottomWidth: showCustomCSS ? undefined : 0 }}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Code2 className="size-4 text-[var(--color-primary)]" aria-hidden="true" />
+                              Custom CSS
+                              {!!config.settings?.customCSS?.trim() && (
+                                <span className="ui-chip" data-tone="accent">active</span>
+                              )}
+                            </span>
+                            <span data-chevron className="text-[var(--color-text-secondary)]">
+                              <ChevronDown className="size-4" aria-hidden="true" />
+                            </span>
+                          </CollapsibleTrigger>
+                          <CollapsiblePanel className="space-y-2 p-3">
+                            <p className="text-xs text-[var(--color-text-secondary)]">
+                              Injected after the selected theme. Custom CSS can override theme
+                              variables on :root without !important, including --color-* and the
+                              theme-specific --theme-* / --st-* tokens. Component rules may need
+                              matching specificity. Changes apply live to the dashboard and the
+                              /monitor page, including its settings panel. Clear this field if you
+                              previously pasted a full theme here.
+                            </p>
+                            <Textarea
+                              className="ui-textarea font-mono"
+                              value={config.settings?.customCSS ?? ''}
+                              onValueChange={(value) =>
                                 setConfig({
                                   ...config,
-                                  settings: { ...config.settings, customCSS: '' },
+                                  settings: { ...config.settings, customCSS: value },
                                 })
                               }
-                              className="text-xs text-[var(--color-error)] hover:underline"
-                            >
-                              Clear custom CSS
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── NOTIFICATIONS ── */}
-                {section.key === 'servers' && <RemoteServersSection />}
-                {section.key === 'inverters' && <InvertersSection />}
-                {section.key === 'notifications' && <NotificationsSettings />}
-
-                {/* ── BACKUPS ── */}
-                {section.key === 'backups' && (
-                  <div className="space-y-4">
-                    <p className="text-xs sm:text-sm text-[var(--color-text-secondary)]">
-                      Create and manage configuration backups. Use the Open Backup Manager button above to create, restore, import, or export.
-                    </p>
-                    {backups.length === 0 ? (
-                      <div className="text-xs text-[var(--color-text-secondary)]">
-                        No backups yet — create one to capture your current configuration.
+                              placeholder={`:root {\n  --color-primary: #ff6b6b;\n  --theme-primary: #ff6b6b;\n}\n\n.my-custom-style { ... }`}
+                              spellCheck={false}
+                              rows={8}
+                            />
+                            {!!config.settings?.customCSS?.trim() && (
+                              <Button
+                                className="ui-btn"
+                                data-variant="ghost"
+                                data-size="sm"
+                                style={{ color: 'var(--color-error)' }}
+                                onClick={() =>
+                                  setConfig({
+                                    ...config,
+                                    settings: { ...config.settings, customCSS: '' },
+                                  })
+                                }
+                              >
+                                Clear custom CSS
+                              </Button>
+                            )}
+                          </CollapsiblePanel>
+                        </Collapsible>
                       </div>
-                    ) : (
-                      <ul className="space-y-1">
-                        {backups.map((b) => (
-                          <li
-                            key={`${b.name}-${b.date}`}
-                            className="flex items-center justify-between gap-3 text-xs text-[var(--color-text-secondary)]"
-                          >
-                            <span className="truncate">{b.name}</span>
-                            <span className="flex-shrink-0 tabular-nums">
-                              {new Date(b.date).toLocaleString()} <span className="opacity-70">· {b.serviceCount} services</span>
-                            </span>
-                          </li>
-                        ))}
-                      </ul>
                     )}
-                  </div>
-                )}
+
+                    {/* ── SERVERS / INVERTERS / NOTIFICATIONS ── */}
+                    {section.key === 'servers' && <RemoteServersSection />}
+                    {section.key === 'inverters' && <InvertersSection />}
+                    {section.key === 'notifications' && <NotificationsSettings />}
+
+                    {/* ── BACKUPS ── */}
+                    {section.key === 'backups' && (
+                      <div className="space-y-4">
+                        <p className="text-xs text-[var(--color-text-secondary)] sm:text-sm">
+                          Create and manage configuration backups. Use the Open Backup Manager button above to create, restore, import, or export.
+                        </p>
+                        {backups.length === 0 ? (
+                          <div className="text-xs text-[var(--color-text-secondary)]">
+                            No backups yet — create one to capture your current configuration.
+                          </div>
+                        ) : (
+                          <ul className="ui-panel-section">
+                            {backups.map((b) => (
+                              <li
+                                key={`${b.name}-${b.date}`}
+                                className="ui-row justify-between gap-3"
+                              >
+                                <span className="truncate">{b.name}</span>
+                                <span className="ui-row-dim flex-shrink-0 tabular-nums">
+                                  {new Date(b.date).toLocaleString()} <span className="opacity-70">· {b.serviceCount} services</span>
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </>
               )}

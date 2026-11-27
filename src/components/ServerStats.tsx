@@ -1,20 +1,25 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Cpu,
-  MemoryStick,
-  HardDrive,
-  Clock,
-  Server,
   AlertTriangle,
+  Clock,
   Container,
+  Cpu,
+  HardDrive,
+  MemoryStick,
+  Server,
   Settings2,
 } from 'lucide-react';
+import { Button } from '@ui-sdk/react/button';
+import { Meter, MeterIndicator, MeterTrack, MeterValue } from '@ui-sdk/react/meter';
+import {
+  SegmentedControl,
+  SegmentedControlIndicator,
+  SegmentedControlItem,
+} from '@ui-sdk/react/segmented-control';
 import { configApi } from '../api/configApi';
 import { useDashboard } from '../context/DashboardContext';
 import type { ServerStats as ServerStatsData } from '../types';
 import { PageHeader, PagePanel } from './shell/PageHeader';
-import { Button } from './ui/Button';
-import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control';
 
 interface ServerStatsProps {
   /** Jumps to Settings → Remote servers. */
@@ -33,54 +38,16 @@ function formatBytes(bytes: number | null): string {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-// Pick a bar colour based on utilisation so high load reads as warning/danger.
-function barColor(percent: number | null): string {
+/** Utilisation reads as warning above 75% and danger above 90%. */
+function usageColor(percent: number | null): string {
   if (percent === null) return 'var(--color-text-secondary)';
   if (percent >= 90) return 'var(--color-error)';
   if (percent >= 75) return 'var(--color-warning)';
   return 'var(--color-primary)';
 }
 
-interface StatBarProps {
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  percent: number | null;
-  detail: string;
-}
-
-function StatBar({ icon: Icon, label, percent, detail }: StatBarProps) {
-  const value = percent ?? 0;
-  return (
-    <div className="bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] p-4">
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2 text-[var(--color-text-primary)]">
-          <Icon className="w-4 h-4 text-[var(--color-text-secondary)]" />
-          <span className="text-sm font-medium">{label}</span>
-        </div>
-        <span className="text-sm font-semibold text-[var(--color-text-primary)] tabular-nums">
-          {percent === null ? '—' : `${percent.toFixed(1)}%`}
-        </span>
-      </div>
-      <div className="h-2 w-full rounded-full bg-[var(--color-surface)] overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-500"
-          style={{ width: `${Math.min(100, Math.max(0, value))}%`, backgroundColor: barColor(percent) }}
-        />
-      </div>
-      <p className="mt-2 text-xs text-[var(--color-text-secondary)]">{detail}</p>
-    </div>
-  );
-}
-
-function InfoRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 py-1.5">
-      <span className="text-xs text-[var(--color-text-secondary)]">{label}</span>
-      <span className="text-xs font-medium text-[var(--color-text-primary)] text-right break-all">
-        {value}
-      </span>
-    </div>
-  );
+function percentLabel(percent: number | null): string {
+  return percent === null ? '—' : `${percent.toFixed(1)}%`;
 }
 
 // Renders live stats for a single server, polling on an interval. `serverUrl`
@@ -139,12 +106,9 @@ function StatsView({ serverUrl, username, password }: { serverUrl?: string; user
 
   if (loading && !stats) {
     return (
-      <div className="space-y-3" aria-hidden="true">
-        {Array.from({ length: 3 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-[92px] rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] animate-pulse"
-          />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden="true">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-[104px] animate-pulse rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--surface-sunken)]" />
         ))}
       </div>
     );
@@ -152,8 +116,8 @@ function StatsView({ serverUrl, username, password }: { serverUrl?: string; user
 
   if (error && !stats) {
     return (
-      <div className="flex items-center gap-2 p-3 rounded-lg bg-[var(--color-error)]/10 border border-[var(--color-error)]/30 text-[var(--color-error)]">
-        <AlertTriangle className="w-4 h-4 shrink-0" />
+      <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-error)_35%,transparent)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--color-error)]">
+        <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
         <span className="text-sm">{error}</span>
       </div>
     );
@@ -161,85 +125,114 @@ function StatsView({ serverUrl, username, password }: { serverUrl?: string; user
 
   if (!stats) return null;
 
+  const systemRows: Array<[string, string]> = [
+    ['Hostname', stats.system.hostname],
+    ['OS', `${stats.system.type}${stats.system.release ? ` (${stats.system.release})` : ''}`],
+    ['Platform', [stats.system.platform, stats.system.arch].filter(Boolean).join(' · ')],
+  ];
+  if (stats.system.distro) systemRows.push(['Distribution', stats.system.distro]);
+  if (stats.cpu.model) systemRows.push(['CPU model', stats.cpu.model]);
+  if (stats.system.nodeVersion) systemRows.push(['Node', stats.system.nodeVersion]);
+  if (stats.system.glancesVersion) systemRows.push(['Glances', stats.system.glancesVersion]);
+
   return (
-    <>
+    <div className="space-y-4">
       {error && (
-        <div className="flex items-center gap-2 mb-3 p-2 rounded-lg bg-[var(--color-warning)]/10 border border-[var(--color-warning)]/30 text-[var(--color-warning)]">
-          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+        <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] px-3 py-2 text-[var(--color-warning)]">
+          <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
           <span className="text-xs">{error} (showing last known values)</span>
         </div>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <StatBar icon={Cpu} label="CPU" percent={stats.cpu.percent} detail={cpuDetail} />
-        <StatBar icon={MemoryStick} label="Memory" percent={stats.memory.percent} detail={memDetail} />
-        <StatBar icon={HardDrive} label="Disk" percent={stats.disk.percent} detail={diskDetail} />
-        <div className="bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] p-4 flex flex-col justify-center">
-          <div className="flex items-center gap-2 mb-1 text-[var(--color-text-primary)]">
-            <Clock className="w-4 h-4 text-[var(--color-text-secondary)]" />
-            <span className="text-sm font-medium">Uptime</span>
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {([
+          { icon: Cpu, label: 'CPU', percent: stats.cpu.percent, detail: cpuDetail },
+          { icon: MemoryStick, label: 'Memory', percent: stats.memory.percent, detail: memDetail },
+          { icon: HardDrive, label: 'Disk', percent: stats.disk.percent, detail: diskDetail },
+        ] as const).map(({ icon: Icon, label, percent, detail }) => (
+          <div key={label} className="ui-stat">
+            <div className="ui-stat-head">
+              <Icon className="size-4 text-[var(--color-text-secondary)]" aria-hidden="true" />
+              <span className="text-[0.8125rem] font-semibold">{label}</span>
+            </div>
+            <Meter
+              value={percent ?? 0}
+              min={0}
+              max={100}
+              format={{ style: 'percent', maximumFractionDigits: 1 }}
+              aria-label={label}
+            >
+              <MeterValue>{percentLabel(percent)}</MeterValue>
+              <MeterTrack>
+                <MeterIndicator style={{ backgroundColor: usageColor(percent) }} />
+              </MeterTrack>
+            </Meter>
+            <p className="ui-stat-detail">{detail}</p>
           </div>
-          <p className="text-xl font-semibold text-[var(--color-text-primary)]">
+        ))}
+
+        <div className="ui-stat">
+          <div className="ui-stat-head">
+            <Clock className="size-4 text-[var(--color-text-secondary)]" aria-hidden="true" />
+            <span className="text-[0.8125rem] font-semibold">Uptime</span>
+          </div>
+          <p className="text-xl font-semibold tabular-nums text-[var(--color-text-primary)]">
             {stats.uptime.formatted ?? '—'}
+          </p>
+          <p className="ui-stat-detail">
+            {stats.source === 'glances' ? 'Remote Glances instance' : 'This host'}
           </p>
         </div>
       </div>
 
-      {/* System info */}
-      <div className="mt-4 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] p-4">
-        <div className="flex items-center gap-2 mb-2 text-[var(--color-text-primary)]">
-          <Server className="w-4 h-4 text-[var(--color-text-secondary)]" />
-          <span className="text-sm font-medium">System</span>
+      <section className="ui-panel-section">
+        <div className="ui-panel-section-head">
+          <Server className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
+          System
         </div>
-        <div className="divide-y divide-[var(--color-border)]">
-          <InfoRow label="Hostname" value={stats.system.hostname} />
-          <InfoRow label="OS" value={`${stats.system.type}${stats.system.release ? ` (${stats.system.release})` : ''}`} />
-          {stats.system.distro && <InfoRow label="Distribution" value={stats.system.distro} />}
-          <InfoRow label="Platform" value={[stats.system.platform, stats.system.arch].filter(Boolean).join(' · ')} />
-          {stats.cpu.model && <InfoRow label="CPU model" value={stats.cpu.model} />}
-          {stats.system.nodeVersion && <InfoRow label="Node" value={stats.system.nodeVersion} />}
-          {stats.system.glancesVersion && <InfoRow label="Glances" value={stats.system.glancesVersion} />}
+        <div>
+          {systemRows.map(([label, value]) => (
+            <div key={label} className="ui-row justify-between">
+              <span className="text-xs text-[var(--color-text-secondary)]">{label}</span>
+              <span className="break-all text-right text-xs font-medium">{value}</span>
+            </div>
+          ))}
         </div>
-      </div>
+      </section>
 
-      {/* Docker containers (Glances instances only) */}
       {stats.containers && (
-        <div className="mt-4 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] p-4">
-          <div className="flex items-center gap-2 mb-3 text-[var(--color-text-primary)]">
-            <Container className="w-4 h-4 text-[var(--color-text-secondary)]" />
-            <span className="text-sm font-medium">Containers</span>
-            <span className="text-xs text-[var(--color-text-secondary)]">({stats.containers.length})</span>
+        <section className="ui-panel-section">
+          <div className="ui-panel-section-head">
+            <Container className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
+            Containers
+            <span className="ui-chip ml-auto tabular-nums">{stats.containers.length}</span>
           </div>
           {stats.containers.length === 0 ? (
-            <p className="text-xs text-[var(--color-text-secondary)]">No running containers.</p>
+            <p className="px-3 py-4 text-xs text-[var(--color-text-secondary)]">No running containers.</p>
           ) : (
-            <div className="space-y-2">
-              {stats.containers.map((c, i) => {
-                const running = /running|up/i.test(c.status);
+            <div>
+              {stats.containers.map((container, index) => {
+                const running = /running|up/i.test(container.status);
                 return (
-                  <div
-                    key={`${c.name}-${i}`}
-                    className="flex items-center justify-between gap-3 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] px-3 py-2"
-                  >
+                  <div key={`${container.name}-${index}`} className="ui-row justify-between">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span
-                          className="w-2 h-2 rounded-full shrink-0"
+                          className="size-2 shrink-0 rounded-full"
                           style={{ backgroundColor: running ? 'var(--color-success)' : 'var(--color-text-secondary)' }}
-                          title={c.status}
+                          title={container.status}
                         />
-                        <span className="text-sm font-medium text-[var(--color-text-primary)] truncate">{c.name}</span>
+                        <span className="truncate text-[0.8125rem] font-medium">{container.name}</span>
                       </div>
-                      <p className="text-[11px] text-[var(--color-text-secondary)] truncate">{c.image}</p>
+                      <p className="ui-row-dim truncate">{container.image}</p>
                     </div>
-                    <div className="flex items-center gap-3 shrink-0 text-right">
-                      <div className="tabular-nums">
-                        <p className="text-xs font-medium text-[var(--color-text-primary)]">
-                          {c.cpuPercent === null ? '—' : `${c.cpuPercent.toFixed(1)}%`}
-                        </p>
+                    <div className="flex shrink-0 items-center gap-4 text-right tabular-nums">
+                      <div>
+                        <p className="text-xs font-medium">{percentLabel(container.cpuPercent)}</p>
                         <p className="text-[10px] text-[var(--color-text-secondary)]">CPU</p>
                       </div>
-                      <div className="tabular-nums">
-                        <p className="text-xs font-medium text-[var(--color-text-primary)]">{formatBytes(c.memoryUsage)}</p>
+                      <div>
+                        <p className="text-xs font-medium">{formatBytes(container.memoryUsage)}</p>
                         <p className="text-[10px] text-[var(--color-text-secondary)]">MEM</p>
                       </div>
                     </div>
@@ -248,13 +241,13 @@ function StatsView({ serverUrl, username, password }: { serverUrl?: string; user
               })}
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      <p className="mt-3 text-center text-[10px] text-[var(--color-text-secondary)]">
+      <p className="pb-1 text-center text-[10px] text-[var(--color-text-secondary)]">
         Updated {new Date(stats.timestamp).toLocaleTimeString()} · refreshing every {POLL_INTERVAL_MS / 1000}s
       </p>
-    </>
+    </div>
   );
 }
 
@@ -272,7 +265,6 @@ export function ServerStats({ onManage }: ServerStatsProps) {
   const selectedServer = servers.find(s => s.id === selectedId);
   const selectedUrl = selectedId === LOCAL_ID ? undefined : selectedServer?.url;
 
-
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
@@ -280,13 +272,13 @@ export function ServerStats({ onManage }: ServerStatsProps) {
         description="Live CPU, memory, disk and containers for this host or a Glances endpoint."
         actions={
           onManage ? (
-            <Button variant="ghost" size="sm" onClick={onManage}>
-              <Settings2 className="size-3.5" /> Manage servers
+            <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={onManage}>
+              <Settings2 className="size-3.5" aria-hidden="true" /> Manage servers
             </Button>
           ) : null
         }
       />
-      <PagePanel>
+      <PagePanel fill={false}>
         <div className="ui-panel-head gap-2 overflow-x-auto">
           <SegmentedControl
             aria-label="Server"
@@ -306,7 +298,7 @@ export function ServerStats({ onManage }: ServerStatsProps) {
           </SegmentedControl>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="p-4">
           {/* Remount StatsView per server so polling resets cleanly. */}
           <StatsView
             key={selectedId}

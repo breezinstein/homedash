@@ -1,4 +1,5 @@
-import { ExternalLink, X, Paperclip } from 'lucide-react';
+import { ExternalLink, Paperclip, X } from 'lucide-react';
+import { Button } from '@ui-sdk/react/button';
 import type { NotificationItem, NtfyAction } from '../../types';
 import { useToast } from '../ui';
 
@@ -105,48 +106,42 @@ export function NotificationCard({ item, onDismiss }: NotificationCardProps) {
     }
   };
 
-  const handleBodyClick = () => {
-    if (item.click) window.open(item.click, '_blank', 'noopener,noreferrer');
-  };
-
   return (
-    <div
-      className={`relative rounded-xl border border-[var(--color-border)] border-l-4 ${border} bg-[var(--color-background)] p-3 ${
+    <article
+      className={`group relative rounded-[var(--radius-md)] border border-l-4 border-[var(--color-border)] ${border} bg-[var(--surface-sunken)] p-3 ${
         item.read ? 'opacity-80' : ''
       }`}
     >
-      <button
-        onClick={() => onDismiss(item.id)}
-        className="absolute top-2 right-2 p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] rounded-md transition-colors"
-        aria-label="Dismiss notification"
-      >
-        <X className="w-4 h-4" />
-      </button>
+      <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <Button
+          className="ui-btn"
+          data-variant="ghost"
+          data-size="icon"
+          onClick={() => onDismiss(item.id)}
+          aria-label="Dismiss notification"
+        >
+          <X className="size-3.5" aria-hidden="true" />
+        </Button>
+      </div>
 
-      <div
-        className={item.click ? 'cursor-pointer pr-6' : 'pr-6'}
-        onClick={item.click ? handleBodyClick : undefined}
-      >
-        <div className="flex items-center gap-2 flex-wrap">
-          {!item.read && (
-            <span className="w-2 h-2 rounded-full bg-[var(--color-primary)] flex-shrink-0" />
-          )}
+      <div className="pr-8">
+        <div className="flex flex-wrap items-center gap-2">
+          {!item.read && <span className="size-2 shrink-0 rounded-full bg-[var(--color-primary)]" />}
           {displayTitle && (
-            <span className="text-sm font-semibold text-[var(--color-text-primary)]">
+            <span className="text-[0.8125rem] font-semibold text-[var(--color-text-primary)]">
               {displayTitle}
             </span>
           )}
-          {item.click && <ExternalLink className="w-3.5 h-3.5 text-[var(--color-text-secondary)]" />}
+          {item.click && <ExternalLink className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />}
         </div>
 
         {displayBody && (
-          <p className="mt-1 text-sm text-[var(--color-text-primary)] whitespace-pre-wrap break-words">
+          <p className="mt-1 whitespace-pre-wrap break-words text-[0.8125rem] text-[var(--color-text-primary)]">
             {displayBody}
           </p>
         )}
       </div>
 
-      {/* Attachment */}
       {item.attachment && (
         <div className="mt-2">
           {isImage ? (
@@ -155,70 +150,61 @@ export function NotificationCard({ item, onDismiss }: NotificationCardProps) {
                 src={item.attachment.url}
                 alt={item.attachment.name}
                 loading="lazy"
-                className="max-h-48 w-auto rounded-lg border border-[var(--color-border)]"
+                className="max-h-48 w-auto rounded-[var(--radius-sm)] border border-[var(--color-border)]"
               />
             </a>
           ) : (
-            <a
-              href={item.attachment.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-2.5 py-1.5 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-xs text-[var(--color-text-primary)] hover:border-[var(--color-primary)] transition-colors"
+            <Button
+              className="ui-btn"
+              data-variant="secondary"
+              data-size="sm"
+              render={<a href={item.attachment.url} target="_blank" rel="noopener noreferrer" />}
             >
-              <Paperclip className="w-3.5 h-3.5" />
-              <span className="truncate max-w-[12rem]">{item.attachment.name}</span>
+              <Paperclip className="size-3.5" aria-hidden="true" />
+              <span className="max-w-[12rem] truncate">{item.attachment.name}</span>
               {formatBytes(item.attachment.size) && (
-                <span className="text-[var(--color-text-secondary)]">
-                  {formatBytes(item.attachment.size)}
-                </span>
+                <span className="text-[var(--color-text-secondary)]">{formatBytes(item.attachment.size)}</span>
               )}
-            </a>
+            </Button>
           )}
         </div>
       )}
 
-      {/* Action buttons */}
       {item.actions && item.actions.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-2">
           {item.actions.map((action, i) =>
             action.action === 'view' && action.url ? (
-              <a
+              <Button
                 key={action.id ?? i}
-                href={action.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[var(--color-primary)] text-white rounded-lg text-xs hover:bg-[var(--color-primary)]/80 transition-colors"
+                className="ui-btn"
+                data-variant="primary"
+                data-size="sm"
+                render={<a href={action.url} target="_blank" rel="noopener noreferrer" />}
               >
                 {action.label}
-              </a>
+              </Button>
             ) : action.action === 'http' ? (
-              <button
+              <Button
                 key={action.id ?? i}
+                className="ui-btn"
+                data-variant="secondary"
+                data-size="sm"
                 onClick={() => handleHttpAction(action)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-primary)] rounded-lg text-xs hover:border-[var(--color-primary)] transition-colors"
               >
                 {action.label}
-              </button>
-            ) : null
+              </Button>
+            ) : null,
           )}
         </div>
       )}
 
-      {/* Footer: topic, tags, time */}
-      <div className="mt-2 flex items-center gap-2 flex-wrap text-xs text-[var(--color-text-secondary)]">
-        <span className="px-1.5 py-0.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)]">
-          {item.topic}
-        </span>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] text-[var(--color-text-secondary)]">
+        <span className="ui-chip">{item.topic}</span>
         {item.tags?.map((tag) => (
-          <span
-            key={tag}
-            className="px-1.5 py-0.5 rounded-md bg-[var(--color-surface)] border border-[var(--color-border)]"
-          >
-            {tag}
-          </span>
+          <span key={tag} className="ui-chip">{tag}</span>
         ))}
-        <span className="ml-auto">{formatTimeAgo(item.time)}</span>
+        <span className="ml-auto tabular-nums">{formatTimeAgo(item.time)}</span>
       </div>
-    </div>
+    </article>
   );
 }

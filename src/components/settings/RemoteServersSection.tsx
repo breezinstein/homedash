@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Lock, Pencil, Plus, Server, Trash2 } from 'lucide-react';
 import { useDashboard } from '../../context/DashboardContext';
-import { Button } from '../ui/Button';
-import { FieldRow, Input } from '../ui/Field';
+import { Button } from '@ui-sdk/react/button';
+import { Field, FieldDescription, FieldLabel } from '@ui-sdk/react/field';
+import { Input } from '@ui-sdk/react/input';
 import { useConfirm, useToast } from '../ui';
 
 function ServerForm({
@@ -38,29 +39,32 @@ function ServerForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3 rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--surface-sunken)] p-4">
-      <FieldRow label="Name">
-        <Input value={name} onValueChange={setName} placeholder="Media server" autoFocus required />
-      </FieldRow>
-      <FieldRow
-        label="Glances URL"
-        description="Base URL of a Glances instance (port 61208). Its REST API supplies CPU, memory, disk and containers."
-      >
-        <Input value={url} onValueChange={setUrl} placeholder="http://10.1.2.17:61208" required />
-      </FieldRow>
+      <Field className="ui-field">
+        <FieldLabel className="ui-label">Name</FieldLabel>
+        <Input className="ui-input" value={name} onValueChange={setName} placeholder="Media server" autoFocus required />
+      </Field>
+      <Field className="ui-field">
+        <FieldLabel className="ui-label">Glances URL</FieldLabel>
+        <Input className="ui-input" value={url} onValueChange={setUrl} placeholder="http://10.1.2.17:61208" required />
+        <FieldDescription className="ui-description">Base URL of a Glances instance (port 61208). Its REST API supplies CPU, memory, disk and containers.</FieldDescription>
+      </Field>
       <div className="grid gap-3 sm:grid-cols-2">
-        <FieldRow label="Username" description="Only if the endpoint is protected.">
-          <Input value={username} onValueChange={setUsername} placeholder="glances" autoComplete="off" />
-        </FieldRow>
-        <FieldRow label="Password">
-          <Input value={password} onValueChange={setPassword} type="password" placeholder="••••••••" autoComplete="new-password" />
-        </FieldRow>
+        <Field className="ui-field">
+        <FieldLabel className="ui-label">Username</FieldLabel>
+        <Input className="ui-input" value={username} onValueChange={setUsername} placeholder="glances" autoComplete="off" />
+        <FieldDescription className="ui-description">Only if the endpoint is protected.</FieldDescription>
+      </Field>
+        <Field className="ui-field">
+        <FieldLabel className="ui-label">Password</FieldLabel>
+        <Input className="ui-input" value={password} onValueChange={setPassword} type="password" placeholder="••••••••" autoComplete="new-password" />
+      </Field>
       </div>
       {error ? <p className="text-xs text-[var(--color-error)]">{error}</p> : null}
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+        <Button type="button" className="ui-btn" data-variant="ghost" data-size="sm" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit" variant="primary" size="sm">
+        <Button type="submit" className="ui-btn" data-variant="primary" data-size="sm">
           {initial ? 'Save' : 'Add server'}
         </Button>
       </div>
@@ -133,10 +137,10 @@ export function RemoteServersSection() {
                 <p className="truncate text-xs text-[var(--color-text-secondary)]">{server.url}</p>
               </div>
               <div className="flex shrink-0 items-center gap-1">
-                <Button variant="ghost" size="sm" onClick={() => { setEditingId(server.id); setAdding(false); }} aria-label={`Edit ${server.name}`}>
+                <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={() => { setEditingId(server.id); setAdding(false); }} aria-label={`Edit ${server.name}`}>
                   <Pencil className="size-3.5" />
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { void handleDelete(server.id, server.name); }} aria-label={`Remove ${server.name}`}>
+                <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={() => { void handleDelete(server.id, server.name); }} aria-label={`Remove ${server.name}`}>
                   <Trash2 className="size-3.5" />
                 </Button>
               </div>
@@ -155,7 +159,7 @@ export function RemoteServersSection() {
           onCancel={() => setAdding(false)}
         />
       ) : (
-        <Button variant="secondary" size="sm" onClick={() => setAdding(true)}>
+        <Button className="ui-btn" data-variant="secondary" data-size="sm" onClick={() => setAdding(true)}>
           <Plus className="size-3.5" /> Add server
         </Button>
       )}

@@ -1,20 +1,20 @@
 import { useState, useEffect, useRef, useCallback, type ChangeEvent } from 'react';
 import {
-  X,
-  Folder,
-  File,
-  Upload,
-  ChevronRight,
-  Home,
-  RefreshCw,
-  Trash2,
   AlertCircle,
-  Share2,
+  ChevronRight,
+  Download,
+  File,
+  Folder,
   Globe,
-  Lock,
+  Home,
   Link2,
-  ArrowDownToLine,
-  ArrowUpFromLine,
+  Lock,
+  MoreHorizontal,
+  RefreshCw,
+  Share2,
+  Trash2,
+  Upload,
+  X,
 } from 'lucide-react';
 import {
   listDirectory,
@@ -27,7 +27,21 @@ import {
 import type { CopypartyListing, CopypartyFile, CopypartyDir } from '../types';
 import { useConfirm, useToast } from './ui';
 import { PageHeader, PagePanel } from './shell/PageHeader';
-import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control';
+import { Button } from '@ui-sdk/react/button';
+import { Listbox, ListboxItem, ListboxItemIcon } from '@ui-sdk/react/listbox';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@ui-sdk/react/menu';
+import { Progress, ProgressIndicator, ProgressTrack } from '@ui-sdk/react/progress';
+import {
+  ScrollArea,
+  ScrollAreaScrollbar,
+  ScrollAreaThumb,
+  ScrollAreaViewport,
+} from '@ui-sdk/react/scroll-area';
+import {
+  SegmentedControl,
+  SegmentedControlIndicator,
+  SegmentedControlItem,
+} from '@ui-sdk/react/segmented-control';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -55,9 +69,8 @@ function formatDate(ts: number): string {
 }
 
 // Phase 3 split the file area into Public (anonymous-readable, used for share
-// links) and Private (admin-only working area). The modal renders one scope
-// at a time on mobile and as side-by-side panes on desktop — anonymous
-// viewers only ever see Public.
+// links) and Private (admin-only working area). Anonymous viewers only ever
+// see Public.
 export function FileSharing() {
   const { authenticated } = useAuth();
   // Anonymous viewers can only browse public; admins start on private (their
@@ -122,8 +135,6 @@ function ScopePane({ scope }: ScopePaneProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const [deletingPath, setDeletingPath] = useState<string | null>(null);
-  const [movingPath, setMovingPath] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(
@@ -151,6 +162,7 @@ function ScopePane({ scope }: ScopePaneProps) {
   // Strip the leading slash and any trailing slash, then split — gives us a
   // clean array for the breadcrumb regardless of how `currentPath` was set.
   const breadcrumbs = currentPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
+  const scopeRootLabel = scope === 'public' ? 'Public' : 'Private';
 
   const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -161,8 +173,8 @@ function ScopePane({ scope }: ScopePaneProps) {
       await uploadFile(scope, currentPath, file, setUploadProgress);
       await load(currentPath);
       toast.success(`Uploaded ${file.name}`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Upload failed';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Upload failed';
       setError(msg);
       toast.error(msg);
     } finally {
@@ -182,26 +194,22 @@ function ScopePane({ scope }: ScopePaneProps) {
       tone: 'danger',
     });
     if (!ok) return;
-    setDeletingPath(path);
     setError(null);
     try {
       await deleteItem(scope, path);
       await load(currentPath);
       toast.success(kind === 'folder' ? 'Folder deleted' : 'File deleted');
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Delete failed';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
       setError(msg);
       toast.error(msg);
-    } finally {
-      setDeletingPath(null);
     }
   };
 
   // Publish (private->public) or Unpublish (public->private). Always lands at
   // the scope root with the same item name so admins don't have to think about
-  // destination folders for the common case; richer placement can be added
-  // later. Refuses to overwrite — the toast tells the admin to remove the
-  // existing item first.
+  // destination folders for the common case. Refuses to overwrite — the toast
+  // tells the admin to remove the existing item first.
   const handleMoveAcrossScope = async (
     sourcePath: string,
     kind: 'file' | 'folder',
@@ -220,7 +228,6 @@ function ScopePane({ scope }: ScopePaneProps) {
       tone: scope === 'private' ? 'primary' : 'danger',
     });
     if (!ok) return;
-    setMovingPath(sourcePath);
     setError(null);
     try {
       await moveItem(
@@ -229,20 +236,17 @@ function ScopePane({ scope }: ScopePaneProps) {
       );
       await load(currentPath);
       toast.success(scope === 'private' ? `Published ${displayName}` : `Unpublished ${displayName}`);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Move failed';
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Move failed';
       setError(msg);
       toast.error(msg);
-    } finally {
-      setMovingPath(null);
     }
   };
 
   const handleShare = async (filePath: string, fileName: string) => {
     // Share/Copy semantics differ by scope:
     //   - public: copies the absolute share URL (the link admins distribute).
-    //   - private: copies the auth-only download URL (useful for the admin
-    //     to paste into other admin tooling; would 401 for the public).
+    //   - private: copies the auth-only download URL.
     const relativeUrl = getFileDownloadUrl(scope, filePath);
     let absoluteUrl = relativeUrl;
     try {
@@ -268,284 +272,272 @@ function ScopePane({ scope }: ScopePaneProps) {
     }
   };
 
-  const isEmpty = listing && listing.dirs.length === 0 && listing.files.length === 0;
-  const scopeRootLabel = scope === 'public' ? 'Public' : 'Private';
+  const dirs = listing?.dirs ?? [];
+  const files = listing?.files ?? [];
+  const isEmpty = Boolean(listing) && dirs.length === 0 && files.length === 0;
+
+  const openEntry = (value: string | null) => {
+    if (!value) return;
+    const isDir = value.startsWith('dir:');
+    const path = value.slice(4);
+    if (isDir) {
+      navigate(path);
+    } else {
+      window.open(getFileDownloadUrl(scope, path), '_blank', 'noopener,noreferrer');
+    }
+  };
 
   return (
     <>
-      {/* Toolbar */}
-      <div className="ui-panel-head gap-3 shrink-0">
-        <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
-          <button
+      <div className="ui-panel-head gap-3">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
+          <Button
+            className="ui-btn shrink-0"
+            data-variant="ghost"
+            data-size="sm"
             onClick={() => navigate('/')}
-            className="flex items-center gap-1 p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors shrink-0"
             title={`${scopeRootLabel} root`}
           >
-            <Home className="w-4 h-4" />
-            <span className="text-xs font-medium">{scopeRootLabel}</span>
-          </button>
+            <Home className="size-3.5" aria-hidden="true" /> {scopeRootLabel}
+          </Button>
           {breadcrumbs.map((segment, i) => {
             const segPath = '/' + breadcrumbs.slice(0, i + 1).join('/') + '/';
             return (
-              <span key={segPath} className="flex items-center gap-1 shrink-0">
-                <ChevronRight className="w-3 h-3 text-[var(--color-text-secondary)]" />
-                <button
+              <span key={segPath} className="flex shrink-0 items-center gap-1">
+                <ChevronRight className="size-3 text-[var(--text-tertiary)]" aria-hidden="true" />
+                <Button
+                  className="ui-btn"
+                  data-variant="ghost"
+                  data-size="sm"
                   onClick={() => navigate(segPath)}
-                  className="text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
                 >
                   {segment}
-                </button>
+                </Button>
               </span>
             );
           })}
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <button
+        <div className="flex shrink-0 items-center gap-1.5">
+          <Button
+            className="ui-btn"
+            data-variant="ghost"
+            data-size="icon"
             onClick={() => load(currentPath)}
             disabled={loading}
-            className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            aria-label="Refresh"
             title="Refresh"
           >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+            <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          </Button>
           {authenticated && (
             <>
-              <button
+              <Button
+                className="ui-btn"
+                data-variant="primary"
+                data-size="sm"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadProgress !== null}
-                className="flex items-center gap-2 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors text-sm font-medium disabled:opacity-50"
               >
-                <Upload className="w-4 h-4" />
-                <span className="hidden sm:inline">Upload</span>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                onChange={handleUpload}
-              />
+                <Upload className="size-3.5" aria-hidden="true" /> Upload
+              </Button>
+              <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
             </>
           )}
         </div>
       </div>
 
       {uploadProgress !== null && (
-        <div className="h-1 bg-[var(--color-background)] shrink-0">
-          <div
-            className="h-full bg-[var(--color-primary)] transition-all duration-100"
-            style={{ width: `${uploadProgress}%` }}
-          />
+        <div className="border-b border-[var(--border-soft)] px-4 py-2">
+          <Progress
+            value={uploadProgress}
+            min={0}
+            max={100}
+            format={{ style: 'percent', maximumFractionDigits: 0 }}
+            aria-label="Upload progress"
+          >
+            <ProgressTrack>
+              <ProgressIndicator />
+            </ProgressTrack>
+          </Progress>
         </div>
       )}
 
       {error && (
-        <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 border-b border-red-500/20 text-red-400 text-sm shrink-0">
-          <AlertCircle className="w-4 h-4 shrink-0" />
-          <span className="flex-1 min-w-0 truncate">{error}</span>
-          <button onClick={() => load(currentPath)} className="underline hover:no-underline shrink-0">
+        <div className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--color-error)_35%,transparent)] bg-[var(--danger-soft)] px-4 py-2 text-[var(--color-error)]">
+          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 truncate text-xs">{error}</span>
+          <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={() => load(currentPath)}>
             Retry
-          </button>
-          <button onClick={() => setError(null)} className="shrink-0" aria-label="Dismiss error">
-            <X className="w-4 h-4" />
-          </button>
+          </Button>
+          <Button
+            className="ui-btn"
+            data-variant="ghost"
+            data-size="icon"
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+          >
+            <X className="size-3.5" aria-hidden="true" />
+          </Button>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-5">
-        {loading && !listing && (
-          <div className="flex items-center justify-center py-24">
-            <RefreshCw className="w-8 h-8 text-[var(--color-text-secondary)] animate-spin" />
-          </div>
-        )}
-
-        {!loading && isEmpty && (
-          <div className="flex flex-col items-center justify-center py-24 text-center">
-            <div className="w-16 h-16 mb-4 rounded-2xl bg-[var(--color-background)] flex items-center justify-center">
-              <Folder className="w-8 h-8 text-[var(--color-text-secondary)]" />
+      <ScrollArea className="min-h-0 flex-1">
+        <ScrollAreaViewport className="p-3">
+          {loading && !listing && (
+            <div className="px-3 py-6">
+              <Progress value={null} aria-label="Loading folder">
+                <ProgressTrack>
+                  <ProgressIndicator />
+                </ProgressTrack>
+              </Progress>
             </div>
-            <p className="text-[var(--color-text-primary)] font-medium mb-1">
-              This {scope} folder is empty
-            </p>
-            {authenticated ? (
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                {scope === 'public'
-                  ? 'Publish something from Private, or upload directly here.'
-                  : 'Click Upload to add files.'}
-              </p>
-            ) : (
-              <p className="text-sm text-[var(--color-text-secondary)]">
-                No public shares yet.
-              </p>
-            )}
-          </div>
-        )}
-
-        {listing && !isEmpty && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-            {listing.dirs.map((dir) => (
-              <DirCard
-                key={dir.n}
-                dir={dir}
-                currentPath={currentPath}
-                scope={scope}
-                authenticated={authenticated}
-                onNavigate={navigate}
-                onDelete={(p) => handleDelete(p, 'folder', dir.n)}
-                onMoveAcrossScope={(p) => handleMoveAcrossScope(p, 'folder', dir.n)}
-                deleting={deletingPath === currentPath + dir.n + '/'}
-                moving={movingPath === currentPath + dir.n + '/'}
-              />
-            ))}
-            {listing.files.map((file) => (
-              <FileCard
-                key={file.n}
-                file={file}
-                currentPath={currentPath}
-                scope={scope}
-                authenticated={authenticated}
-                onDelete={(p) => handleDelete(p, 'file', file.n)}
-                onShare={(p) => handleShare(p, file.n)}
-                onMoveAcrossScope={(p) => handleMoveAcrossScope(p, 'file', file.n)}
-                deleting={deletingPath === currentPath + file.n}
-                moving={movingPath === currentPath + file.n}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </>
-  );
-}
-
-interface DirCardProps {
-  dir: CopypartyDir;
-  currentPath: string;
-  scope: FileScope;
-  authenticated: boolean;
-  onNavigate: (path: string) => void;
-  onDelete: (path: string) => void;
-  onMoveAcrossScope: (path: string) => void;
-  deleting: boolean;
-  moving: boolean;
-}
-
-function DirCard({ dir, currentPath, scope, authenticated, onNavigate, onDelete, onMoveAcrossScope, deleting, moving }: DirCardProps) {
-  const path = currentPath + dir.n + '/';
-  return (
-    <div
-      className="group relative flex flex-col items-center gap-2 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/50 active:bg-[var(--color-background)] transition-colors cursor-pointer"
-      onClick={() => onNavigate(path)}
-    >
-      <Folder className="w-10 h-10 text-[var(--color-accent)]" />
-      <span className="text-xs text-[var(--color-text-primary)] text-center break-all line-clamp-2 w-full leading-tight">
-        {dir.n}
-      </span>
-      {dir.ts > 0 && (
-        <span className="text-xs text-[var(--color-text-secondary)]">{formatDate(dir.ts)}</span>
-      )}
-      {authenticated && (
-        <div className="absolute top-1.5 right-1.5 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => { e.stopPropagation(); onMoveAcrossScope(path); }}
-            disabled={moving}
-            className="p-1.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-colors disabled:opacity-50"
-            title={scope === 'private' ? 'Publish to public area' : 'Unpublish (move back to private)'}
-            aria-label={scope === 'private' ? `Publish folder ${dir.n}` : `Unpublish folder ${dir.n}`}
-          >
-            {scope === 'private' ? <ArrowUpFromLine className="w-3.5 h-3.5" /> : <ArrowDownToLine className="w-3.5 h-3.5" />}
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(path); }}
-            disabled={deleting}
-            className="p-1.5 rounded text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-400/10 active:bg-red-400/20 transition-colors disabled:opacity-50"
-            title="Delete folder"
-            aria-label={`Delete folder ${dir.n}`}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-    </div>
-  );
-}
-
-interface FileCardProps {
-  file: CopypartyFile;
-  currentPath: string;
-  scope: FileScope;
-  authenticated: boolean;
-  onDelete: (path: string) => void;
-  onShare: (path: string) => void;
-  onMoveAcrossScope: (path: string) => void;
-  deleting: boolean;
-  moving: boolean;
-}
-
-function FileCard({ file, currentPath, scope, authenticated, onDelete, onShare, onMoveAcrossScope, deleting, moving }: FileCardProps) {
-  const filePath = currentPath + file.n;
-  const downloadUrl = getFileDownloadUrl(scope, filePath);
-  const shareTitle = scope === 'public'
-    ? (canWebShare ? 'Share' : 'Copy share link')
-    : 'Copy admin link';
-  return (
-    <div className="group relative flex flex-col items-center gap-2 p-3 rounded-xl bg-[var(--color-surface)] border border-[var(--color-border)] hover:border-[var(--color-primary)]/50 transition-colors">
-      <a
-        href={downloadUrl}
-        download={file.n}
-        onClick={(e) => e.stopPropagation()}
-        className="flex flex-col items-center gap-2 w-full active:scale-[0.98] transition-transform"
-        title={`Download ${file.n}`}
-      >
-        <File className="w-10 h-10 text-[var(--color-primary)]" />
-        <span className="text-xs text-[var(--color-text-primary)] text-center break-all line-clamp-2 w-full leading-tight">
-          {file.n}
-        </span>
-        <div className="flex flex-col items-center gap-0.5">
-          <span className="text-xs text-[var(--color-text-secondary)]">{formatBytes(file.sz)}</span>
-          {file.ts > 0 && (
-            <span className="text-xs text-[var(--color-text-secondary)]">{formatDate(file.ts)}</span>
           )}
-        </div>
-      </a>
-      <div className="absolute top-1.5 right-1.5 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-        {/* Share/copy link — public shows a Share icon (public share link),
-            private shows a Link icon and only appears for admins (the URL
-            is auth-only). Both fall back to clipboard if Web Share is
-            unavailable. */}
-        {(scope === 'public' || authenticated) && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onShare(filePath); }}
-            className="p-1.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 active:bg-[var(--color-primary)]/20 transition-colors"
-            title={shareTitle}
-            aria-label={`${shareTitle} for ${file.n}`}
-          >
-            {scope === 'public' ? <Share2 className="w-3.5 h-3.5" /> : <Link2 className="w-3.5 h-3.5" />}
-          </button>
-        )}
-        {authenticated && (
-          <>
-            <button
-              onClick={(e) => { e.stopPropagation(); onMoveAcrossScope(filePath); }}
-              disabled={moving}
-              className="p-1.5 rounded text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 transition-colors disabled:opacity-50"
-              title={scope === 'private' ? 'Publish to public area' : 'Unpublish (move back to private)'}
-              aria-label={scope === 'private' ? `Publish ${file.n}` : `Unpublish ${file.n}`}
+
+          {!loading && isEmpty && (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="mb-3 grid size-14 place-items-center rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--surface-sunken)]">
+                <Folder className="size-6 text-[var(--color-text-secondary)]" aria-hidden="true" />
+              </div>
+              <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                This {scope} folder is empty
+              </p>
+              <p className="mt-1 max-w-xs text-xs text-[var(--color-text-secondary)]">
+                {!authenticated
+                  ? 'No public shares yet.'
+                  : scope === 'public'
+                    ? 'Publish something from Private, or upload directly here.'
+                    : 'Use Upload to add files.'}
+              </p>
+            </div>
+          )}
+
+          {listing && !isEmpty && (
+            <Listbox
+              aria-label={`${scopeRootLabel} folder contents`}
+              className="ui-listbox"
+              activation="manual"
+              onValueChange={openEntry}
             >
-              {scope === 'private' ? <ArrowUpFromLine className="w-3.5 h-3.5" /> : <ArrowDownToLine className="w-3.5 h-3.5" />}
-            </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(filePath); }}
-              disabled={deleting}
-              className="p-1.5 rounded text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-400/10 active:bg-red-400/20 transition-colors disabled:opacity-50"
-              title="Delete file"
-              aria-label={`Delete file ${file.n}`}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+              {dirs.map((dir: CopypartyDir) => {
+                const path = currentPath + dir.n + '/';
+                return (
+                  <ListboxItem key={`dir:${dir.n}`} value={`dir:${path}`} className="ui-list-item">
+                    <ListboxItemIcon>
+                      <Folder className="size-4 text-[var(--color-accent)]" aria-hidden="true" />
+                    </ListboxItemIcon>
+                    <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">{dir.n}</span>
+                    <span className="shrink-0 text-[11px] text-[var(--color-text-secondary)]">
+                      {dir.ts > 0 ? formatDate(dir.ts) : 'Folder'}
+                    </span>
+                    <Menu
+                      onAction={(action) => {
+                        if (action === 'delete') void handleDelete(path, 'folder', dir.n);
+                        if (action === 'move') void handleMoveAcrossScope(path, 'folder', dir.n);
+                      }}
+                    >
+                      <MenuTrigger
+                        aria-label={`Actions for ${dir.n}`}
+                        className="ui-btn shrink-0"
+                        data-variant="ghost"
+                        data-size="icon"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <MoreHorizontal className="size-4" aria-hidden="true" />
+                      </MenuTrigger>
+                      <MenuContent className="ui-popup">
+                        <MenuItem value="open" className="ui-menu-item" onClick={(event) => { event.stopPropagation(); navigate(path); }}>
+                          <Folder className="size-4" aria-hidden="true" /> Open
+                        </MenuItem>
+                        {authenticated && (
+                          <>
+                            <MenuItem value="move" className="ui-menu-item" onClick={(event) => event.stopPropagation()}>
+                              <Share2 className="size-4" aria-hidden="true" />
+                              {scope === 'private' ? 'Publish to public' : 'Unpublish'}
+                            </MenuItem>
+                            <MenuSeparator className="ui-menu-separator" />
+                            <MenuItem value="delete" className="ui-menu-item" data-tone="danger" onClick={(event) => event.stopPropagation()}>
+                              <Trash2 className="size-4" aria-hidden="true" /> Delete folder
+                            </MenuItem>
+                          </>
+                        )}
+                      </MenuContent>
+                    </Menu>
+                  </ListboxItem>
+                );
+              })}
+
+              {files.map((file: CopypartyFile) => {
+                const path = currentPath + file.n;
+                return (
+                  <ListboxItem key={`file:${file.n}`} value={`file:${path}`} className="ui-list-item">
+                    <ListboxItemIcon>
+                      <File className="size-4 text-[var(--color-primary)]" aria-hidden="true" />
+                    </ListboxItemIcon>
+                    <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{file.n}</span>
+                    <span className="shrink-0 text-[11px] tabular-nums text-[var(--color-text-secondary)]">
+                      {formatBytes(file.sz)}
+                      {file.ts > 0 ? ` · ${formatDate(file.ts)}` : ''}
+                    </span>
+                    <Menu
+                      onAction={(action) => {
+                        if (action === 'share') void handleShare(path, file.n);
+                        if (action === 'move') void handleMoveAcrossScope(path, 'file', file.n);
+                        if (action === 'delete') void handleDelete(path, 'file', file.n);
+                      }}
+                    >
+                      <MenuTrigger
+                        aria-label={`Actions for ${file.n}`}
+                        className="ui-btn shrink-0"
+                        data-variant="ghost"
+                        data-size="icon"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <MoreHorizontal className="size-4" aria-hidden="true" />
+                      </MenuTrigger>
+                      <MenuContent className="ui-popup">
+                        <MenuItem
+                          value="download"
+                          className="ui-menu-item"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            window.open(getFileDownloadUrl(scope, path), '_blank', 'noopener,noreferrer');
+                          }}
+                        >
+                          <Download className="size-4" aria-hidden="true" /> Download
+                        </MenuItem>
+                        {(scope === 'public' || authenticated) && (
+                          <MenuItem value="share" className="ui-menu-item" onClick={(event) => event.stopPropagation()}>
+                            {scope === 'public'
+                              ? <Share2 className="size-4" aria-hidden="true" />
+                              : <Link2 className="size-4" aria-hidden="true" />}
+                            {scope === 'public' ? 'Copy share link' : 'Copy admin link'}
+                          </MenuItem>
+                        )}
+                        {authenticated && (
+                          <>
+                            <MenuItem value="move" className="ui-menu-item" onClick={(event) => event.stopPropagation()}>
+                              <Share2 className="size-4" aria-hidden="true" />
+                              {scope === 'private' ? 'Publish to public' : 'Unpublish'}
+                            </MenuItem>
+                            <MenuSeparator className="ui-menu-separator" />
+                            <MenuItem value="delete" className="ui-menu-item" data-tone="danger" onClick={(event) => event.stopPropagation()}>
+                              <Trash2 className="size-4" aria-hidden="true" /> Delete file
+                            </MenuItem>
+                          </>
+                        )}
+                      </MenuContent>
+                    </Menu>
+                  </ListboxItem>
+                );
+              })}
+            </Listbox>
+          )}
+        </ScrollAreaViewport>
+        <ScrollAreaScrollbar orientation="vertical">
+          <ScrollAreaThumb />
+        </ScrollAreaScrollbar>
+      </ScrollArea>
+    </>
   );
 }
