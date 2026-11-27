@@ -932,3 +932,11 @@ test('MonitorManager.refreshCertificates bypasses the throttle, merges subset, a
   assert.equal(all.items.length, 2);
   assert.ok(all.items.every((c) => c.status === 'error'));
 });
+
+test('the self-signed bypass only applies to https URLs', async () => {
+  const { needsTlsBypass } = await import('./monitor.js');
+  assert.equal(needsTlsBypass('http://10.1.2.1:3000', true), false);
+  assert.equal(needsTlsBypass('https://10.1.2.1', true), true);
+  assert.equal(needsTlsBypass('https://10.1.2.1', false), false);
+  assert.equal(needsTlsBypass('not a url', true), false);
+});

@@ -7,6 +7,7 @@ import { useShell } from '../../components/shell/AppShell';
 import { useMonitorOverview } from '../useMonitorOverview';
 import { useTabRotation, type MonitorTab } from '../useTabRotation';
 import { stripHtml } from '../format';
+import { collectIssues } from '../issues';
 import { SummaryTiles } from './SummaryTiles';
 import { AlertsRail } from './AlertsRail';
 import { ServerTab } from './ServerTab';
@@ -78,6 +79,7 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
 
   const status = error ? 'unknown' : overview?.globalStatus ?? 'unknown';
   const firing = overview?.alerts?.firing ?? [];
+  const issues = useMemo(() => collectIssues(overview), [overview]);
   const updated = lastUpdated?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const pollSeconds = Math.round((overview?.pollIntervalMs ?? 5000) / 1000);
   const banner = useMemo(() => {
@@ -130,7 +132,7 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
             <span className="ui-chip mv-status" data-tone={STATUS_TONE[status]}>
               <span className="ui-live-dot" aria-hidden="true" />
               {error ? 'Offline' : STATUS_TEXT[status]}
-              {firing.length > 0 && !error ? ` · ${firing.length} firing` : ''}
+              {!error && firing.length > 0 ? ` · ${firing.length} firing` : !error && issues.length > 0 && status !== 'ok' ? ` · ${issues.length} to check` : ''}
             </span>
           )}
           <IconButton label="Monitor settings" onClick={onOpenSettings}>
@@ -203,7 +205,7 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
           <TabsPanel value="power" className="mv-tabpanel"><PowerTab solar={overview?.solar ?? null} /></TabsPanel>
         </Tabs>
 
-        <AlertsRail firing={firing} resolved={overview?.alerts?.recentlyResolved ?? []} />
+        <AlertsRail firing={firing} resolved={overview?.alerts?.recentlyResolved ?? []} issues={issues} />
       </div>
     </div>
   );

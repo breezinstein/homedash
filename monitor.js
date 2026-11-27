@@ -217,8 +217,15 @@ async function fetchJson(url, username, password) {
   }
 }
 
+// The self-signed bypass needs Node's https module, which only speaks TLS. A
+// plain http:// URL with "allow self-signed" ticked must still use fetch.
+export function needsTlsBypass(url, insecureTls) {
+  if (!insecureTls) return false;
+  try { return new URL(url).protocol === 'https:'; } catch { return false; }
+}
+
 async function fetchOpnsenseJson(url, headers, insecureTls) {
-  if (!insecureTls) {
+  if (!needsTlsBypass(url, insecureTls)) {
     const response = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     return response.ok ? response.json() : null;
   }
@@ -952,7 +959,7 @@ export async function fetchOpnsense(opnConfigs) {
       }
     };
 
-    if (!o.insecureTls) {
+    if (!needsTlsBypass(url, o.insecureTls === true)) {
       try {
         const res = await fetch(url, {
           method: 'POST',
@@ -1262,7 +1269,7 @@ export async function fetchNtopng(ntopConfigs) {
   async function doGet(path, hdrs) {
     const url = `${base}${path}`;
     try {
-      if (!insecureTls) {
+      if (!needsTlsBypass(url, insecureTls)) {
         const res = await fetch(url, { headers: hdrs, redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (res.status < 200 || res.status >= 300) return { ok: false, status: res.status };
         const ct = res.headers.get('content-type') || '';
@@ -1725,7 +1732,7 @@ export async function fetchHomeAssistant(haConfigs) {
   async function haGet(path) {
     const url = `${base}${path}`;
     try {
-      if (!insecureTls) {
+      if (!needsTlsBypass(url, insecureTls)) {
         const res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (res.status < 200 || res.status >= 300) return { ok: false, status: res.status };
         const ct = res.headers.get('content-type') || '';

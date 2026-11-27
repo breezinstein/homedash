@@ -64,6 +64,9 @@ describe('MonitorView', () => {
     expect(screen.getByRole('alert').textContent).toContain('bravo disk at 95%');
     const tab = screen.getByRole('tab', { name: 'Server' });
     expect(tab.getAttribute('aria-selected')).toBe('true');
+    const rail = screen.getByRole('complementary', { name: 'Alerts' });
+    expect(within(rail).getByText('Needs attention')).toBeTruthy();
+    expect(within(rail).getByText('charlie is down')).toBeTruthy();
     const panel = screen.getByRole('tabpanel');
     expect(within(panel).getByRole('heading', { name: 'alpha' })).toBeTruthy();
   });

@@ -122,12 +122,11 @@ function ArrPanel({ arr }: { arr: ArrSnapshot | null }) {
   if (!arr || arr.instances.length === 0) {
     return <MonPanel title="Sonarr / Radarr" icon={Film}><Empty>Add Sonarr or Radarr in Settings → Sonarr / Radarr.</Empty></MonPanel>;
   }
-  const warnings = arr.instances.flatMap((i) => i.healthWarnings.map((w) => ({ inst: appName(i.name, i.type), w })));
   return (
     <MonPanel
       title="Sonarr / Radarr"
       icon={Film}
-      actions={warnings.length ? <Chip tone="warning">{warnings.length} health {warnings.length === 1 ? 'warning' : 'warnings'}</Chip> : <Chip tone="success">Healthy</Chip>}
+      actions={arr.instances.some((i) => !i.healthOk) ? <Chip tone="warning">Warnings in Alerts</Chip> : <Chip tone="success">Healthy</Chip>}
     >
       <div className="mv-inst-grid">
         {arr.instances.map((inst) => (
@@ -137,7 +136,7 @@ function ArrPanel({ arr }: { arr: ArrSnapshot | null }) {
               {inst.status === 'down'
                 ? <Chip tone="danger">Unreachable</Chip>
                 : inst.healthOk ? <Chip tone="success">Healthy</Chip>
-                : <Chip tone="warning">{inst.healthWarnings.length} {inst.healthWarnings.length === 1 ? 'warning' : 'warnings'}</Chip>}
+                : <Chip tone="warning">See Alerts</Chip>}
             </div>
             <dl className="mv-pairs">
               <div><dt>Queue</dt><dd>{inst.queueCount}</dd></div>
@@ -146,11 +145,6 @@ function ArrPanel({ arr }: { arr: ArrSnapshot | null }) {
           </div>
         ))}
       </div>
-      {warnings.slice(0, 3).map(({ inst, w }) => (
-        <InlineAlert key={`${inst}-${w}`} tone="warning" className="mv-inset">
-          <b>{inst}:</b> {w}
-        </InlineAlert>
-      ))}
       {arr.queue.length === 0 ? (
         <Empty>The download queue is empty.</Empty>
       ) : (

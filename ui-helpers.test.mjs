@@ -102,3 +102,24 @@ test('rolling history keeps one window and one sample per timestamp', () => {
   assert.equal(points, '0.0,20.0 100.0,0.0');
   assert.deepEqual(last, [100, 0]);
 });
+
+import { collectIssues } from './src/monitor/issues.ts';
+
+test('issues explain a degraded monitor: down sources, hosts, containers and Arr warnings', () => {
+  const issues = collectIssues({
+    hosts: [{ host: { id: 'a', name: 'alpha' }, status: 'down', error: 'refused' }, { host: { id: 'b', name: 'bravo' }, status: 'ok' }],
+    docker: { problems: [{ name: 'immich-ml', image: 'x', state: 'running', health: 'unhealthy' }] },
+    ntopng: { status: 'down', error: 'timeout' },
+    solar: { status: 'ok' },
+    arr: { status: 'ok', instances: [{ name: '', type: 'radarr', status: 'ok', healthWarnings: ['Indexer down'] }] },
+  });
+  assert.deepEqual(issues.map((i) => i.title), [
+    'alpha is down',
+    'immich-ml is unhealthy',
+    "ntopng isn't answering",
+    'Radarr health warning',
+  ]);
+  assert.equal(issues[2].detail, 'timeout');
+  assert.equal(issues[3].detail, 'Indexer down');
+  assert.deepEqual(collectIssues(null), []);
+});

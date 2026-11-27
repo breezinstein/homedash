@@ -11,13 +11,14 @@ import {
 } from '@ui-sdk/react/timeline';
 import type { AlertInstance, Severity } from '../../types';
 import { formatAgo, formatDuration, stripHtml } from '../format';
+import type { MonitorIssue } from '../issues';
 import { Chip } from './parts';
 
 const SEV_RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2 };
 const SEV_LABEL: Record<Severity, string> = { critical: 'Critical', warning: 'Warning', info: 'Info' };
 
-/** Firing alerts by severity, then recently resolved ones as a timeline. */
-export function AlertsRail({ firing, resolved }: { firing: AlertInstance[]; resolved: AlertInstance[] }) {
+/** Firing alerts by severity, then what else needs a look, then recently resolved ones as a timeline. */
+export function AlertsRail({ firing, resolved, issues = [] }: { firing: AlertInstance[]; resolved: AlertInstance[]; issues?: MonitorIssue[] }) {
   const sorted = [...firing].sort((a, b) => SEV_RANK[a.severity] - SEV_RANK[b.severity] || b.since - a.since);
   return (
     <aside className="mv-rail" aria-label="Alerts">
@@ -25,7 +26,7 @@ export function AlertsRail({ firing, resolved }: { firing: AlertInstance[]; reso
         <Bell className="size-3.5 shrink-0" aria-hidden="true" />
         <h2 className="mv-panel-title">Alerts</h2>
         <span className="ml-auto">
-          {firing.length ? <Chip tone="danger">{firing.length} firing</Chip> : <Chip tone="success">All clear</Chip>}
+          {firing.length ? <Chip tone="danger">{firing.length} firing</Chip> : issues.length ? <Chip tone="warning">{issues.length} to check</Chip> : <Chip tone="success">All clear</Chip>}
         </span>
       </header>
       <ScrollArea className="mv-rail-scroll" aria-label="Alert list">
@@ -49,7 +50,24 @@ export function AlertsRail({ firing, resolved }: { firing: AlertInstance[]; reso
               </ul>
             </>
           )}
-          {sorted.length === 0 && <p className="mv-empty mv-section-pad">Nothing is firing.</p>}
+          {sorted.length === 0 && <p className="mv-empty mv-section-pad">No alert rules are firing.</p>}
+
+          {issues.length > 0 && (
+            <>
+              <h3 className="mv-section mv-section-pad">Needs attention</h3>
+              <ul className="mv-alerts">
+                {issues.map((issue) => (
+                  <li key={issue.id} className="mv-alert" data-severity={issue.tone === 'danger' ? 'critical' : 'warning'} data-kind="issue">
+                    <span className="mv-alert-bar" aria-hidden="true" />
+                    <div className="min-w-0">
+                      <p className="mv-alert-title">{issue.title}</p>
+                      {issue.detail ? <p className="mv-alert-meta">{issue.detail}</p> : null}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
 
           {resolved.length > 0 && (
             <>
