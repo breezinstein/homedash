@@ -290,6 +290,13 @@ function SettingsBody({ initialSection, onSectionChange }: SettingsViewProps) {
     return filteredNavSections.find((s) => s.key === active) ?? filteredNavSections[0] ?? null;
   }, [active, filteredNavSections, hasQuery]);
 
+  // On phones the section list scrolls sideways; keep the open section in view.
+  useEffect(() => {
+    if (!section) return;
+    const tab = document.querySelector<HTMLElement>(`.ui-settings-tabs [data-value="${section.key}"], .ui-settings-tabs [aria-selected="true"]`);
+    tab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [section]);
+
   const jump = (key: string) => {
     setSearchQuery('');
     if (NAV_SECTIONS.some((s) => s.key === key)) setActive(key as SectionKey);

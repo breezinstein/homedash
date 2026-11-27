@@ -18,6 +18,13 @@ A modern, responsive dashboard for managing homelab services built with React, T
   show metrics **and the Docker containers** running on each host, all from one
   panel. Password-protected Glances instances are supported via optional
   username/password (HTTP Basic auth)
+- **Monitor**: A live homelab overview at `/monitor`, inside the app (no
+  sign-in needed to view): servers, Docker, media, network, power and Home
+  Assistant on rotating tabs, with an alerts rail. **Kiosk** hides the
+  sidebar behind a floating button and goes full screen for wall displays.
+  Its sources and alert rules live in Settings under Monitor; Glances
+  servers are one list (Settings → Sources → Servers) shared with Server
+  stats, with a "Show on monitor" switch per server.
 - **Inverter Monitor**: Monitor one or more solar inverters running
   [Solar Assistant](https://solar-assistant.io/). HomeDash proxies their REST
   API (`/api/v1/metrics`) and shows live PV, load, grid and battery readings in
