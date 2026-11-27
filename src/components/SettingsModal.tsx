@@ -30,7 +30,7 @@ import { NotificationsSettings } from './notifications/NotificationsSettings';
 import { getThemeByName, themePresets } from '../themes';
 import type { ThemePreset } from '../themes';
 import { applyThemeAttribute, applyThemeColors } from '../lib/theme';
-import { ModalShell, useConfirm } from './ui';
+import { Modal, useConfirm } from './ui';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -238,8 +238,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   return (
     <>
-      <ModalShell onClose={onClose} ariaLabel="Settings">
-        <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-5xl shadow-2xl max-h-[90vh] sm:max-h-[86vh] flex flex-col overflow-hidden">
+      <Modal onClose={onClose} label="Settings" size="xl" bare>
+        <div className="flex h-[min(88dvh,54rem)] flex-col overflow-hidden">
 
           {/* Header */}
           <header className="flex items-center gap-3 p-4 sm:p-5 border-b border-[var(--color-border)] flex-shrink-0">
@@ -746,7 +746,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
             </main>
           </div>
         </div>
-      </ModalShell>
+      </Modal>
 
       {showCategoryModal && (
         <CategoryModal

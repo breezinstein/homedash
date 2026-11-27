@@ -1,4 +1,3 @@
-export { Header } from './Header';
 export { ServiceCard } from './ServiceCard';
 export { CategorySection } from './CategorySection';
 export { ServiceModal } from './ServiceModal';

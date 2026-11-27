@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
 import type { Clip } from '../types';
-import { ModalShell, useConfirm, useToast } from './ui';
+import { Modal, useConfirm, useToast } from './ui';
 
 interface ClipboardManagerProps {
   onClose: () => void;
@@ -70,7 +70,7 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Esc inside the editor cancels the editor first. ModalShell's Esc
+  // Esc inside the editor cancels the editor first. the dialog's Esc
   // handler is suppressed while we're editing (see `dismissOnEscape` below)
   // so the second press will dismiss the modal.
   useEffect(() => {
@@ -232,18 +232,20 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
   };
 
   return (
-    <ModalShell
+    <Modal
       onClose={onClose}
-      ariaLabel="Multi-clipboard"
+      label="Multi-clipboard"
+      size="lg"
+      bare
       dismissOnBackdrop={editor.mode === 'idle'}
       dismissOnEscape={editor.mode === 'idle'}
     >
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-3xl shadow-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col">
+      <div className="flex h-[min(86dvh,52rem)] flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between p-3 sm:p-4 border-b border-[var(--color-border)]">
+      <div className="ui-panel-head justify-between">
         <div className="flex items-center gap-2">
           <ClipboardIcon className="w-5 h-5 text-[var(--color-primary)]" />
-          <h2 id="clipboard-title" className="text-base sm:text-lg font-semibold text-[var(--color-text-primary)]">
+          <h2 id="clipboard-title" className="ui-panel-title">
             Multi-Clipboard
           </h2>
           <span className="text-xs text-[var(--color-text-secondary)] hidden sm:inline">
@@ -252,7 +254,7 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
         </div>
         <button
           onClick={onClose}
-          className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] active:bg-[var(--color-border)] rounded-lg transition-colors"
+          className="ui-dialog-close"
           title="Close (Esc)"
           aria-label="Close clipboard"
         >
@@ -514,6 +516,6 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
         })}
       </div>
       </div>
-    </ModalShell>
+    </Modal>
   );
 }

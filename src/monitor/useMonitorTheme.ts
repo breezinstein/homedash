@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { configApi } from '../api/configApi';
 import { applyCustomCss } from '../lib/customCss';
 import { applyThemeAttribute, applyThemeColors } from '../lib/theme';
+import { applyThemeType } from '../lib/themeType';
 import type { DashboardConfig } from '../types';
 
 // The /monitor page is its own root tree (no DashboardProvider), so it must
@@ -14,7 +15,10 @@ const CONFIG_STORAGE_KEY = 'homedash-config';
 
 function applyAppearance(config?: Partial<DashboardConfig> | null) {
   if (!config) return;
-  if (config.colors) applyThemeColors(config.colors);
+  if (config.colors) {
+    applyThemeColors(config.colors);
+    applyThemeType(config.theme, config.colors);
+  }
   applyThemeAttribute(config.theme);
   applyCustomCss(config.settings?.customCSS);
 }

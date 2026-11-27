@@ -13,6 +13,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@ui-sdk/core": "^0.1.0-beta.17",
+    "@ui-sdk/react": "^0.1.0-beta.17",
     "compression": "^1.8.1",
     "express": "^5.1.0",
     "lucide-react": "^0.468.0",

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { Lock, X } from 'lucide-react';
+import { Lock } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { ModalShell } from './ui/ModalShell';
+import { Modal } from './ui/Modal';
+import { FieldRow, Input } from './ui/Field';
+import { Button } from './ui/Button';
 
 interface LoginModalProps {
   onClose?: () => void;
-  // When true, the modal cannot be dismissed (used when a 401 forces sign-in).
+  /** When true the dialog cannot be dismissed: a 401 forced the sign-in. */
   forced?: boolean;
 }
 
@@ -17,7 +19,8 @@ export function LoginModal({ onClose, forced = false }: LoginModalProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    inputRef.current?.focus();
+    const id = setTimeout(() => inputRef.current?.focus(), 0);
+    return () => clearTimeout(id);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -27,7 +30,7 @@ export function LoginModal({ onClose, forced = false }: LoginModalProps) {
     try {
       const ok = await login(password);
       if (!ok) {
-        setError('Invalid password');
+        setError('That password is not right.');
         setPassword('');
         inputRef.current?.focus();
       } else {
@@ -41,71 +44,41 @@ export function LoginModal({ onClose, forced = false }: LoginModalProps) {
   };
 
   return (
-    <ModalShell
-      onClose={() => onClose?.()}
-      dismissOnBackdrop={!forced}
+    <Modal
+      onClose={() => { if (!forced) onClose?.(); }}
+      dismissOnBackdrop={false}
       dismissOnEscape={!forced}
-      zIndex={60}
-      ariaLabel="Sign in"
-    >
-      <div className="w-full max-w-sm rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] shadow-2xl">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]">
-          <div className="flex items-center gap-2">
-            <Lock className="w-5 h-5 text-[var(--color-primary)]" />
-            <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">Sign in</h2>
-          </div>
+      size="sm"
+      icon={<div className="grid size-9 place-items-center rounded-full bg-[var(--accent-soft)] text-[var(--color-primary)]"><Lock className="size-4" /></div>}
+      title="Sign in"
+      description="Enter the admin password to manage services, settings and files."
+      footer={
+        <>
           {!forced && (
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] transition-colors"
-              aria-label="Close"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            <Button type="button" variant="secondary" onClick={onClose} disabled={submitting}>
+              Cancel
+            </Button>
           )}
-        </div>
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            Enter the admin password to manage services, settings, and files.
-          </p>
-          <div>
-            <label htmlFor="homedash-admin-password" className="sr-only">Admin password</label>
-            <input
-              id="homedash-admin-password"
-              ref={inputRef}
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-              className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-              disabled={submitting}
-            />
-          </div>
-          {error && (
-            <p className="text-sm text-[var(--color-error)]" role="alert">{error}</p>
-          )}
-          <div className="flex items-center justify-end gap-2">
-            {!forced && (
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-3 py-2 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-            )}
-            <button
-              type="submit"
-              className="px-4 py-2 rounded-lg bg-[var(--color-primary)] text-white text-sm font-medium hover:bg-[var(--color-primary)]/80 disabled:opacity-50 transition-colors"
-              disabled={submitting || !password}
-            >
-              {submitting ? 'Signing in…' : 'Sign in'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </ModalShell>
+          <Button type="submit" form="login-form" variant="primary" disabled={submitting || !password}>
+            {submitting ? 'Signing in…' : 'Sign in'}
+          </Button>
+        </>
+      }
+    >
+      <form id="login-form" onSubmit={handleSubmit}>
+        <FieldRow label="Admin password" error={error}>
+          <Input
+            ref={inputRef}
+            value={password}
+            onValueChange={setPassword}
+            type="password"
+            autoComplete="current-password"
+            placeholder="Password"
+            disabled={submitting}
+            invalid={Boolean(error)}
+          />
+        </FieldRow>
+      </form>
+    </Modal>
   );
 }

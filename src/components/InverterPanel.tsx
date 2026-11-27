@@ -21,7 +21,7 @@ import {
 import { configApi } from '../api/configApi';
 import { useDashboard } from '../context/DashboardContext';
 import type { InverterServer, InverterStats, InverterMetric, InverterDevice, BatteryRuntime } from '../types';
-import { ModalShell, useConfirm } from './ui';
+import { Modal, useConfirm } from './ui';
 
 interface InverterPanelProps {
   onClose: () => void;
@@ -532,10 +532,10 @@ export function InverterPanel({ onClose }: InverterPanelProps) {
   };
 
   return (
-    <ModalShell onClose={onClose} ariaLabel="Inverter Monitor">
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-2xl shadow-2xl max-h-[90vh] sm:max-h-[80vh] flex flex-col">
+    <Modal onClose={onClose} label="Inverter monitor" size="lg" bare>
+      <div className="flex max-h-[min(82dvh,46rem)] flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-[var(--color-border)]">
+        <div className="ui-panel-head justify-between">
           <div className="flex items-center gap-2">
             {managing && inverters.length > 0 ? (
               <button
@@ -548,13 +548,13 @@ export function InverterPanel({ onClose }: InverterPanelProps) {
             ) : (
               <Sun className="w-5 h-5 text-[var(--color-primary)]" />
             )}
-            <h2 className="text-base sm:text-lg font-semibold text-[var(--color-text-primary)]">
+            <h2 className="ui-panel-title">
               {managing ? 'Manage Inverters' : 'Inverter Monitor'}
             </h2>
           </div>
           <button
             onClick={onClose}
-            className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            className="ui-dialog-close"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -678,6 +678,6 @@ export function InverterPanel({ onClose }: InverterPanelProps) {
           )}
         </div>
       </div>
-    </ModalShell>
+    </Modal>
   );
 }

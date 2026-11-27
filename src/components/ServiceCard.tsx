@@ -1,9 +1,10 @@
 import { memo, useState, useEffect } from 'react';
 import type { Service } from '../types';
-import { ExternalLink, Edit2, Trash2, GripVertical } from 'lucide-react';
+import { ArrowUpRight, Edit2, GripVertical, MoreHorizontal, Trash2 } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
 import { configApi } from '../api/configApi';
 import { useConfirm, useToast } from './ui';
+import { Menu, MenuContent, MenuItem, MenuTrigger } from '@ui-sdk/react/menu';
 
 interface ServiceCardProps {
   service: Service;
@@ -14,29 +15,43 @@ interface ServiceCardProps {
   onDragEnd?: () => void;
 }
 
-// Check if an icon URL is external (not local/uploads)
 function isExternalIcon(url: string): boolean {
   if (!url) return false;
-  // Local icons start with / or are relative paths
   if (url.startsWith('/uploads/') || url.startsWith('/icons/')) return false;
-  // External icons have http(s) protocol
   return url.startsWith('http://') || url.startsWith('https://');
+}
+
+function ServiceIcon({ service, url }: { service: Service; url: string }) {
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setFailed(false);
+  }, [url]);
+
+  return (
+    <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-[10px] border border-[var(--border-soft)] bg-[var(--surface-sunken)]">
+      {!failed && url ? (
+        <img src={url} alt="" className="size-6 object-contain" onError={() => setFailed(true)} />
+      ) : (
+        <span className="text-[0.9375rem] font-semibold text-[var(--color-primary)]">
+          {service.name.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </span>
+  );
 }
 
 export const ServiceCard = memo(function ServiceCard({ service, index, localIndex, onEdit, onDragStart, onDragEnd }: ServiceCardProps) {
   const { isEditMode, deleteService } = useDashboard();
   const confirm = useConfirm();
   const toast = useToast();
-  const [imgError, setImgError] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [cachedIconUrl, setCachedIconUrl] = useState<string | null>(null);
 
   // Cache external icons. Because the proxy result is pinned on the page's
-  // first request, a degraded upstream (icon container down, returning 400s)
-  // previously produced a one-shot fallback the page never retried — so icons
-  // stayed missing until a full refresh after recovery. We now retry on a
-  // short interval until the icon is served from the cache, so the card
-  // self-heals without any manual refresh.
+  // first request, a degraded upstream previously produced a one-shot fallback
+  // the page never retried. Retry on a short interval until the icon is served
+  // from the cache, so the card self-heals without a manual refresh.
   useEffect(() => {
     if (service.icon && isExternalIcon(service.icon)) {
       let cancelled = false;
@@ -46,10 +61,8 @@ export const ServiceCard = memo(function ServiceCard({ service, index, localInde
           .then(result => {
             if (cancelled) return;
             if (result.url && result.url.startsWith('/icons/')) {
-              // Stable cached icon — done.
               setCachedIconUrl(result.url);
             } else {
-              // Degraded / not yet cached: keep the letter avatar and retry.
               setCachedIconUrl(null);
               retryTimer = window.setTimeout(attempt, 30_000);
             }
@@ -65,125 +78,96 @@ export const ServiceCard = memo(function ServiceCard({ service, index, localInde
         cancelled = true;
         if (retryTimer) window.clearTimeout(retryTimer);
       };
-    } else {
-      setCachedIconUrl(service.icon || null);
     }
+    setCachedIconUrl(service.icon || null);
   }, [service.icon]);
 
   const displayIconUrl = cachedIconUrl || service.icon;
 
-  // When the effective icon URL changes (e.g. a degraded fallback is replaced
-  // by a freshly cached icon), clear the error so the <img> is recreated and
-  // actually attempts to load instead of staying stuck on the letter avatar.
-  useEffect(() => {
-    setImgError(false);
-  }, [displayIconUrl]);
-
   const handleDragStart = (e: React.DragEvent) => {
     setIsDragging(true);
-    if (onDragStart) {
-      onDragStart(e, service, localIndex);
-    }
+    onDragStart?.(e, service, localIndex);
   };
 
   const handleDragEnd = () => {
     setIsDragging(false);
-    if (onDragEnd) {
-      onDragEnd();
-    }
+    onDragEnd?.();
   };
 
-  const cardClassName = `group relative bg-[var(--color-surface)] rounded-xl border border-[var(--color-border)] p-4 transition-all duration-200 ${
-    isEditMode
-      ? 'cursor-move'
-      : 'block cursor-pointer hover:border-[var(--color-primary)] hover:shadow-lg hover:shadow-[var(--color-primary)]/10 active:scale-[0.98] active:bg-[var(--color-background)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-background)]'
-  } ${isDragging ? 'opacity-50' : ''}`;
+  const handleDelete = async () => {
+    const ok = await confirm({
+      title: 'Delete service',
+      message: `Delete "${service.name}"? This cannot be undone.`,
+      confirmLabel: 'Delete',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    deleteService(index);
+    toast.success('Service deleted');
+  };
 
-  const cardContent = (
+  const body = (
     <>
-      {isEditMode && (
-        <div className="absolute top-2 right-2 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onEdit(index);
-            }}
-            className="p-2 -m-0.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/70 transition-colors"
-            title="Edit"
-            aria-label="Edit service"
-          >
-            <Edit2 className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={async (e) => {
-              e.stopPropagation();
-              const ok = await confirm({
-                title: 'Delete service',
-                message: `Delete "${service.name}"? This cannot be undone.`,
-                confirmLabel: 'Delete',
-                tone: 'danger',
-              });
-              if (!ok) return;
-              deleteService(index);
-              toast.success('Service deleted');
-            }}
-            className="p-2 -m-0.5 bg-[var(--color-error)] text-white rounded-lg hover:bg-[var(--color-error)]/80 active:bg-[var(--color-error)]/70 transition-colors"
-            title="Delete"
-            aria-label="Delete service"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
-
-      {isEditMode && (
-        <div className="absolute top-2 left-2 text-[var(--color-text-secondary)] opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-          <GripVertical className="w-4 h-4" />
-        </div>
-      )}
-
-      <div className="flex items-start gap-3">
-        <div className="w-12 h-12 rounded-lg bg-[var(--color-background)] flex items-center justify-center flex-shrink-0 overflow-hidden">
-          {!imgError && displayIconUrl ? (
-            <img
-              src={displayIconUrl}
-              alt={service.name}
-              className="w-8 h-8 object-contain"
-              onError={() => setImgError(true)}
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] flex items-center justify-center text-white font-bold text-sm">
-              {service.name.charAt(0).toUpperCase()}
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-[var(--color-text-primary)] truncate">
-              {service.name}
-            </h3>
-            {!isEditMode && (
-              <ExternalLink className="w-3.5 h-3.5 text-[var(--color-text-secondary)] opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0" />
-            )}
-          </div>
-          <p className="text-sm text-[var(--color-text-secondary)] line-clamp-2 sm:truncate">
+      <ServiceIcon service={service} url={displayIconUrl} />
+      <span className="min-w-0 flex-1">
+        <span
+          className={`block truncate text-[0.8125rem] font-semibold text-[var(--color-text-primary)] ${
+            isEditMode ? 'pr-6' : ''
+          }`}
+        >
+          {service.name}
+        </span>
+        {service.description ? (
+          <span className="mt-0.5 line-clamp-2 block text-xs leading-snug text-[var(--color-text-secondary)]">
             {service.description}
-          </p>
-        </div>
-      </div>
+          </span>
+        ) : null}
+      </span>
+      {!isEditMode && (
+        <ArrowUpRight
+          className="pointer-events-none absolute right-2.5 top-2.5 size-3.5 text-[var(--color-text-secondary)] opacity-0 transition-opacity group-hover:opacity-100"
+          aria-hidden="true"
+        />
+      )}
     </>
   );
 
   if (isEditMode) {
     return (
       <div
-        className={cardClassName}
+        className="svc-card group"
+        data-edit
+        data-dragging={isDragging || undefined}
         draggable
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        {cardContent}
+        <span className="absolute left-1 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100">
+          <GripVertical className="size-3.5" aria-hidden="true" />
+        </span>
+        <div className="flex w-full items-start gap-3 pl-2">
+          {body}
+        </div>
+        <div className="absolute right-1.5 top-1.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+          <Menu
+            onAction={(action) => {
+              if (action === 'edit') onEdit(index);
+              if (action === 'delete') void handleDelete();
+            }}
+          >
+            <MenuTrigger aria-label={`Actions for ${service.name}`} className="ui-btn" data-variant="ghost" data-size="icon">
+              <MoreHorizontal className="size-4" />
+            </MenuTrigger>
+            <MenuContent className="ui-popup">
+              <MenuItem value="edit" className="ui-menu-item">
+                <Edit2 className="size-4" aria-hidden="true" /> Edit service
+              </MenuItem>
+              <MenuItem value="delete" className="ui-menu-item" data-tone="danger">
+                <Trash2 className="size-4" aria-hidden="true" /> Delete service
+              </MenuItem>
+            </MenuContent>
+          </Menu>
+        </div>
       </div>
     );
   }
@@ -193,9 +177,9 @@ export const ServiceCard = memo(function ServiceCard({ service, index, localInde
       href={service.url}
       target="_blank"
       rel="noopener noreferrer"
-      className={cardClassName}
+      className="svc-card group"
     >
-      {cardContent}
+      {body}
     </a>
   );
 });

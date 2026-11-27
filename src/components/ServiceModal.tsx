@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Service } from '../types';
-import { X, Upload, Link, Image } from 'lucide-react';
+import { Image, Link2, Upload } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
-import { ModalShell } from './ui';
+import { Modal } from './ui/Modal';
+import { FieldRow, Input, SelectField } from './ui/Field';
+import { Button } from './ui/Button';
+import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control';
 
 interface ServiceModalProps {
   service: Service | null;
@@ -17,11 +20,12 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
     url: '',
     icon: '',
     category: '',
-    description: ''
+    description: '',
   });
   const [iconMode, setIconMode] = useState<'url' | 'upload'>('url');
   const [previewIcon, setPreviewIcon] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (service) {
@@ -33,246 +37,156 @@ export function ServiceModal({ service, serviceIndex, onClose }: ServiceModalPro
         url: '',
         icon: '',
         category: config.categoryOrder[0] || '',
-        description: ''
+        description: '',
       });
+      setPreviewIcon('');
     }
   }, [service, config.categoryOrder]);
 
+  const setField = <K extends keyof Service>(key: K, value: Service[K]) => {
+    setFormData((prev) => ({ ...prev, [key]: value }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (serviceIndex !== null) {
-      updateService(serviceIndex, formData);
-    } else {
-      addService(formData);
-    }
+    if (serviceIndex !== null) updateService(serviceIndex, formData);
+    else addService(formData);
     onClose();
   };
 
-  const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setIsUploading(true);
-      try {
-        // Upload to server
-        const url = await uploadIcon(file);
-        setFormData({ ...formData, icon: url });
-        setPreviewIcon(url);
-      } catch (error) {
-        console.error('Failed to upload icon:', error);
-        // Fallback to base64
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64 = reader.result as string;
-          setFormData({ ...formData, icon: base64 });
-          setPreviewIcon(base64);
-        };
-        reader.readAsDataURL(file);
-      } finally {
-        setIsUploading(false);
-      }
+  const handleIconUpload = async (file: File) => {
+    setIsUploading(true);
+    try {
+      const url = await uploadIcon(file);
+      setFormData((prev) => ({ ...prev, icon: url }));
+      setPreviewIcon(url);
+    } catch (error) {
+      console.error('Failed to upload icon:', error);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setFormData((prev) => ({ ...prev, icon: base64 }));
+        setPreviewIcon(base64);
+      };
+      reader.readAsDataURL(file);
+    } finally {
+      setIsUploading(false);
     }
   };
 
   return (
-    <ModalShell
+    <Modal
       onClose={onClose}
       dismissOnBackdrop={false}
-      ariaLabel={service ? 'Edit service' : 'Add service'}
+      size="md"
+      title={service ? 'Edit service' : 'Add service'}
+      description={service ? 'Update where this card points and how it looks.' : 'Name it, point it at a URL, pick a category.'}
+      footer={
+        <>
+          <Button type="button" variant="secondary" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" form="service-form" variant="primary">
+            {service ? 'Save changes' : 'Add service'}
+          </Button>
+        </>
+      }
     >
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
-          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
-            {service ? 'Edit Service' : 'Add Service'}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
+      <form id="service-form" onSubmit={handleSubmit} className="space-y-4">
+        <div className="flex items-center gap-4">
+          <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-md)] border border-dashed border-[var(--border-strong)] bg-[var(--surface-sunken)]">
+            {previewIcon ? (
+              <img src={previewIcon} alt="" className="size-10 object-contain" />
+            ) : (
+              <Image className="size-6 text-[var(--text-tertiary)]" aria-hidden="true" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1 space-y-2">
+            <SegmentedControl
+              aria-label="Icon source"
+              className="ui-seg"
+              value={iconMode}
+              onValueChange={(value) => { if (value) setIconMode(value as 'url' | 'upload'); }}
+            >
+              <SegmentedControlIndicator />
+              <SegmentedControlItem value="url" className="ui-seg-item">
+                <Link2 className="size-3.5" aria-hidden="true" /> URL
+              </SegmentedControlItem>
+              <SegmentedControlItem value="upload" className="ui-seg-item">
+                <Upload className="size-3.5" aria-hidden="true" /> Upload
+              </SegmentedControlItem>
+            </SegmentedControl>
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              {iconMode === 'url' ? 'Paste a direct image URL.' : 'PNG, SVG or WebP up to 2 MB.'}
+            </p>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto">
-          {/* Icon Preview */}
-          <div className="flex justify-center">
-            <div className="w-20 h-20 rounded-xl bg-[var(--color-background)] flex items-center justify-center overflow-hidden border-2 border-dashed border-[var(--color-border)]">
-              {previewIcon ? (
-                <img src={previewIcon} alt="Icon" className="w-12 h-12 object-contain" />
-              ) : (
-                <Image className="w-8 h-8 text-[var(--color-text-secondary)]" />
-              )}
-            </div>
-          </div>
-
-          {/* Icon Mode Toggle */}
-          <div className="flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={() => setIconMode('url')}
-              aria-pressed={iconMode === 'url'}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                iconMode === 'url'
-                  ? 'bg-[var(--color-primary)] text-white'
-                  : 'bg-[var(--color-background)] text-[var(--color-text-secondary)]'
-              }`}
-            >
-              <Link className="w-4 h-4" />
-              URL
-            </button>
-            <button
-              type="button"
-              onClick={() => setIconMode('upload')}
-              aria-pressed={iconMode === 'upload'}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                iconMode === 'upload'
-                  ? 'bg-[var(--color-primary)] text-white'
-                  : 'bg-[var(--color-background)] text-[var(--color-text-secondary)]'
-              }`}
-            >
-              <Upload className="w-4 h-4" />
-              Upload
-            </button>
-          </div>
-
-          {/* Icon Input */}
-          {iconMode === 'url' ? (
-            <div>
-              <label
-                htmlFor="service-icon-url"
-                className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
-              >
-                Icon URL
-              </label>
-              <input
-                id="service-icon-url"
-                type="url"
-                value={formData.icon}
-                onChange={(e) => {
-                  setFormData({ ...formData, icon: e.target.value });
-                  setPreviewIcon(e.target.value);
-                }}
-                placeholder="https://example.com/icon.png"
-                className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)]"
-              />
-            </div>
-          ) : (
-            <div>
-              <label
-                htmlFor="service-icon-file"
-                className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
-              >
-                Upload Icon {isUploading && <span className="text-[var(--color-primary)]">(uploading...)</span>}
-              </label>
-              <input
-                id="service-icon-file"
-                type="file"
-                accept="image/*"
-                onChange={handleIconUpload}
-                disabled={isUploading}
-                className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] file:mr-4 file:py-1 file:px-3 file:rounded-lg file:border-0 file:bg-[var(--color-primary)] file:text-white file:cursor-pointer disabled:opacity-50"
-              />
-            </div>
-          )}
-
-          {/* Name */}
-          <div>
-            <label
-              htmlFor="service-name"
-              className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
-            >
-              Name *
-            </label>
-            <input
-              id="service-name"
-              type="text"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              required
-              placeholder="Service Name"
-              className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)]"
-            />
-          </div>
-
-          {/* URL */}
-          <div>
-            <label
-              htmlFor="service-url"
-              className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
-            >
-              URL *
-            </label>
-            <input
-              id="service-url"
+        {iconMode === 'url' ? (
+          <FieldRow label="Icon URL">
+            <Input
+              value={formData.icon}
+              onValueChange={(value) => {
+                setField('icon', value);
+                setPreviewIcon(value);
+              }}
+              placeholder="https://example.com/icon.png"
               type="url"
-              value={formData.url}
-              onChange={(e) => setFormData({ ...formData, url: e.target.value })}
-              required
-              placeholder="https://service.example.com"
-              className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)]"
             />
-          </div>
-
-          {/* Category */}
-          <div>
-            <label
-              htmlFor="service-category"
-              className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
-            >
-              Category *
-            </label>
-            <select
-              id="service-category"
-              value={formData.category}
-              onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-              required
-              className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)]"
-            >
-              <option value="">Select Category</option>
-              {config.categoryOrder.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Description */}
-          <div>
-            <label
-              htmlFor="service-description"
-              className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1"
-            >
-              Description
-            </label>
+          </FieldRow>
+        ) : (
+          <FieldRow label={isUploading ? 'Uploading…' : 'Icon file'}>
             <input
-              id="service-description"
-              type="text"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Brief description"
-              className="w-full px-3 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)]"
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              disabled={isUploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleIconUpload(file);
+              }}
+              className="ui-input text-xs file:mr-3 file:rounded-md file:border-0 file:bg-[var(--accent-soft)] file:px-2.5 file:py-1 file:text-[var(--color-primary)]"
             />
-          </div>
+          </FieldRow>
+        )}
 
-          {/* Actions */}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2.5 sm:py-2 bg-[var(--color-background)] text-[var(--color-text-primary)] rounded-lg hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2.5 sm:py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/80 transition-colors"
-            >
-              {service ? 'Save Changes' : 'Add Service'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </ModalShell>
+        <FieldRow label="Name">
+          <Input
+            value={formData.name}
+            onValueChange={(value) => setField('name', value)}
+            required
+            placeholder="Service name"
+          />
+        </FieldRow>
+
+        <FieldRow label="URL">
+          <Input
+            value={formData.url}
+            onValueChange={(value) => setField('url', value)}
+            required
+            type="url"
+            placeholder="https://service.example.com"
+          />
+        </FieldRow>
+
+        <FieldRow label="Category">
+          <SelectField
+            value={formData.category}
+            onValueChange={(value) => setField('category', value)}
+            placeholder="Select a category"
+            ariaLabel="Category"
+            options={config.categoryOrder.map((cat) => ({ value: cat, label: cat }))}
+          />
+        </FieldRow>
+
+        <FieldRow label="Description">
+          <Input
+            value={formData.description}
+            onValueChange={(value) => setField('description', value)}
+            placeholder="Brief description"
+          />
+        </FieldRow>
+      </form>
+    </Modal>
   );
 }

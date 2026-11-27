@@ -3,7 +3,7 @@ import { useDashboard } from '../context/DashboardContext';
 import { useBackups } from '../context/BackupsContext';
 import { X, Download, Upload, Trash2, RotateCcw, Save, Plus, Image } from 'lucide-react';
 import { configApi } from '../api/configApi';
-import { ModalShell, useConfirm, useToast } from './ui';
+import { Modal, useConfirm, useToast } from './ui';
 
 interface ServerBackup {
   name: string;
@@ -134,15 +134,15 @@ export function BackupManager({ onClose }: BackupManagerProps) {
   };
 
   return (
-    <ModalShell onClose={onClose} ariaLabel="Backup manager">
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-2xl shadow-2xl max-h-[90vh] sm:max-h-[80vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)]">
-          <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+    <Modal onClose={onClose} label="Backup manager" size="lg" bare>
+      <div className="flex max-h-[min(82dvh,46rem)] flex-col">
+        <div className="ui-panel-head justify-between">
+          <h2 className="ui-panel-title">
             Backup Manager
           </h2>
           <button
             onClick={onClose}
-            className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            className="ui-dialog-close"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -250,6 +250,6 @@ export function BackupManager({ onClose }: BackupManagerProps) {
           </div>
         </div>
       </div>
-    </ModalShell>
+    </Modal>
   );
 }

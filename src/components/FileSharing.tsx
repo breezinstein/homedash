@@ -25,7 +25,8 @@ import {
   type FileScope,
 } from '../api/filesApi';
 import type { CopypartyListing, CopypartyFile, CopypartyDir } from '../types';
-import { ModalShell, useConfirm, useToast } from './ui';
+import { Modal, useConfirm, useToast } from './ui';
+import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -68,53 +69,35 @@ export function FileSharing({ onClose }: FileSharingProps) {
   const [activeScope, setActiveScope] = useState<FileScope>(initialScope);
 
   return (
-    <ModalShell onClose={onClose} ariaLabel="File Sharing">
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-4xl shadow-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col">
-        <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-[var(--color-border)] shrink-0">
-          <span className="text-sm font-semibold text-[var(--color-text-primary)] shrink-0">
-            File Sharing
-          </span>
-          {authenticated && (
-            <div className="flex items-center bg-[var(--color-background)] rounded-lg p-0.5">
-              <button
-                onClick={() => setActiveScope('private')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                  activeScope === 'private'
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                }`}
-                title="Private area (admins only)"
-              >
-                <Lock className="w-3.5 h-3.5" />
-                Private
-              </button>
-              <button
-                onClick={() => setActiveScope('public')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
-                  activeScope === 'public'
-                    ? 'bg-[var(--color-primary)] text-white'
-                    : 'text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                }`}
-                title="Public share area (anyone with the link)"
-              >
-                <Globe className="w-3.5 h-3.5" />
-                Public
-              </button>
-            </div>
-          )}
-          {!authenticated && (
-            <span
-              className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border border-[var(--color-border)] text-[var(--color-text-secondary)]"
-              title="Sign in to upload, delete, or publish"
+    <Modal onClose={onClose} label="File sharing" size="xl" bare>
+      <div className="flex h-[min(86dvh,54rem)] flex-col">
+        <div className="ui-panel-head gap-3 shrink-0">
+          <span className="ui-panel-title shrink-0">File sharing</span>
+          {authenticated ? (
+            <SegmentedControl
+              aria-label="Area"
+              className="ui-seg"
+              value={activeScope}
+              onValueChange={(value) => { if (value) setActiveScope(value as FileScope); }}
             >
-              <Globe className="w-3 h-3" />
+              <SegmentedControlIndicator />
+              <SegmentedControlItem value="private" className="ui-seg-item" title="Private area (admins only)">
+                <Lock className="size-3.5" aria-hidden="true" /> Private
+              </SegmentedControlItem>
+              <SegmentedControlItem value="public" className="ui-seg-item" title="Public share area (anyone with the link)">
+                <Globe className="size-3.5" aria-hidden="true" /> Public
+              </SegmentedControlItem>
+            </SegmentedControl>
+          ) : (
+            <span className="ui-chip" title="Sign in to upload, delete, or publish">
+              <Globe className="size-3" aria-hidden="true" />
               Public (read-only)
             </span>
           )}
           <div className="flex-1" />
           <button
             onClick={onClose}
-            className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+            className="ui-dialog-close"
             aria-label="Close"
           >
             <X className="w-5 h-5" />
@@ -129,7 +112,7 @@ export function FileSharing({ onClose }: FileSharingProps) {
           scope={activeScope}
         />
       </div>
-    </ModalShell>
+    </Modal>
   );
 }
 
@@ -300,7 +283,7 @@ function ScopePane({ scope }: ScopePaneProps) {
   return (
     <>
       {/* Toolbar */}
-      <div className="flex items-center gap-3 px-4 sm:px-5 py-3 border-b border-[var(--color-border)] shrink-0">
+      <div className="ui-panel-head gap-3 shrink-0">
         <div className="flex items-center gap-1 flex-1 min-w-0 overflow-x-auto">
           <button
             onClick={() => navigate('/')}

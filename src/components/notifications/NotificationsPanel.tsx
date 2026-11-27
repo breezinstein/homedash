@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, Bell, Trash2, RefreshCw, BellOff, ChevronDown, ChevronRight } from 'lucide-react';
 import { useNotifications } from '../../context/NotificationsContext';
-import { ModalShell, useConfirm } from '../ui';
+import { Modal, useConfirm } from '../ui';
 import { NotificationCard } from './NotificationCard';
 
 interface NotificationsPanelProps {
@@ -82,12 +82,12 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
   };
 
   return (
-    <ModalShell onClose={onClose} ariaLabel="Notifications" className="sm:items-start sm:pt-20">
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-md shadow-2xl max-h-[90vh] sm:max-h-[70vh] flex flex-col">
-        <div className="flex items-center justify-between p-3 sm:p-4 border-b border-[var(--color-border)]">
+    <Modal onClose={onClose} label="Notifications" size="md" bare>
+      <div className="flex max-h-[min(78dvh,42rem)] flex-col">
+        <div className="ui-panel-head justify-between">
           <div className="flex items-center gap-2">
             <Bell className="w-5 h-5 text-[var(--color-text-primary)]" />
-            <h2 className="text-base sm:text-lg font-semibold text-[var(--color-text-primary)]">
+            <h2 className="ui-panel-title">
               Notifications
             </h2>
             <span className="flex items-center gap-1.5 text-xs text-[var(--color-text-secondary)] ml-1">
@@ -116,7 +116,7 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
             )}
             <button
               onClick={onClose}
-              className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
+              className="ui-dialog-close"
               aria-label="Close"
             >
               <X className="w-5 h-5" />
@@ -181,6 +181,6 @@ export function NotificationsPanel({ onClose }: NotificationsPanelProps) {
           )}
         </div>
       </div>
-    </ModalShell>
+    </Modal>
   );
 }
