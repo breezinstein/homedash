@@ -188,7 +188,7 @@ html[data-theme^="discovery"] body::after {
   opacity: var(--st-scanline-opacity);
 }
 
-html[data-theme^="discovery"] #root > div:not(.monitor-shell) {
+html[data-theme^="discovery"] #root > div {
   position: relative;
   z-index: 1;
   background: transparent !important;
@@ -411,138 +411,65 @@ html[data-theme^="discovery"] *::-webkit-scrollbar-thumb {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   /monitor — Discovery ops console
+   Monitor view — Discovery ops console
    ───────────────────────────────────────────────────────────────────── */
-html[data-theme^="discovery"] .monitor-shell {
-  --mon-bg: var(--st-bg) !important;
-  --mon-panel: var(--st-panel) !important;
-  --mon-surface: var(--st-panel-2) !important;
-  --mon-surface-2: var(--st-panel-3) !important;
-  --mon-border: var(--st-border) !important;
-  --mon-border-soft: var(--st-border-soft) !important;
-  --mon-border-faint: var(--st-border-faint) !important;
-  --mon-accent: var(--st-blue) !important;
-  --mon-accent-hover: var(--st-cyan) !important;
-  --mon-ok: var(--st-ok) !important;
-  --mon-warn: var(--st-warn) !important;
-  --mon-danger: var(--st-danger) !important;
-  --mon-text: var(--st-text) !important;
-  --mon-text-dim: var(--st-text-dim) !important;
-  --mon-text-muted: var(--st-text-muted) !important;
-  --mon-text-faint: var(--st-text-faint) !important;
-
-  background:
-    radial-gradient(1200px 800px at 50% -10%, var(--st-shell-glow-1), transparent 60%),
-    radial-gradient(900px 700px at 100% 100%, var(--st-shell-glow-2), transparent 55%),
-    repeating-linear-gradient(0deg, var(--st-grid) 0 1px, transparent 1px 44px),
-    repeating-linear-gradient(90deg, var(--st-grid) 0 1px, transparent 1px 44px),
-    var(--st-shell-base) !important;
-  background-attachment: fixed !important;
-  font-family: var(--st-body) !important;
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--st-cyan) 12%, transparent), inset 0 0 90px var(--st-glow);
-}
-
-/* Monitor header */
-html[data-theme^="discovery"] .monitor-header {
-  box-shadow: 0 1px 0 color-mix(in srgb, var(--st-cyan) 18%, transparent);
-}
-html[data-theme^="discovery"] .monitor-logo {
-  border-radius: var(--st-radius) !important;
-  border-color: transparent !important;
-  background: linear-gradient(135deg, var(--st-logo-1), var(--st-logo-2) 48%, var(--st-logo-3)) !important;
-  color: var(--st-on-accent) !important;
-  box-shadow: 0 0 20px color-mix(in srgb, var(--st-logo-1) 50%, transparent), inset 0 0 12px color-mix(in srgb, white 25%, transparent) !important;
-  transform: skewX(-6deg);
-}
-html[data-theme^="discovery"] .monitor-logo svg { transform: skewX(6deg); }
-html[data-theme^="discovery"] .monitor-title {
+html[data-theme^="discovery"] .mv { font-family: var(--st-body) !important; }
+html[data-theme^="discovery"] .mv-title {
   font-family: var(--st-display) !important;
-  font-size: 14px !important;
+  font-size: 15px !important;
   text-transform: uppercase;
   letter-spacing: 0.14em;
   text-shadow: 0 0 16px color-mix(in srgb, var(--st-cyan) 40%, transparent);
 }
-html[data-theme^="discovery"] .monitor-subtitle {
+html[data-theme^="discovery"] .mv-sub {
   color: var(--st-cyan) !important;
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 9.5px !important;
 }
-html[data-theme^="discovery"] .clock-time {
+html[data-theme^="discovery"] .mv-clock-time {
   font-family: var(--st-display) !important;
   color: var(--st-cyan) !important;
   text-shadow: 0 0 12px color-mix(in srgb, var(--st-cyan) 45%, transparent);
 }
-html[data-theme^="discovery"] .monitor-poll {
+html[data-theme^="discovery"] .mv-clock-sub {
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 9px !important;
   color: var(--st-text-faint) !important;
 }
-html[data-theme^="discovery"] .monitor-settings-btn {
-  border-radius: 2px !important;
-  border-color: var(--st-border) !important;
-  background: color-mix(in srgb, var(--st-blue) 8%, transparent) !important;
-  color: var(--st-cyan) !important;
-  box-shadow: inset 0 0 12px color-mix(in srgb, var(--st-blue) 8%, transparent);
-}
-html[data-theme^="discovery"] .monitor-settings-btn:hover {
-  background: color-mix(in srgb, var(--st-blue) 18%, transparent) !important;
-  border-color: var(--st-cyan) !important;
-  box-shadow: 0 0 16px color-mix(in srgb, var(--st-cyan) 28%, transparent);
-}
-html[data-theme^="discovery"] .status-pill {
+html[data-theme^="discovery"] .mv-status {
   border-radius: 2px !important;
   font-family: var(--st-display) !important;
   font-size: 10px !important;
   letter-spacing: 0.16em !important;
 }
-html[data-theme^="discovery"] .status-pill-dot { border-radius: 1px !important; }
-html[data-theme^="discovery"] .alert-strip {
+html[data-theme^="discovery"] .mv-status .ui-live-dot { border-radius: 1px !important; }
+html[data-theme^="discovery"] .mv .ui-alert {
   border-radius: 2px !important;
   border-left: 3px solid var(--st-amber) !important;
   letter-spacing: 0.06em;
 }
 
 /* Monitor cards and panels */
-html[data-theme^="discovery"] .card,
-html[data-theme^="discovery"] .node-card,
-html[data-theme^="discovery"] .net-v2-card,
-html[data-theme^="discovery"] .streams-panel,
-html[data-theme^="discovery"] .media-card,
-html[data-theme^="discovery"] .solar-summary-card,
-html[data-theme^="discovery"] .alerts-card {
+html[data-theme^="discovery"] .mv .ui-tile,
+html[data-theme^="discovery"] .mv-host,
+html[data-theme^="discovery"] .mv-card {
   position: relative;
   border-radius: var(--st-radius) !important;
   border-color: var(--st-border) !important;
   background: linear-gradient(180deg, var(--st-card-1), var(--st-card-2)) !important;
   box-shadow: inset 0 0 34px var(--st-glow), 0 10px 26px var(--st-shadow) !important;
 }
-html[data-theme^="discovery"] .card::before,
-html[data-theme^="discovery"] .node-card::before,
-html[data-theme^="discovery"] .net-v2-card::before,
-html[data-theme^="discovery"] .streams-panel::before,
-html[data-theme^="discovery"] .media-card::before,
-html[data-theme^="discovery"] .solar-summary-card::before,
-html[data-theme^="discovery"] .alerts-card::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 14px;
-  height: 14px;
-  border-top: 2px solid var(--st-cyan);
-  border-left: 2px solid var(--st-cyan);
-  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--st-cyan) 70%, transparent));
-  pointer-events: none;
+html[data-theme^="discovery"] .mv-tabs,
+html[data-theme^="discovery"] .mv-rail {
+  position: relative;
+  border-radius: var(--st-radius) !important;
+  border-color: var(--st-border-soft) !important;
+  background: linear-gradient(180deg, var(--st-panel), var(--st-card-2)) !important;
+  box-shadow: inset 0 0 40px var(--st-glow), 0 12px 30px var(--st-shadow) !important;
 }
-html[data-theme^="discovery"] .card::after,
-html[data-theme^="discovery"] .node-card::after,
-html[data-theme^="discovery"] .net-v2-card::after,
-html[data-theme^="discovery"] .streams-panel::after,
-html[data-theme^="discovery"] .media-card::after,
-html[data-theme^="discovery"] .solar-summary-card::after,
-html[data-theme^="discovery"] .alerts-card::after {
+html[data-theme^="discovery"] .mv-rail::after {
   content: "";
   position: absolute;
   right: 0;
@@ -554,337 +481,121 @@ html[data-theme^="discovery"] .alerts-card::after {
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--st-amber) 55%, transparent));
   pointer-events: none;
 }
-html[data-theme^="discovery"] .server-container {
-  border-radius: var(--st-radius) !important;
-  border-color: var(--st-border-soft) !important;
-  background: linear-gradient(180deg, var(--st-panel), var(--st-card-2)) !important;
-  box-shadow: inset 0 0 40px var(--st-glow), 0 12px 30px var(--st-shadow) !important;
-}
-html[data-theme^="discovery"] .net-v2-card,
-html[data-theme^="discovery"] .media-v2-card,
-html[data-theme^="discovery"] .ha-metric,
-html[data-theme^="discovery"] .pump-box,
-html[data-theme^="discovery"] .ha-unavail-row,
-html[data-theme^="discovery"] .stream-row {
+html[data-theme^="discovery"] .mv-panel,
+html[data-theme^="discovery"] .mv-metric,
+html[data-theme^="discovery"] .mv-group,
+html[data-theme^="discovery"] .mv-spark,
+html[data-theme^="discovery"] .mv-inst-card {
   border-radius: 2px !important;
+  background: var(--st-card-3) !important;
+  border-color: var(--st-border-faint) !important;
 }
+html[data-theme^="discovery"] .mv-alert { border-radius: 2px !important; }
+html[data-theme^="discovery"] .mv-alert[data-severity="critical"] { background: color-mix(in srgb, var(--st-danger) 6%, transparent) !important; }
 
 /* Monitor typography */
-html[data-theme^="discovery"] .card .title,
-html[data-theme^="discovery"] .net-section-title,
-html[data-theme^="discovery"] .solar-section-title,
-html[data-theme^="discovery"] .streams-header,
-html[data-theme^="discovery"] .alerts-title,
-html[data-theme^="discovery"] .ms-card-title,
-html[data-theme^="discovery"] .ms-section-title {
+html[data-theme^="discovery"] .mv .ui-tile-head,
+html[data-theme^="discovery"] .mv-panel-title,
+html[data-theme^="discovery"] .mv-section,
+html[data-theme^="discovery"] .mv-card-title {
   font-family: var(--st-display) !important;
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
-html[data-theme^="discovery"] .card .subtitle,
-html[data-theme^="discovery"] .node-os,
-html[data-theme^="discovery"] .solar-summary-label,
-html[data-theme^="discovery"] .pump-label {
+html[data-theme^="discovery"] .mv-host-os,
+html[data-theme^="discovery"] .mv .ui-tile-detail {
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
-html[data-theme^="discovery"] .node-title {
+html[data-theme^="discovery"] .mv-host-name {
   font-family: var(--st-display) !important;
   font-size: 13px !important;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-html[data-theme^="discovery"] .summary-hero-value,
-html[data-theme^="discovery"] .gauge-val,
-html[data-theme^="discovery"] .metric-val,
-html[data-theme^="discovery"] .ha-metric-value,
-html[data-theme^="discovery"] .solar-runtime-value,
-html[data-theme^="discovery"] .net-throughput-label {
+html[data-theme^="discovery"] .mv .ui-tile-value,
+html[data-theme^="discovery"] .mv .ui-ring-value,
+html[data-theme^="discovery"] .mv .ui-meter-value,
+html[data-theme^="discovery"] .mv-metric-value,
+html[data-theme^="discovery"] .mv-figure b,
+html[data-theme^="discovery"] .mv-group-value:not([data-tone]) {
   color: var(--st-cyan) !important;
   text-shadow: 0 0 12px color-mix(in srgb, var(--st-cyan) 30%, transparent);
 }
-html[data-theme^="discovery"] .card-icon,
-html[data-theme^="discovery"] .alerts-header-icon {
-  border-radius: 2px !important;
-}
 
 /* Monitor tabs */
-html[data-theme^="discovery"] .tab-bar {
-  border-radius: 2px !important;
-  background: var(--st-panel) !important;
-  border-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .tab {
+html[data-theme^="discovery"] .mv-tabs-bar { background: var(--st-panel) !important; border-color: var(--st-border-soft) !important; }
+html[data-theme^="discovery"] .mv-tab {
   border-radius: 2px !important;
   font-family: var(--st-display) !important;
   font-size: 11px !important;
   text-transform: uppercase;
   letter-spacing: 0.12em;
 }
-html[data-theme^="discovery"] .tab.active {
+html[data-theme^="discovery"] .mv-tab[data-selected] {
   background: linear-gradient(180deg, color-mix(in srgb, var(--st-blue) 28%, transparent), color-mix(in srgb, var(--st-blue) 8%, transparent)) !important;
   color: var(--st-cyan) !important;
-  box-shadow: inset 0 -2px 0 var(--st-amber), 0 0 18px color-mix(in srgb, var(--st-blue) 20%, transparent) !important;
+  box-shadow: 0 0 18px color-mix(in srgb, var(--st-blue) 20%, transparent) !important;
 }
-html[data-theme^="discovery"] .tab-badge {
+html[data-theme^="discovery"] .mv-tab-chip {
   border-radius: 2px !important;
   background: color-mix(in srgb, var(--st-amber) 16%, transparent) !important;
+  border-color: color-mix(in srgb, var(--st-amber) 30%, transparent) !important;
   color: var(--st-amber) !important;
 }
-html[data-theme^="discovery"] .tab.active .tab-badge {
-  background: color-mix(in srgb, var(--st-amber) 24%, transparent) !important;
-  color: var(--st-amber) !important;
-}
-html[data-theme^="discovery"] .tab-rotation-hint {
-  color: var(--st-amber) !important;
-  font-family: var(--st-display) !important;
-}
-
-/* Monitor details */
-html[data-theme^="discovery"] .node-card .node-footer {
-  border-top-color: color-mix(in srgb, var(--st-cyan) 10%, transparent) !important;
-}
-html[data-theme^="discovery"] .net-talker-head {
-  border-bottom: 1px solid color-mix(in srgb, var(--st-cyan) 16%, transparent);
-  padding-bottom: 4px;
-}
-html[data-theme^="discovery"] .net-talker-row {
-  border-bottom: 1px solid color-mix(in srgb, var(--st-cyan) 6%, transparent);
-  padding-bottom: 4px;
-}
-html[data-theme^="discovery"] .net-talker-name { color: var(--st-cyan) !important; }
-html[data-theme^="discovery"] .progress-bg,
-html[data-theme^="discovery"] .stream-progress-bg,
-html[data-theme^="discovery"] .net-talker-bar-bg {
-  background: color-mix(in srgb, var(--st-cyan) 8%, transparent) !important;
-  border-radius: 1px !important;
-}
-html[data-theme^="discovery"] .progress-fill,
-html[data-theme^="discovery"] .stream-progress-fill,
-html[data-theme^="discovery"] .net-talker-bar-fill { border-radius: 1px !important; }
-html[data-theme^="discovery"] .stream-row {
-  background: var(--st-card-3) !important;
-  border-color: var(--st-border-faint) !important;
-}
-html[data-theme^="discovery"] .stream-row-transcode { border-left: 3px solid var(--st-amber) !important; }
-html[data-theme^="discovery"] .stream-badge { border-radius: 2px !important; }
-html[data-theme^="discovery"] .solar-summary-card,
-html[data-theme^="discovery"] .pump-box {
-  background: linear-gradient(180deg, var(--st-card-1), var(--st-card-2)) !important;
-  border-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ha-metric {
-  background: var(--st-card-3) !important;
-  border-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ha-unavail-row {
-  background: color-mix(in srgb, var(--st-danger) 6%, transparent) !important;
-  border-color: color-mix(in srgb, var(--st-danger) 18%, transparent) !important;
-}
-html[data-theme^="discovery"] .alert-box {
-  border-radius: 2px !important;
-  background: color-mix(in srgb, var(--st-danger) 6%, transparent) !important;
-  border: 1px solid color-mix(in srgb, var(--st-danger) 25%, transparent) !important;
-}
-html[data-theme^="discovery"] .alerts-firing-badge { color: var(--st-amber) !important; }
-html[data-theme^="discovery"] .empty-grid-msg {
-  border: 1px dashed color-mix(in srgb, var(--st-cyan) 18%, transparent);
-  border-radius: 2px;
-}
-
-/* Monitor progress */
-html[data-theme^="discovery"] .monitor-progress {
-  height: 2px;
-  background: color-mix(in srgb, var(--st-cyan) 8%, transparent);
-}
-html[data-theme^="discovery"] .monitor-progress-fill {
+html[data-theme^="discovery"] .mv-rotation { color: var(--st-amber) !important; font-family: var(--st-display) !important; }
+html[data-theme^="discovery"] .mv-tab-progress { background: color-mix(in srgb, var(--st-cyan) 8%, transparent) !important; }
+html[data-theme^="discovery"] .mv-tab-progress i {
   background: linear-gradient(90deg, var(--st-amber), var(--st-blue), var(--st-cyan)) !important;
   box-shadow: 0 0 12px color-mix(in srgb, var(--st-cyan) 60%, transparent);
 }
 
-/* ── Monitor Settings dialog ────────────────────────────────────────── */
-html[data-theme^="discovery"] .ms-overlay {
-  background:
-    radial-gradient(900px 600px at 50% 0%, color-mix(in srgb, var(--st-blue) 10%, transparent), transparent 70%),
-    var(--st-overlay) !important;
-  backdrop-filter: blur(18px) saturate(130%) !important;
-  -webkit-backdrop-filter: blur(18px) saturate(130%) !important;
+/* Monitor details */
+html[data-theme^="discovery"] .mv-host-foot,
+html[data-theme^="discovery"] .mv-pairs[data-line] { border-top-color: color-mix(in srgb, var(--st-cyan) 10%, transparent) !important; }
+html[data-theme^="discovery"] .mv .ui-meter-track,
+html[data-theme^="discovery"] .mv-range,
+html[data-theme^="discovery"] .mv-split,
+html[data-theme^="discovery"] .mv-share {
+  background: color-mix(in srgb, var(--st-cyan) 8%, transparent) !important;
+  border-radius: 1px !important;
 }
-html[data-theme^="discovery"] .ms-dialog {
-  position: relative;
-  border-radius: var(--st-radius) !important;
-  border-color: var(--st-border) !important;
-  background: linear-gradient(180deg, var(--st-modal-1), var(--st-modal-2)) !important;
-  box-shadow:
-    0 30px 90px var(--st-shadow),
-    0 0 40px color-mix(in srgb, var(--st-blue) 15%, transparent),
-    inset 0 0 80px var(--st-glow) !important;
-}
-html[data-theme^="discovery"] .ms-dialog::before,
-html[data-theme^="discovery"] .ms-submodal-dialog::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 18px;
-  height: 18px;
-  border-top: 2px solid var(--st-cyan);
-  border-left: 2px solid var(--st-cyan);
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--st-cyan) 75%, transparent));
-  pointer-events: none;
-  z-index: 2;
-}
-html[data-theme^="discovery"] .ms-dialog::after,
-html[data-theme^="discovery"] .ms-submodal-dialog::after {
-  content: "";
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 18px;
-  height: 18px;
-  border-right: 2px solid var(--st-amber);
-  border-bottom: 2px solid var(--st-amber);
-  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--st-amber) 60%, transparent));
-  pointer-events: none;
-  z-index: 2;
-}
-html[data-theme^="discovery"] .ms-header {
-  background: linear-gradient(90deg, var(--st-panel), var(--st-bg)) !important;
-  border-bottom-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ms-logo {
-  border-radius: 2px !important;
-  border-color: transparent !important;
-  background: linear-gradient(135deg, var(--st-logo-1), var(--st-logo-2) 48%, var(--st-logo-3)) !important;
-  color: var(--st-on-accent) !important;
-  box-shadow: 0 0 18px color-mix(in srgb, var(--st-logo-1) 45%, transparent) !important;
-  transform: skewX(-6deg);
-}
-html[data-theme^="discovery"] .ms-logo svg { transform: skewX(6deg); }
-html[data-theme^="discovery"] .ms-title {
-  font-family: var(--st-display) !important;
-  font-size: 13px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.14em;
-  text-shadow: 0 0 14px color-mix(in srgb, var(--st-cyan) 35%, transparent);
-}
-html[data-theme^="discovery"] .ms-subtitle {
-  color: var(--st-cyan) !important;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 9px !important;
-}
-html[data-theme^="discovery"] .ms-nav {
-  background: var(--st-nav-bg) !important;
-  border-right-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ms-nav-group-label {
-  font-family: var(--st-display) !important;
-  color: var(--st-amber) !important;
-  letter-spacing: 0.18em;
-}
-html[data-theme^="discovery"] .ms-nav-item {
-  border-radius: 2px !important;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  font-size: 11px !important;
-}
-html[data-theme^="discovery"] .ms-nav-item.active {
-  background: linear-gradient(90deg, color-mix(in srgb, var(--st-blue) 22%, transparent), color-mix(in srgb, var(--st-blue) 4%, transparent)) !important;
-  border-color: var(--st-border) !important;
-  box-shadow: inset 2px 0 0 var(--st-amber) !important;
-}
-html[data-theme^="discovery"] .ms-nav-icon-wrap {
-  border-radius: 2px !important;
-  background: var(--st-panel-3) !important;
-  border-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ms-nav-item.active .ms-nav-icon-wrap {
-  background: color-mix(in srgb, var(--st-blue) 20%, transparent) !important;
+html[data-theme^="discovery"] .mv .ui-meter-fill,
+html[data-theme^="discovery"] .mv-range-band,
+html[data-theme^="discovery"] .mv-share i { border-radius: 1px !important; }
+html[data-theme^="discovery"] .mv .ui-chip { border-radius: 2px !important; }
+
+/* ── Settings, where the monitor settings now live ──────────────────── */
+html[data-theme^="discovery"] .ui-settings-nav { background: var(--st-panel) !important; border-color: var(--st-border-soft) !important; }
+html[data-theme^="discovery"] .ui-settings-group { font-family: var(--st-display) !important; letter-spacing: 0.14em; color: var(--st-text-faint) !important; }
+html[data-theme^="discovery"] .ui-settings-tab { border-radius: 2px !important; }
+html[data-theme^="discovery"] .ui-settings-tab[data-selected] {
+  background: linear-gradient(90deg, color-mix(in srgb, var(--st-blue) 26%, transparent), transparent) !important;
   border-color: var(--st-border) !important;
   color: var(--st-cyan) !important;
 }
-html[data-theme^="discovery"] .ms-nav-badge { border-radius: 2px !important; }
-html[data-theme^="discovery"] .ms-content { background: var(--st-bg) !important; }
-html[data-theme^="discovery"] .ms-section-header { border-bottom-color: var(--st-border-soft) !important; }
-html[data-theme^="discovery"] .ms-card {
-  border-radius: var(--st-radius) !important;
-  border-color: var(--st-border-soft) !important;
-  background: linear-gradient(180deg, var(--st-card-1), var(--st-card-2)) !important;
-  box-shadow: inset 0 0 30px var(--st-glow) !important;
-}
-html[data-theme^="discovery"] .ms-row + .ms-row { border-top-color: var(--st-border-faint) !important; }
-html[data-theme^="discovery"] .ms-input,
-html[data-theme^="discovery"] .ms-select {
-  border-radius: 2px !important;
-  background: var(--st-panel-2) !important;
-  border-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ms-input:focus,
-html[data-theme^="discovery"] .ms-select:focus {
-  border-color: var(--st-cyan) !important;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--st-cyan) 35%, transparent), 0 0 18px color-mix(in srgb, var(--st-blue) 18%, transparent) !important;
-}
-html[data-theme^="discovery"] .ms-btn {
+html[data-theme^="discovery"] .ui-settings-tab-icon,
+html[data-theme^="discovery"] .ui-settings-count { border-radius: 2px !important; }
+html[data-theme^="discovery"] .ui-settings-scroll { background: var(--st-bg) !important; }
+html[data-theme^="discovery"] .ui-settings-panel .ui-btn {
   border-radius: 2px !important;
   font-family: var(--st-display) !important;
   font-size: 11px !important;
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-html[data-theme^="discovery"] .ms-btn-primary {
+html[data-theme^="discovery"] .ui-settings-panel .ui-btn[data-variant="primary"] {
   background: linear-gradient(135deg, var(--st-blue), var(--st-cyan)) !important;
   color: var(--st-on-accent) !important;
   box-shadow: 0 0 16px color-mix(in srgb, var(--st-blue) 25%, transparent) !important;
 }
-html[data-theme^="discovery"] .ms-btn-primary:hover:not(:disabled) {
+html[data-theme^="discovery"] .ui-settings-panel .ui-btn[data-variant="primary"]:hover:not([data-disabled]) {
   background: linear-gradient(135deg, var(--st-cyan), var(--st-blue)) !important;
 }
-html[data-theme^="discovery"] .ms-btn-ghost,
-html[data-theme^="discovery"] .ms-btn-secondary { border-radius: 2px !important; }
-html[data-theme^="discovery"] .ms-toggle-track { border-radius: 2px !important; }
-html[data-theme^="discovery"] .ms-toggle-thumb { border-radius: 1px !important; }
-html[data-theme^="discovery"] .ms-entity-card {
-  border-radius: 2px !important;
-  background: var(--st-card-3) !important;
-  border-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ms-entity-card:hover {
-  background: var(--st-panel-3) !important;
-  border-color: var(--st-border) !important;
-  box-shadow: 0 0 20px color-mix(in srgb, var(--st-blue) 12%, transparent) !important;
-}
-html[data-theme^="discovery"] .ms-entity-name { color: var(--st-cyan) !important; }
-html[data-theme^="discovery"] .ms-entity-type-badge { border-radius: 2px !important; }
-html[data-theme^="discovery"] .ms-icon-btn { border-radius: 2px !important; }
-html[data-theme^="discovery"] .ms-add-btn {
-  border-radius: 2px !important;
-  border-style: dashed !important;
-}
-html[data-theme^="discovery"] .ms-submodal-overlay {
-  background: var(--st-submodal-overlay) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-}
-html[data-theme^="discovery"] .ms-submodal-dialog {
-  position: relative;
-  border-radius: var(--st-radius) !important;
-  border-color: var(--st-border) !important;
-  background: linear-gradient(180deg, var(--st-modal-1), var(--st-modal-2)) !important;
-  box-shadow: 0 28px 80px var(--st-shadow), 0 0 36px color-mix(in srgb, var(--st-blue) 12%, transparent) !important;
-}
-html[data-theme^="discovery"] .ms-submodal-header {
-  background: var(--st-panel-3) !important;
-  border-bottom-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ms-submodal-footer {
-  background: var(--st-panel-3) !important;
-  border-top-color: var(--st-border-soft) !important;
-}
-html[data-theme^="discovery"] .ms-hint,
-html[data-theme^="discovery"] .ms-info-box,
-html[data-theme^="discovery"] .ms-error { border-radius: 2px !important; }
-html[data-theme^="discovery"] .ms-loading { color: var(--st-cyan) !important; }
+html[data-theme^="discovery"] .ui-settings-panel .ui-switch { border-radius: 2px !important; }
+html[data-theme^="discovery"] .ui-settings-panel .ui-switch [data-slot="switch-thumb"] { border-radius: 1px !important; }
+html[data-theme^="discovery"] .ui-settings-panel :is(.ui-panel-section, .ui-input, .ui-select-trigger) { border-radius: 2px !important; }
+html[data-theme^="discovery"] .ui-savebar { background: var(--st-panel-3) !important; border-top-color: var(--st-border-soft) !important; }
 
 /* ── Motion / accessibility ─────────────────────────────────────────── */
 @keyframes st-twinkle {
@@ -904,13 +615,9 @@ html[data-theme^="discovery"] .ms-loading { color: var(--st-cyan) !important; }
 }
 
 @media (max-width: 768px) {
-  html[data-theme^="discovery"] .ms-dialog {
-    border-radius: 0 !important;
-    border-left: none !important;
-    border-right: none !important;
-  }
-  html[data-theme^="discovery"] .ms-nav {
+  html[data-theme^="discovery"] .ui-settings-nav {
     background: var(--st-nav-bg) !important;
     border-bottom-color: var(--st-border-soft) !important;
   }
 }
+

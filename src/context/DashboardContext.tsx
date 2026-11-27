@@ -298,7 +298,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Inject the user's custom CSS into the document so it overrides theme
-    // variables. Shared with /monitor (see useMonitorTheme).
+    // variables. The monitor view lives in the same tree, so it follows too.
     applyCustomCss(config.settings?.customCSS);
   }, [config.settings?.customCSS]);
 

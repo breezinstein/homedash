@@ -99,7 +99,7 @@
     outline-offset: 2px;
   }
 
-  #root > div:not(.monitor-shell) {
+  #root > div {
     background: transparent !important;
   }
   main.max-w-7xl {
@@ -256,12 +256,6 @@
   .bg-\[var\(--color-error\)\] svg {
     color: var(--theme-on-accent) !important;
   }
-  .bg-\[var\(--mon-accent\)\],
-  .bg-\[var\(--mon-ok\)\],
-  .bg-\[var\(--mon-warn\)\],
-  .bg-\[var\(--mon-danger\)\] {
-    color: var(--theme-on-accent) !important;
-  }
 
   /* ── Modals and toasts ────────────────────────────────────────────── */
   [role="dialog"] {
@@ -300,100 +294,45 @@
     -webkit-backdrop-filter: var(--theme-blur);
   }
 
-  /* ── Monitor shell ────────────────────────────────────────────────── */
-  .monitor-shell {
-    --mon-bg: var(--theme-background, #0a0a0a) !important;
-    --mon-panel: var(--theme-panel) !important;
-    --mon-surface: var(--theme-card-bg) !important;
-    --mon-surface-2: var(--theme-panel-3) !important;
-    --mon-border: var(--theme-border) !important;
-    --mon-border-soft: var(--theme-border-soft) !important;
-    --mon-border-faint: var(--theme-border-faint) !important;
-    --mon-accent: var(--theme-primary, #6366f1) !important;
-    --mon-accent-hover: var(--theme-accent, #8b5cf6) !important;
-    --mon-ok: var(--theme-success, #22c55e) !important;
-    --mon-warn: var(--theme-warning, #eab308) !important;
-    --mon-danger: var(--theme-error, #f87171) !important;
-    --mon-text: var(--theme-text) !important;
-    --mon-text-dim: var(--theme-text-dim) !important;
-    --mon-text-muted: var(--theme-text-muted) !important;
-    --mon-text-faint: var(--theme-text-faint) !important;
-    background-color: var(--theme-shell-bg) !important;
-    background-image: var(--theme-shell-image) !important;
+  /* ── Monitor view ─────────────────────────────────────────────────── */
+  .mv {
     color: var(--theme-text) !important;
     font-family: var(--theme-body-font) !important;
-    box-shadow: var(--theme-shell-shadow) !important;
-    backdrop-filter: var(--theme-blur);
-    -webkit-backdrop-filter: var(--theme-blur);
   }
-  .monitor-shell .monitor-header {
-    border-bottom: 1px solid var(--theme-border-soft);
-  }
-  .monitor-shell .monitor-logo,
-  .monitor-shell .ms-logo {
-    background: var(--theme-logo-bg) !important;
-    border-radius: var(--theme-radius-sm) !important;
-    color: var(--theme-on-accent) !important;
-    box-shadow: none !important;
-    transform: none !important;
-  }
-  .monitor-shell .monitor-logo svg,
-  .monitor-shell .ms-logo svg {
-    color: var(--theme-on-accent) !important;
-    transform: none !important;
-  }
-  .monitor-shell .monitor-title,
-  .monitor-shell .ms-title {
+  .mv-title {
     font-family: var(--theme-display-font) !important;
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
     color: var(--theme-text) !important;
   }
-  .monitor-shell .monitor-subtitle,
-  .monitor-shell .ms-subtitle {
-    color: var(--theme-accent) !important;
+  .mv-sub {
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
   }
-  .monitor-shell .clock-time {
-    color: var(--theme-accent) !important;
+  .mv-clock-time {
     font-family: var(--theme-display-font) !important;
   }
-  .monitor-shell .monitor-poll {
-    color: var(--theme-text-faint) !important;
+  .mv-clock-sub {
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
   }
-  .monitor-shell .monitor-settings-btn {
-    border-radius: var(--theme-radius-sm) !important;
-    border-color: var(--theme-border) !important;
-    color: var(--theme-text-dim) !important;
-    background: var(--theme-panel-2) !important;
-  }
-  .monitor-shell .status-pill {
+  .mv-status {
     border-radius: var(--theme-status-radius) !important;
     font-family: var(--theme-body-font) !important;
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
   }
-  .monitor-shell .alert-strip {
+  .mv .ui-alert {
     border-radius: var(--theme-radius) !important;
     border-width: var(--theme-bevel-width) !important;
     border-style: solid !important;
     border-color: var(--theme-bevel-light) var(--theme-bevel-dark) var(--theme-bevel-dark) var(--theme-bevel-light) !important;
-    background-color: var(--theme-card-bg) !important;
-    background-image: var(--theme-card-image) !important;
   }
 
   /* ── Monitor cards ────────────────────────────────────────────────── */
-  .monitor-shell .card,
-  .monitor-shell .node-card,
-  .monitor-shell .net-v2-card,
-  .monitor-shell .streams-panel,
-  .monitor-shell .media-card,
-  .monitor-shell .solar-summary-card,
-  .monitor-shell .alerts-card,
-  .monitor-shell .server-container {
+  .mv .ui-tile,
+  .mv-tabs,
+  .mv-rail {
     border-radius: var(--theme-radius) !important;
     border-width: var(--theme-bevel-width) !important;
     border-style: solid !important;
@@ -405,332 +344,156 @@
     backdrop-filter: var(--theme-blur);
     -webkit-backdrop-filter: var(--theme-blur);
   }
-  .monitor-shell .card-icon,
-  .monitor-shell .alerts-header-icon {
+  .mv-host,
+  .mv-card,
+  .mv-panel,
+  .mv-metric,
+  .mv-group,
+  .mv-spark,
+  .mv-inst-card {
+    border-radius: var(--theme-radius-sm) !important;
+    border: 1px solid var(--theme-border-soft) !important;
+    background: var(--theme-card-3) !important;
+  }
+  .mv .ui-chip,
+  .mv-alert {
     border-radius: var(--theme-radius-sm) !important;
   }
-  .monitor-shell .card-icon-blue {
-    background: color-mix(in srgb, var(--theme-accent) 14%, transparent) !important;
-    border-color: color-mix(in srgb, var(--theme-accent) 25%, transparent) !important;
-    color: var(--theme-accent) !important;
+  .mv-alert[data-severity="critical"] {
+    background: color-mix(in srgb, var(--theme-error) 8%, transparent) !important;
   }
-  .monitor-shell .stream-badge,
-  .monitor-shell .stream-paused,
-  .monitor-shell .tab-badge,
-  .monitor-shell .net-talker-more-badge,
-  .monitor-shell .streams-more-badge,
-  .monitor-shell .ms-nav-badge,
-  .monitor-shell .ms-entity-type-badge,
-  .monitor-shell .gateway-pill,
-  .monitor-shell .docker-problem {
-    border-radius: var(--theme-radius-sm) !important;
-  }
-  .monitor-shell .card .title,
-  .monitor-shell .net-section-title,
-  .monitor-shell .solar-section-title,
-  .monitor-shell .streams-header,
-  .monitor-shell .alerts-title,
-  .monitor-shell .node-title,
-  .monitor-shell .ms-card-title,
-  .monitor-shell .ms-section-title {
+  .mv .ui-tile-head,
+  .mv-panel-title,
+  .mv-section,
+  .mv-host-name,
+  .mv-card-title {
     font-family: var(--theme-display-font) !important;
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
     color: var(--theme-text) !important;
   }
-  .monitor-shell .summary-hero-value,
-  .monitor-shell .gauge-val,
-  .monitor-shell .metric-val,
-  .monitor-shell .ha-metric-value,
-  .monitor-shell .solar-runtime-value,
-  .monitor-shell .net-throughput-label {
+  .mv .ui-tile-value,
+  .mv .ui-ring-value,
+  .mv-metric-value,
+  .mv-figure b,
+  .mv-group-value:not([data-tone]) {
     color: var(--theme-accent) !important;
   }
-  .monitor-shell .progress-bg,
-  .monitor-shell .stream-progress-bg,
-  .monitor-shell .net-talker-bar-bg {
+  .mv .ui-meter-track,
+  .mv-range,
+  .mv-split,
+  .mv-share {
     background: var(--theme-border-faint) !important;
     border-radius: var(--theme-radius-sm) !important;
   }
-  .monitor-shell .progress-fill,
-  .monitor-shell .stream-progress-fill,
-  .monitor-shell .net-talker-bar-fill {
+  .mv .ui-meter-fill,
+  .mv-range-band {
     border-radius: var(--theme-radius-sm) !important;
-  }
-  .monitor-shell .stream-row,
-  .monitor-shell .ha-metric,
-  .monitor-shell .pump-box,
-  .monitor-shell .ha-unavail-row {
-    border-radius: var(--theme-radius-sm) !important;
-    border: 1px solid var(--theme-border-soft) !important;
-    background: var(--theme-card-3) !important;
-  }
-  .monitor-shell .alert-box {
-    border-radius: var(--theme-radius-sm) !important;
-    background: color-mix(in srgb, var(--theme-error) 8%, transparent) !important;
-    border: 1px solid color-mix(in srgb, var(--theme-error) 30%, transparent) !important;
-  }
-  .monitor-shell .empty-grid-msg {
-    border: 1px dashed var(--theme-border-soft);
-    border-radius: var(--theme-radius-sm);
   }
 
   /* Monitor tabs */
-  .monitor-shell .tab-bar {
-    border-radius: var(--theme-radius) !important;
+  .mv-tabs-bar {
     background: var(--theme-panel-2) !important;
-    border: 1px solid var(--theme-border-soft) !important;
+    border-color: var(--theme-border-soft) !important;
   }
-  .monitor-shell .tab {
-    border-radius: var(--theme-radius-sm) !important;
+  .mv-tab {
+    border-radius: var(--theme-radius-sm) var(--theme-radius-sm) 0 0 !important;
     font-family: var(--theme-display-font) !important;
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
     color: var(--theme-text-muted) !important;
   }
-  .monitor-shell .tab.active {
+  .mv-tab[data-selected] {
     background: var(--theme-primary) !important;
     color: var(--theme-on-accent) !important;
     box-shadow: none !important;
   }
-  .monitor-shell .tab-badge {
+  .mv-tab-chip {
     border-radius: var(--theme-radius-sm) !important;
     background: color-mix(in srgb, var(--theme-accent) 18%, transparent) !important;
     color: var(--theme-accent) !important;
   }
-  .monitor-shell .tab.active .tab-badge {
+  .mv-tab[data-selected] .mv-tab-chip {
     background: color-mix(in srgb, var(--theme-on-accent) 20%, transparent) !important;
     color: var(--theme-on-accent) !important;
   }
-  .monitor-shell .tab-rotation-hint {
+  .mv-rotation {
     color: var(--theme-accent) !important;
     font-family: var(--theme-display-font) !important;
   }
-  .monitor-shell .monitor-progress {
-    background: var(--theme-border-faint);
+  .mv-tab-progress {
+    background: var(--theme-border-faint) !important;
   }
-  .monitor-shell .monitor-progress-fill {
+  .mv-tab-progress i {
     background: var(--theme-progress) !important;
-    box-shadow: none !important;
   }
 
-  /* ── Monitor Settings ─────────────────────────────────────────────── */
-  .ms-overlay {
-    background-color: var(--theme-overlay) !important;
-    backdrop-filter: var(--theme-blur) !important;
-    -webkit-backdrop-filter: var(--theme-blur) !important;
-  }
-  .ms-dialog {
-    border-radius: var(--theme-radius-lg) !important;
-    border-width: var(--theme-bevel-width) !important;
-    border-style: solid !important;
-    border-color: var(--theme-bevel-light) var(--theme-bevel-dark) var(--theme-bevel-dark) var(--theme-bevel-light) !important;
-    background-color: var(--theme-modal-bg) !important;
-    background-image: var(--theme-modal-image) !important;
-    box-shadow: var(--theme-modal-shadow) !important;
-    backdrop-filter: var(--theme-blur);
-    -webkit-backdrop-filter: var(--theme-blur);
-    position: relative;
-  }
-  .ms-header {
-    background-color: var(--theme-header-bg) !important;
-    background-image: var(--theme-header-image) !important;
-    border-bottom: 1px solid var(--theme-border) !important;
-    color: var(--theme-header-text) !important;
-  }
-  .ms-title {
-    color: var(--theme-header-text) !important;
-  }
-  .ms-subtitle {
-    color: var(--theme-header-muted) !important;
-  }
-  .ms-nav {
+  /* ── Settings, where the monitor settings now live ────────────────── */
+  .ui-settings-nav {
     background: var(--theme-nav-bg) !important;
-    border-right: 1px solid var(--theme-border-soft) !important;
+    border-color: var(--theme-border-soft) !important;
   }
-  .ms-nav-group-label {
+  .ui-settings-group {
     font-family: var(--theme-display-font) !important;
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
     color: var(--theme-text-muted) !important;
   }
-  .ms-nav-item {
+  .ui-settings-tab {
     border-radius: var(--theme-radius-sm) !important;
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
     color: var(--theme-text-muted) !important;
   }
-  .ms-nav-item:hover {
+  .ui-settings-tab:hover {
     background: var(--theme-panel-2) !important;
     color: var(--theme-text) !important;
   }
-  .ms-nav-item.active {
+  .ui-settings-tab[data-selected] {
     background: var(--theme-primary) !important;
     border-color: var(--theme-primary) !important;
     color: var(--theme-on-accent) !important;
   }
-  .ms-nav-icon-wrap,
-  .ms-nav-badge {
+  .ui-settings-tab-icon,
+  .ui-settings-count {
     border-radius: var(--theme-radius-sm) !important;
   }
-  .ms-nav-item.active .ms-nav-icon-wrap,
-  .ms-nav-item.active .ms-nav-badge {
+  .ui-settings-tab[data-selected] .ui-settings-tab-icon,
+  .ui-settings-tab[data-selected] .ui-settings-count {
     color: var(--theme-on-accent) !important;
     background: color-mix(in srgb, var(--theme-on-accent) 18%, transparent) !important;
     border-color: color-mix(in srgb, var(--theme-on-accent) 35%, transparent) !important;
   }
-  .ms-content {
+  .ui-settings-scroll {
     background: var(--theme-content-bg) !important;
   }
-  .ms-section-header {
-    border-bottom: 1px solid var(--theme-border-soft) !important;
-  }
-  .ms-section-title {
-    color: var(--theme-text) !important;
-    font-family: var(--theme-display-font) !important;
-    text-transform: var(--theme-transform);
-    letter-spacing: var(--theme-tracking);
-  }
-  .ms-section-desc {
-    color: var(--theme-text-muted) !important;
-  }
-  .ms-card {
-    border-radius: var(--theme-radius) !important;
-    border-width: var(--theme-bevel-width) !important;
-    border-style: solid !important;
-    border-color: var(--theme-bevel-light) var(--theme-bevel-dark) var(--theme-bevel-dark) var(--theme-bevel-light) !important;
-    background-color: var(--theme-card-bg) !important;
-    background-image: var(--theme-card-image) !important;
-    box-shadow: var(--theme-card-shadow) !important;
-  }
-  .ms-card-title {
-    color: var(--theme-text) !important;
-  }
-  .ms-row + .ms-row {
-    border-top-color: var(--theme-border-soft) !important;
-  }
-  .ms-row-label {
-    color: var(--theme-text) !important;
-  }
-  .ms-row-detail {
-    color: var(--theme-text-muted) !important;
-  }
-  .ms-input,
-  .ms-select {
-    background-color: var(--theme-input-bg) !important;
-    color: var(--theme-input-text) !important;
-    border: 1px solid var(--theme-border) !important;
-    border-radius: var(--theme-radius-sm) !important;
-    font-family: var(--theme-body-font) !important;
-  }
-  .ms-input:focus,
-  .ms-select:focus {
-    border-color: var(--theme-accent) !important;
-    box-shadow: 0 0 0 2px color-mix(in srgb, var(--theme-accent) 40%, transparent) !important;
-  }
-  .ms-btn {
+  .ui-settings-panel .ui-btn {
     border-radius: var(--theme-radius-sm) !important;
     font-family: var(--theme-display-font) !important;
     text-transform: var(--theme-transform);
     letter-spacing: var(--theme-tracking);
   }
-  .ms-btn-primary {
+  .ui-settings-panel .ui-btn[data-variant="primary"] {
     background: var(--theme-primary) !important;
     border-color: var(--theme-primary) !important;
     color: var(--theme-on-accent) !important;
     box-shadow: none !important;
   }
-  .ms-btn-primary:hover:not(:disabled) {
+  .ui-settings-panel .ui-btn[data-variant="primary"]:hover:not([data-disabled]) {
     background: var(--theme-accent) !important;
   }
-  .ms-btn-ghost,
-  .ms-btn-secondary {
-    background: var(--theme-panel-2) !important;
-    border-color: var(--theme-border) !important;
-    color: var(--theme-text) !important;
-  }
-  .ms-btn-danger {
-    background: color-mix(in srgb, var(--theme-error) 12%, transparent) !important;
-    color: var(--theme-error) !important;
-    border-color: color-mix(in srgb, var(--theme-error) 35%, transparent) !important;
-  }
-  .ms-btn-success {
-    background: color-mix(in srgb, var(--theme-success) 14%, transparent) !important;
-    color: var(--theme-success) !important;
-    border-color: color-mix(in srgb, var(--theme-success) 35%, transparent) !important;
-  }
-  .ms-toggle-track {
+  .ui-settings-panel .ui-switch {
     border-radius: var(--theme-radius-sm) !important;
-    background: var(--theme-panel-2) !important;
-    border-color: var(--theme-border) !important;
   }
-  .ms-toggle-wrap[data-checked="true"] .ms-toggle-track {
+  .ui-settings-panel .ui-switch[data-checked] {
     background: var(--theme-success) !important;
     border-color: var(--theme-success) !important;
   }
-  .ms-toggle-thumb {
+  .ui-settings-panel .ui-switch [data-slot="switch-thumb"] {
     border-radius: var(--theme-radius-sm) !important;
   }
-  .ms-entity-card {
-    border-radius: var(--theme-radius-sm) !important;
-    border: 1px solid var(--theme-border-soft) !important;
-    background: var(--theme-card-3) !important;
-  }
-  .ms-entity-name {
-    color: var(--theme-text) !important;
-  }
-  .ms-entity-type-badge,
-  .ms-icon-btn,
-  .ms-nav-badge {
-    border-radius: var(--theme-radius-sm) !important;
-  }
-  .ms-add-btn {
-    border-radius: var(--theme-radius-sm) !important;
-    border: 1px dashed var(--theme-border) !important;
-    color: var(--theme-text-muted) !important;
-  }
-  .ms-add-btn:hover {
-    border-color: var(--theme-accent) !important;
-    color: var(--theme-accent) !important;
-  }
-  .ms-submodal-overlay {
-    background-color: var(--theme-submodal-overlay) !important;
-    backdrop-filter: var(--theme-blur) !important;
-    -webkit-backdrop-filter: var(--theme-blur) !important;
-  }
-  .ms-submodal-dialog {
-    border-radius: var(--theme-radius-lg) !important;
-    border-width: var(--theme-bevel-width) !important;
-    border-style: solid !important;
-    border-color: var(--theme-bevel-light) var(--theme-bevel-dark) var(--theme-bevel-dark) var(--theme-bevel-light) !important;
-    background-color: var(--theme-modal-bg) !important;
-    background-image: var(--theme-modal-image) !important;
-    box-shadow: var(--theme-modal-shadow) !important;
-    position: relative;
-  }
-  .ms-submodal-header,
-  .ms-submodal-footer {
+  .ui-savebar {
     background: var(--theme-panel-2) !important;
     border-color: var(--theme-border-soft) !important;
-  }
-  .ms-hint,
-  .ms-info-box,
-  .ms-error {
-    border-radius: var(--theme-radius-sm) !important;
-  }
-  .ms-loading {
-    color: var(--theme-accent) !important;
-  }
-}
-
-@media (max-width: 768px) {
-  html[data-theme]:not([data-theme^="discovery"]) .ms-dialog {
-    border-radius: 0 !important;
-    border-left: none !important;
-    border-right: none !important;
-  }
-  html[data-theme]:not([data-theme^="discovery"]) .ms-nav {
-    border-bottom: 1px solid var(--theme-border-soft) !important;
-    border-right: none !important;
   }
 }
