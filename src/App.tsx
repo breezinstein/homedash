@@ -12,7 +12,11 @@ import { EditModeToggle } from './components/ui/EditModeToggle';
 import { useBrowserNotifications } from './components/notifications/useBrowserNotifications';
 import { NotificationsBell } from './components/notifications/NotificationsBell';
 import { useShortcut } from '@ui-sdk/react/shortcuts';
+import { formatRoute, parseRoute, type View } from './lib/route';
+import { canLeave } from './lib/navGuard';
+import { useFiringAlerts } from './monitor/useFiringAlerts';
 import type { Service } from './types';
+import type { SectionKey as SettingsSection } from './components/SettingsView';
 import {
   Activity,
   Bell,
@@ -40,8 +44,9 @@ const ServerStats = lazy(() => import('./components/ServerStats').then(m => ({ d
 const InverterPanel = lazy(() => import('./components/InverterPanel').then(m => ({ default: m.InverterPanel })));
 const NotificationsPanel = lazy(() => import('./components/notifications/NotificationsPanel').then(m => ({ default: m.NotificationsPanel })));
 const LoginModal = lazy(() => import('./components/LoginModal').then(m => ({ default: m.LoginModal })));
+const MonitorView = lazy(() => import('./monitor/MonitorApp').then(m => ({ default: m.MonitorApp })));
 
-type View = 'dashboard' | 'files' | 'stats' | 'inverter' | 'clipboard' | 'notifications' | 'settings';
+const initialRoute = parseRoute(window.location.pathname);
 
 const ADMIN_VIEWS: View[] = ['stats', 'inverter', 'clipboard', 'notifications', 'settings'];
 
@@ -95,7 +100,7 @@ function Dashboard() {
   } = useDashboard();
   const { authEnabled, authenticated, loginRequired, acknowledgeLoginRequired, logout } = useAuth();
 
-  const [view, setView] = useState<View>('dashboard');
+  const [view, setView] = useState<View>(initialRoute.view);
   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -104,19 +109,35 @@ function Dashboard() {
   const [categoryDraggedOver, setCategoryDraggedOver] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<'servers' | 'inverters' | 'notifications' | undefined>();
+  const [settingsSection, setSettingsSection] = useState<string | undefined>(initialRoute.section);
+  const alertCount = useFiringAlerts();
 
   const canEdit = authenticated;
 
-  const navigate = useCallback((next: string) => {
+  const navigate = useCallback(async (next: string, section?: string) => {
     const target = next as View;
     if (ADMIN_VIEWS.includes(target) && !authenticated) {
       setShowLoginModal(true);
       return;
     }
+    if (!(await canLeave())) return;
     setView(target);
+    setSettingsSection(target === 'settings' ? section : undefined);
+    const path = formatRoute({ view: target, section: target === 'settings' ? section : undefined }, initialRoute.base);
+    if (path !== window.location.pathname) window.history.pushState(null, '', path);
     window.scrollTo({ top: 0 });
   }, [authenticated]);
+
+  // Back and forward move between views.
+  useEffect(() => {
+    const onPop = () => {
+      const route = parseRoute(window.location.pathname);
+      setView(route.view);
+      setSettingsSection(route.section);
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
 
   // A 401 from any request flips loginRequired: surface the sign-in dialog and
   // drop every privileged surface so the page snaps back to an anonymous state.
@@ -125,6 +146,7 @@ function Dashboard() {
     setShowLoginModal(true);
     setIsEditMode(false);
     setView('dashboard');
+    window.history.replaceState(null, '', formatRoute({ view: 'dashboard' }, initialRoute.base));
     setShowServiceModal(false);
     setShowCategoryModal(false);
     setPaletteOpen(false);
@@ -132,7 +154,10 @@ function Dashboard() {
 
   // Losing the session while on an admin view falls back to the dashboard.
   useEffect(() => {
-    if (authEnabled && !authenticated && ADMIN_VIEWS.includes(view)) setView('dashboard');
+    if (authEnabled && !authenticated && ADMIN_VIEWS.includes(view)) {
+      setView('dashboard');
+      window.history.replaceState(null, '', formatRoute({ view: 'dashboard' }, initialRoute.base));
+    }
   }, [authEnabled, authenticated, view]);
 
   useShortcut('mod+k', () => setPaletteOpen(true), { description: 'Search services and views' });
@@ -262,7 +287,7 @@ function Dashboard() {
     ...tools
       .filter((tool) => !tool.adminOnly || authenticated)
       .map((tool) => ({ id: tool.id, label: tool.label, icon: tool.icon, run: () => navigate(tool.id) })),
-    { id: 'monitor', label: 'Open monitor', icon: LayoutGrid, run: () => window.open('/monitor', '_blank', 'noopener,noreferrer') },
+    { id: 'monitor', label: 'Monitor', icon: LayoutGrid, run: () => navigate('monitor') },
     ...(authEnabled
       ? [{
           id: 'auth',
@@ -288,6 +313,8 @@ function Dashboard() {
       onOpenPalette={() => setPaletteOpen(true)}
       status={<SyncStatus />}
       serviceCount={config.services.length}
+      alertCount={alertCount}
+      startHidden={initialRoute.view === 'monitor'}
       notifications={
         <NotificationsBell
           onClick={authenticated ? () => navigate('notifications') : () => setShowLoginModal(true)}
@@ -413,19 +440,27 @@ function Dashboard() {
 
       {view !== 'dashboard' && (
         <Suspense fallback={<ViewLoading />}>
+          {view === 'monitor' && <MonitorView />}
           {view === 'files' && <FileSharing />}
           {view === 'stats' && authenticated && (
-            <ServerStats onManage={() => { setSettingsSection('servers'); navigate('settings'); }} />
+            <ServerStats onManage={() => navigate('settings', 'servers')} />
           )}
           {view === 'inverter' && authenticated && (
-            <InverterPanel onManage={() => { setSettingsSection('inverters'); navigate('settings'); }} />
+            <InverterPanel onManage={() => navigate('settings', 'inverters')} />
           )}
           {view === 'clipboard' && authenticated && <ClipboardManager />}
           {view === 'notifications' && authenticated && (
-            <NotificationsPanel onManage={() => { setSettingsSection('notifications'); navigate('settings'); }} />
+            <NotificationsPanel onManage={() => navigate('settings', 'notifications')} />
           )}
           {view === 'settings' && authenticated && (
-            <SettingsView key={settingsSection ?? 'default'} initialSection={settingsSection} />
+            <SettingsView
+              key={settingsSection ?? 'default'}
+              initialSection={settingsSection as SettingsSection | undefined}
+              onSectionChange={(section) => {
+                const path = formatRoute({ view: 'settings', section }, initialRoute.base);
+                if (path !== window.location.pathname) window.history.replaceState(null, '', path);
+              }}
+            />
           )}
         </Suspense>
       )}

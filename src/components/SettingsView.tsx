@@ -67,13 +67,19 @@ const NAV_SECTIONS: NavSectionItem[] = [
 interface SettingsViewProps {
   /** Section to open on mount, e.g. the one a tool's “Manage” link points at. */
   initialSection?: SectionKey;
+  /** Called when the person picks another section, so the URL can follow. */
+  onSectionChange?: (section: SectionKey) => void;
 }
 
-export function SettingsView({ initialSection }: SettingsViewProps) {
+export function SettingsView({ initialSection, onSectionChange }: SettingsViewProps) {
   const { config, setConfig, reorderCategories, addCategory, updateCategory, deleteCategory } = useDashboard();
   const { backups } = useBackups();
   const confirm = useConfirm();
-  const [active, setActive] = useState<SectionKey>(initialSection ?? 'categories');
+  const [active, setActiveState] = useState<SectionKey>(initialSection ?? 'categories');
+  const setActive = (key: SectionKey) => {
+    setActiveState(key);
+    onSectionChange?.(key);
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
