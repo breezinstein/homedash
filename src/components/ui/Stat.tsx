@@ -108,7 +108,8 @@ interface RingMeterProps {
   min?: number;
   max?: number;
   valueText?: string;
-  level?: Level;
+  /** `info` draws the accent colour for ratios that are neither good nor bad, like link load. */
+  level?: Level | 'info';
   size?: 'md' | 'lg';
 }
 
@@ -130,7 +131,7 @@ export function RingMeter({ label, value, min = 0, max = 100, valueText, level, 
     >
       <svg viewBox="0 0 36 36" aria-hidden="true">
         <circle className="ui-ring-track" cx="18" cy="18" r="15.915" />
-        <circle className="ui-ring-fill" cx="18" cy="18" r="15.915" strokeDasharray={`${pct} 100`} />
+        {pct > 0.5 ? <circle className="ui-ring-fill" cx="18" cy="18" r="15.915" strokeDasharray={`${pct} 100`} /> : null}
       </svg>
       <MeterValue className="ui-ring-value">{text}</MeterValue>
     </Meter>

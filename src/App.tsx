@@ -44,7 +44,7 @@ const ServerStats = lazy(() => import('./components/ServerStats').then(m => ({ d
 const InverterPanel = lazy(() => import('./components/InverterPanel').then(m => ({ default: m.InverterPanel })));
 const NotificationsPanel = lazy(() => import('./components/notifications/NotificationsPanel').then(m => ({ default: m.NotificationsPanel })));
 const LoginModal = lazy(() => import('./components/LoginModal').then(m => ({ default: m.LoginModal })));
-const MonitorView = lazy(() => import('./monitor/MonitorApp').then(m => ({ default: m.MonitorApp })));
+const MonitorView = lazy(() => import('./monitor/view/MonitorView').then(m => ({ default: m.MonitorView })));
 
 const initialRoute = parseRoute(window.location.pathname);
 
@@ -440,7 +440,7 @@ function Dashboard() {
 
       {view !== 'dashboard' && (
         <Suspense fallback={<ViewLoading />}>
-          {view === 'monitor' && <MonitorView />}
+          {view === 'monitor' && <MonitorView onOpenSettings={() => navigate('settings', 'monitor-general')} />}
           {view === 'files' && <FileSharing />}
           {view === 'stats' && authenticated && (
             <ServerStats onManage={() => navigate('settings', 'servers')} />
