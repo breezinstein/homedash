@@ -25,7 +25,8 @@ import {
   type FileScope,
 } from '../api/filesApi';
 import type { CopypartyListing, CopypartyFile, CopypartyDir } from '../types';
-import { Modal, useConfirm, useToast } from './ui';
+import { useConfirm, useToast } from './ui';
+import { PageHeader, PagePanel } from './shell/PageHeader';
 import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control';
 import { useDashboard } from '../context/DashboardContext';
 import { useAuth } from '../context/AuthContext';
@@ -35,10 +36,6 @@ import { useAuth } from '../context/AuthContext';
 const canWebShare =
   typeof navigator !== 'undefined' &&
   typeof (navigator as Navigator).share === 'function';
-
-interface FileSharingProps {
-  onClose: () => void;
-}
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -61,7 +58,7 @@ function formatDate(ts: number): string {
 // links) and Private (admin-only working area). The modal renders one scope
 // at a time on mobile and as side-by-side panes on desktop — anonymous
 // viewers only ever see Public.
-export function FileSharing({ onClose }: FileSharingProps) {
+export function FileSharing() {
   const { authenticated } = useAuth();
   // Anonymous viewers can only browse public; admins start on private (their
   // working area) but can switch to public to publish/unpublish.
@@ -69,11 +66,12 @@ export function FileSharing({ onClose }: FileSharingProps) {
   const [activeScope, setActiveScope] = useState<FileScope>(initialScope);
 
   return (
-    <Modal onClose={onClose} label="File sharing" size="xl" bare>
-      <div className="flex h-[min(86dvh,54rem)] flex-col">
-        <div className="ui-panel-head gap-3 shrink-0">
-          <span className="ui-panel-title shrink-0">File sharing</span>
-          {authenticated ? (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title="Files"
+        description={authenticated ? 'Private working area and the public share area.' : 'Public share area, read-only.'}
+        actions={
+          authenticated ? (
             <SegmentedControl
               aria-label="Area"
               className="ui-seg"
@@ -93,17 +91,10 @@ export function FileSharing({ onClose }: FileSharingProps) {
               <Globe className="size-3" aria-hidden="true" />
               Public (read-only)
             </span>
-          )}
-          <div className="flex-1" />
-          <button
-            onClick={onClose}
-            className="ui-dialog-close"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+          )
+        }
+      />
+      <PagePanel>
         <ScopePane
           // Remount the pane when the scope changes so its internal navigation
           // state (currentPath) resets cleanly. Cheaper than threading scope
@@ -111,8 +102,8 @@ export function FileSharing({ onClose }: FileSharingProps) {
           key={activeScope}
           scope={activeScope}
         />
-      </div>
-    </Modal>
+      </PagePanel>
+    </div>
   );
 }
 

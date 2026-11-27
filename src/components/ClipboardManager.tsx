@@ -18,11 +18,9 @@ import {
 } from 'lucide-react';
 import { useDashboard } from '../context/DashboardContext';
 import type { Clip } from '../types';
-import { Modal, useConfirm, useToast } from './ui';
-
-interface ClipboardManagerProps {
-  onClose: () => void;
-}
+import { useConfirm, useToast } from './ui';
+import { Button } from './ui/Button';
+import { PageHeader, PagePanel } from './shell/PageHeader';
 
 type EditorState =
   | { mode: 'idle' }
@@ -48,7 +46,7 @@ function formatRelative(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export function ClipboardManager({ onClose }: ClipboardManagerProps) {
+export function ClipboardManager() {
   const {
     clips,
     addClip,
@@ -232,36 +230,17 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
   };
 
   return (
-    <Modal
-      onClose={onClose}
-      label="Multi-clipboard"
-      size="lg"
-      bare
-      dismissOnBackdrop={editor.mode === 'idle'}
-      dismissOnEscape={editor.mode === 'idle'}
-    >
-      <div className="flex h-[min(86dvh,52rem)] flex-col">
-      {/* Header */}
-      <div className="ui-panel-head justify-between">
-        <div className="flex items-center gap-2">
-          <ClipboardIcon className="w-5 h-5 text-[var(--color-primary)]" />
-          <h2 id="clipboard-title" className="ui-panel-title">
-            Multi-Clipboard
-          </h2>
-          <span className="text-xs text-[var(--color-text-secondary)] hidden sm:inline">
-            ({clips.length})
-          </span>
-        </div>
-        <button
-          onClick={onClose}
-          className="ui-dialog-close"
-          title="Close (Esc)"
-          aria-label="Close clipboard"
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title="Clipboard"
+        description={`${clips.length} saved ${clips.length === 1 ? 'clip' : 'clips'}, synced with the dashboard config.`}
+        actions={
+          <Button variant="primary" size="sm" onClick={openCreator} disabled={editor.mode === 'creating'}>
+            <Plus className="size-3.5" /> New clip
+          </Button>
+        }
+      />
+      <PagePanel>
       {/* Toolbar */}
       <div className="flex flex-col sm:flex-row gap-2 p-3 sm:p-4 border-b border-[var(--color-border)]">
         <div className="relative flex-1">
@@ -283,14 +262,6 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
             </button>
           )}
         </div>
-        <button
-          onClick={openCreator}
-          disabled={editor.mode === 'creating'}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/70 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Plus className="w-4 h-4" />
-          New Clip
-        </button>
       </div>
 
       {/* Body */}
@@ -451,7 +422,7 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
                     </div>
                   )}
                 </div>
-                <div className="flex flex-col sm:flex-row items-center gap-1 flex-shrink-0">
+                <div className="flex flex-wrap items-center gap-1 flex-shrink-0">
                   <button
                     onClick={() => handleCopy(clip)}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors active:scale-95 ${
@@ -515,7 +486,7 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
           );
         })}
       </div>
-      </div>
-    </Modal>
+      </PagePanel>
+    </div>
   );
 }

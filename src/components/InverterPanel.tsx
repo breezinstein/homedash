@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  X,
+  Settings2,
   Sun,
   Zap,
   Battery,
@@ -9,22 +9,19 @@ import {
   Gauge,
   Plug,
   AlertTriangle,
-  Plus,
-  Pencil,
-  Trash2,
-  Check,
-  ArrowLeft,
-  Lock,
   CircuitBoard,
   ChevronDown,
 } from 'lucide-react';
 import { configApi } from '../api/configApi';
 import { useDashboard } from '../context/DashboardContext';
-import type { InverterServer, InverterStats, InverterMetric, InverterDevice, BatteryRuntime } from '../types';
-import { Modal, useConfirm } from './ui';
+import type { InverterStats, InverterMetric, InverterDevice, BatteryRuntime } from '../types';
+import { PageHeader, PagePanel } from './shell/PageHeader';
+import { Button } from './ui/Button';
+import { SegmentedControl, SegmentedControlIndicator, SegmentedControlItem } from '@ui-sdk/react/segmented-control';
 
 interface InverterPanelProps {
-  onClose: () => void;
+  /** Jumps to Settings → Inverters. */
+  onManage?: () => void;
 }
 
 const POLL_INTERVAL_MS = 3000;
@@ -385,122 +382,9 @@ function InverterStatsView({ url, username, password }: { url: string; username?
   );
 }
 
-// Add/edit form for a Solar Assistant device.
-function InverterForm({
-  initial,
-  onSubmit,
-  onCancel,
-}: {
-  initial?: InverterServer;
-  onSubmit: (name: string, url: string, username: string, password: string) => void;
-  onCancel: () => void;
-}) {
-  const [name, setName] = useState(initial?.name ?? '');
-  const [url, setUrl] = useState(initial?.url ?? '');
-  const [username, setUsername] = useState(initial?.username ?? '');
-  const [password, setPassword] = useState(initial?.password ?? '');
-  const [error, setError] = useState<string | null>(null);
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmedUrl = url.trim();
-    if (!name.trim()) return setError('Name is required.');
-    if (!trimmedUrl) return setError('URL is required.');
-    try {
-      const parsed = new URL(trimmedUrl);
-      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-        return setError('URL must start with http:// or https://');
-      }
-    } catch {
-      return setError('Enter a valid URL, e.g. http://10.1.2.14');
-    }
-    onSubmit(name.trim(), trimmedUrl, username.trim(), password);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] p-4 space-y-3">
-      <div>
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">Name</label>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Home Inverter"
-          className="w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-        />
-      </div>
-      <div>
-        <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-          Solar Assistant URL
-        </label>
-        <input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="http://10.1.2.14"
-          className="w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-        />
-        <p className="mt-1 text-[10px] text-[var(--color-text-secondary)]">
-          Base URL of your Solar Assistant device. Its REST API (<code>/api/v1/metrics</code>) is read for live PV, load, grid and battery metrics.
-        </p>
-      </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-            Username
-          </label>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="admin"
-            autoComplete="off"
-            className="w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-            Password
-          </label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            autoComplete="new-password"
-            className="w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-          />
-        </div>
-      </div>
-      <p className="text-[10px] text-[var(--color-text-secondary)]">
-        Use the device password configured in Solar Assistant. Credentials are stored server-side and never exposed to anonymous viewers.
-      </p>
-      {error && <p className="text-xs text-[var(--color-error)]">{error}</p>}
-      <div className="flex items-center gap-2 justify-end">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-3 py-1.5 text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-primary)] text-white text-sm rounded-lg hover:bg-[var(--color-primary)]/80 transition-colors"
-        >
-          <Check className="w-4 h-4" />
-          {initial ? 'Save' : 'Add Inverter'}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-export function InverterPanel({ onClose }: InverterPanelProps) {
-  const { inverters, addInverter, updateInverter, deleteInverter } = useDashboard();
-  const confirm = useConfirm();
+export function InverterPanel({ onManage }: InverterPanelProps) {
+  const { inverters } = useDashboard();
   const [selectedId, setSelectedId] = useState<string | null>(inverters[0]?.id ?? null);
-  const [managing, setManaging] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [adding, setAdding] = useState(false);
 
   // Keep a valid selection as inverters are added/removed.
   useEffect(() => {
@@ -511,173 +395,64 @@ export function InverterPanel({ onClose }: InverterPanelProps) {
     }
   }, [inverters, selectedId]);
 
-  // With no devices configured, drop straight into the manage/add view.
-  useEffect(() => {
-    if (inverters.length === 0) setManaging(true);
-  }, [inverters.length]);
-
   const selected = inverters.find(s => s.id === selectedId);
 
-  const handleDelete = async (inv: InverterServer) => {
-    const ok = await confirm({
-      title: 'Remove inverter?',
-      message: `"${inv.name}" will be removed from your inverter list.`,
-      confirmLabel: 'Remove',
-      tone: 'danger',
-    });
-    if (ok) {
-      deleteInverter(inv.id);
-      if (editingId === inv.id) setEditingId(null);
-    }
-  };
 
   return (
-    <Modal onClose={onClose} label="Inverter monitor" size="lg" bare>
-      <div className="flex max-h-[min(82dvh,46rem)] flex-col">
-        {/* Header */}
-        <div className="ui-panel-head justify-between">
-          <div className="flex items-center gap-2">
-            {managing && inverters.length > 0 ? (
-              <button
-                onClick={() => { setManaging(false); setAdding(false); setEditingId(null); }}
-                className="p-1 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-                aria-label="Back to metrics"
-              >
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-            ) : (
-              <Sun className="w-5 h-5 text-[var(--color-primary)]" />
-            )}
-            <h2 className="ui-panel-title">
-              {managing ? 'Manage Inverters' : 'Inverter Monitor'}
-            </h2>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title="Inverter"
+        description="Live PV, load, grid and battery metrics from Solar Assistant."
+        actions={
+          onManage ? (
+            <Button variant="ghost" size="sm" onClick={onManage}>
+              <Settings2 className="size-3.5" /> Manage inverters
+            </Button>
+          ) : null
+        }
+      />
+      <PagePanel>
+        {inverters.length > 1 && (
+          <div className="ui-panel-head gap-2 overflow-x-auto">
+            <SegmentedControl
+              aria-label="Inverter"
+              className="ui-seg"
+              value={selectedId}
+              onValueChange={(value) => { if (value) setSelectedId(value); }}
+            >
+              <SegmentedControlIndicator />
+              {inverters.map((inverter) => (
+                <SegmentedControlItem key={inverter.id} value={inverter.id} className="ui-seg-item">
+                  {inverter.name}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
           </div>
-          <button
-            onClick={onClose}
-            className="ui-dialog-close"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+        )}
 
-        {/* Body */}
-        <div className="p-3 sm:p-4 overflow-y-auto">
-          {managing ? (
-            <div className="space-y-3">
-              {inverters.length === 0 && !adding && (
-                <p className="text-sm text-[var(--color-text-secondary)] text-center py-4">
-                  No inverters yet. Add a Solar Assistant device to monitor it here.
-                </p>
-              )}
-
-              {inverters.map((inv) =>
-                editingId === inv.id ? (
-                  <InverterForm
-                    key={inv.id}
-                    initial={inv}
-                    onSubmit={(name, url, username, password) => {
-                      updateInverter(inv.id, { name, url, username, password });
-                      setEditingId(null);
-                    }}
-                    onCancel={() => setEditingId(null)}
-                  />
-                ) : (
-                  <div
-                    key={inv.id}
-                    className="flex items-center justify-between gap-3 bg-[var(--color-background)] rounded-xl border border-[var(--color-border)] p-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{inv.name}</p>
-                        {inv.username && (
-                          <Lock className="w-3 h-3 shrink-0 text-[var(--color-text-secondary)]" aria-label="Password protected" />
-                        )}
-                      </div>
-                      <p className="text-xs text-[var(--color-text-secondary)] truncate">{inv.url}</p>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => { setEditingId(inv.id); setAdding(false); }}
-                        className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] rounded-lg transition-colors"
-                        aria-label={`Edit ${inv.name}`}
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(inv)}
-                        className="p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-error)] hover:bg-[var(--color-surface)] rounded-lg transition-colors"
-                        aria-label={`Remove ${inv.name}`}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                )
-              )}
-
-              {adding ? (
-                <InverterForm
-                  onSubmit={(name, url, username, password) => {
-                    addInverter(name, url, username, password);
-                    setAdding(false);
-                  }}
-                  onCancel={() => setAdding(false)}
-                />
-              ) : (
-                <button
-                  onClick={() => { setAdding(true); setEditingId(null); }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 border border-dashed border-[var(--color-border)] rounded-xl text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:border-[var(--color-primary)] transition-colors"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Inverter
-                </button>
-              )}
-            </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+          {selected ? (
+            // Remount per device so polling resets cleanly.
+            <InverterStatsView
+              key={selected.id}
+              url={selected.url}
+              username={selected.username}
+              password={selected.password}
+            />
           ) : (
-            <>
-              {/* Device selector (only meaningful with more than one device) */}
-              <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
-                {inverters.map((inv) => (
-                  <button
-                    key={inv.id}
-                    onClick={() => setSelectedId(inv.id)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
-                      selectedId === inv.id
-                        ? 'bg-[var(--color-primary)] text-white'
-                        : 'bg-[var(--color-background)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
-                    }`}
-                  >
-                    {inv.name}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setManaging(true)}
-                  className="ml-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] whitespace-nowrap transition-colors"
-                  title="Add or manage inverters"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span className="hidden sm:inline">Manage</span>
-                </button>
-              </div>
-
-              {selected ? (
-                // Remount per device so polling resets cleanly.
-                <InverterStatsView
-                  key={selected.id}
-                  url={selected.url}
-                  username={selected.username}
-                  password={selected.password}
-                />
-              ) : (
-                <p className="text-sm text-[var(--color-text-secondary)] text-center py-6">
-                  Select an inverter to view its metrics.
-                </p>
-              )}
-            </>
+            <div className="py-16 text-center">
+              <p className="text-sm text-[var(--color-text-secondary)]">
+                No inverter configured yet.
+              </p>
+              {onManage ? (
+                <Button variant="primary" size="sm" className="mt-4" onClick={onManage}>
+                  <Settings2 className="size-3.5" /> Add one in Settings
+                </Button>
+              ) : null}
+            </div>
           )}
         </div>
-      </div>
-    </Modal>
+      </PagePanel>
+    </div>
   );
 }

@@ -2,7 +2,6 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useDashboard } from '../context/DashboardContext';
 import { useBackups } from '../context/BackupsContext';
 import {
-  X,
   GripVertical,
   Plus,
   Trash2,
@@ -14,13 +13,13 @@ import {
   ChevronDown,
   ChevronUp,
   Sun,
+  Server,
   Moon,
   ArrowUp,
   ArrowDown,
   Code2,
   Bell,
   Search,
-  Layers,
   ShieldAlert,
   Monitor,
 } from 'lucide-react';
@@ -30,13 +29,12 @@ import { NotificationsSettings } from './notifications/NotificationsSettings';
 import { getThemeByName, themePresets } from '../themes';
 import type { ThemePreset } from '../themes';
 import { applyThemeAttribute, applyThemeColors } from '../lib/theme';
-import { Modal, useConfirm } from './ui';
+import { useConfirm } from './ui';
+import { PageHeader, PagePanel } from './shell/PageHeader';
+import { RemoteServersSection } from './settings/RemoteServersSection';
+import { InvertersSection } from './settings/InvertersSection';
 
-interface SettingsModalProps {
-  onClose: () => void;
-}
-
-type SectionKey = 'categories' | 'appearance' | 'notifications' | 'backups';
+export type SectionKey = 'categories' | 'appearance' | 'notifications' | 'backups' | 'servers' | 'inverters';
 
 interface NavSectionItem {
   key: SectionKey;
@@ -49,15 +47,22 @@ interface NavSectionItem {
 const NAV_SECTIONS: NavSectionItem[] = [
   { key: 'categories', label: 'Categories', group: 'Dashboard', icon: Layout, description: 'Organize and reorder service categories' },
   { key: 'appearance', label: 'Appearance', group: 'Dashboard', icon: Palette, description: 'Themes, grid columns, custom colors and CSS' },
+  { key: 'servers', label: 'Remote servers', group: 'System', icon: Server, description: 'Glances endpoints for the server stats view' },
+  { key: 'inverters', label: 'Inverters', group: 'System', icon: Sun, description: 'Solar Assistant devices for the inverter view' },
   { key: 'notifications', label: 'Notifications', group: 'System', icon: Bell, description: 'ntfy server, browser alerts and inbox' },
   { key: 'backups', label: 'Backups', group: 'System', icon: Database, description: 'Create, restore, import and export configurations' },
 ];
 
-export function SettingsModal({ onClose }: SettingsModalProps) {
+interface SettingsViewProps {
+  /** Section to open on mount, e.g. the one a tool's “Manage” link points at. */
+  initialSection?: SectionKey;
+}
+
+export function SettingsView({ initialSection }: SettingsViewProps) {
   const { config, setConfig, reorderCategories, addCategory, updateCategory, deleteCategory } = useDashboard();
   const { backups } = useBackups();
   const confirm = useConfirm();
-  const [active, setActive] = useState<SectionKey>('categories');
+  const [active, setActive] = useState<SectionKey>(initialSection ?? 'categories');
   const [searchQuery, setSearchQuery] = useState('');
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -172,6 +177,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         return { count: config.categoryOrder.length };
       case 'appearance':
         return { dot: config.theme === 'custom' ? 'var(--color-primary)' : undefined };
+      case 'servers':
+        return { count: config.servers?.length || undefined };
+      case 'inverters':
+        return { count: config.inverters?.length || undefined };
       case 'notifications':
         return { dot: config.notifications?.enabled ? 'var(--color-success)' : undefined };
       case 'backups':
@@ -232,48 +241,42 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       <a href="/monitor" target="_blank" rel="noopener noreferrer" className="text-[var(--color-primary)] hover:underline">
         <Monitor className="inline w-3 h-3 -mt-0.5" /> monitor page
       </a>.
-      Add or edit remote Glances endpoints in <strong className="text-[var(--color-text-primary)]">Server Stats</strong>.
+      Remote Glances endpoints are managed in{' '}
+      <button
+        type="button"
+        onClick={() => setActive('servers')}
+        className="font-semibold text-[var(--color-primary)] hover:underline"
+      >
+        Remote servers
+      </button>
+      ; Solar Assistant devices in{' '}
+      <button
+        type="button"
+        onClick={() => setActive('inverters')}
+        className="font-semibold text-[var(--color-primary)] hover:underline"
+      >
+        Inverters
+      </button>
+      .
     </div>
   );
 
   return (
     <>
-      <Modal onClose={onClose} label="Settings" size="xl" bare>
-        <div className="flex h-[min(88dvh,54rem)] flex-col overflow-hidden">
-
-          {/* Header */}
-          <header className="flex items-center gap-3 p-4 sm:p-5 border-b border-[var(--color-border)] flex-shrink-0">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-[var(--color-primary)] to-[var(--color-accent)] flex items-center justify-center flex-shrink-0 shadow-lg">
-              <Layers className="w-5 h-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-semibold text-[var(--color-text-primary)] transition-colors">
-                  Settings
-                </h2>
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10.5px] font-semibold tracking-wide uppercase bg-emerald-500/10 text-emerald-500 border border-emerald-500/25">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Auto-save
-                </span>
-              </div>
-              <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-                Configure your dashboard — changes apply and save automatically
-              </p>
-            </div>
-            <div className="ml-auto flex items-center gap-2">
-              <span className="hidden lg:inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[var(--color-background)] border border-[var(--color-border)] text-[11px] text-[var(--color-text-secondary)]">
-                <strong className="text-[var(--color-text-primary)]">{config.categoryOrder.length}</strong> categories
+      <div className="flex min-h-0 flex-1 flex-col">
+        <PageHeader
+          title="Settings"
+          description="Changes apply and save automatically."
+          actions={
+            <>
+              <span className="ui-chip" data-tone="success">
+                <span className="size-1.5 rounded-full bg-[var(--color-success)]" aria-hidden="true" /> Auto-save
               </span>
-              <button
-                onClick={onClose}
-                className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-                aria-label="Close"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </header>
-
+              <span className="ui-chip">{config.categoryOrder.length} categories</span>
+            </>
+          }
+        />
+        <PagePanel>
           {/* Body layout */}
           <div className="flex flex-1 min-h-0 flex-col sm:flex-row">
 
@@ -711,6 +714,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 )}
 
                 {/* ── NOTIFICATIONS ── */}
+                {section.key === 'servers' && <RemoteServersSection />}
+                {section.key === 'inverters' && <InvertersSection />}
                 {section.key === 'notifications' && <NotificationsSettings />}
 
                 {/* ── BACKUPS ── */}
@@ -745,8 +750,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               )}
             </main>
           </div>
-        </div>
-      </Modal>
+        </PagePanel>
+      </div>
 
       {showCategoryModal && (
         <CategoryModal
