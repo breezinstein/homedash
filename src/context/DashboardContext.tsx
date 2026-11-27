@@ -10,6 +10,7 @@ import { configApi } from '../api/configApi';
 import { useToast } from '../components/ui';
 import { applyCustomCss } from '../lib/customCss';
 import { applyThemeAttribute, applyThemeColors } from '../lib/theme';
+import { applyThemeType } from '../lib/themeType';
 import { newId } from '../lib/id';
 import { useAuth } from './AuthContext';
 import { BackupsProvider } from './BackupsContext';
@@ -283,9 +284,10 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Apply colours through a layered stylesheet so custom CSS can override
-    // them with normal :root declarations.
+    // them with normal :root declarations, and tag the document light/dark.
     applyThemeColors(config.colors);
-  }, [config.colors]);
+    applyThemeType(config.theme, config.colors);
+  }, [config.colors, config.theme]);
 
   useEffect(() => {
     // Activate the selected theme's scoped stylesheet (if it has one). Plain

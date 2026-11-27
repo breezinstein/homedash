@@ -65,3 +65,14 @@ data/uploads/1764425856750-solar-assistant.png
 
 # Copyparty shared volume (user-uploaded files live here at runtime)
 shared-files/
+
+# Agent scaffolding: skills are installed per machine, not vendored
+.agents/
+skills-lock.json
+
+# Runtime cache written by the dev server
+data/icons/
+data/notifications.json
+
+# Local agent plans and scratch
+.hermes/

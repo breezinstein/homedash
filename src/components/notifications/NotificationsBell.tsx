@@ -4,16 +4,19 @@ import { useDashboard } from '../../context/DashboardContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { useAuth } from '../../context/AuthContext';
 import { fetchNotificationsCount } from '../../api/notificationsApi';
+import { IconButton } from '../ui/Button';
 
 interface NotificationsBellProps {
   onClick: () => void;
+  /** Highlights the bell while the notifications view is open. */
+  active?: boolean;
   /** Compact variant for the mobile menu row. */
   variant?: 'icon' | 'menu';
 }
 
 const PUBLIC_POLL_MS = 20000;
 
-export function NotificationsBell({ onClick, variant = 'icon' }: NotificationsBellProps) {
+export function NotificationsBell({ onClick, active, variant = 'icon' }: NotificationsBellProps) {
   const { config } = useDashboard();
   const { unreadCount: adminUnread, notificationsStatus } = useNotifications();
   const { authenticated } = useAuth();
@@ -91,21 +94,23 @@ export function NotificationsBell({ onClick, variant = 'icon' }: NotificationsBe
   }
 
   return (
-    <button
+    <IconButton
+      label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
       onClick={onClick}
-      className="relative p-2 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] rounded-lg transition-colors"
-      title="Notifications"
-      aria-label={unreadCount > 0 ? `Notifications (${unreadCount} unread)` : 'Notifications'}
+      data-active={active || undefined}
+      className={active ? 'text-[var(--color-text-primary)]' : undefined}
     >
-      <Bell className="w-5 h-5" />
-      {unreadCount > 0 && (
-        <span className="absolute top-0.5 right-0.5 min-w-[1rem] h-4 px-1 flex items-center justify-center text-[10px] font-semibold text-white bg-[var(--color-error)] rounded-full">
-          {badge}
-        </span>
-      )}
-      {hasError && unreadCount === 0 && (
-        <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-[var(--color-error)]" />
-      )}
-    </button>
+      <span className="relative inline-flex">
+        <Bell className="size-4" aria-hidden="true" />
+        {unreadCount > 0 && (
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-[var(--color-error)] px-1 text-[10px] font-semibold text-white">
+            {badge}
+          </span>
+        )}
+        {hasError && unreadCount === 0 && (
+          <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-[var(--color-error)]" />
+        )}
+      </span>
+    </IconButton>
   );
 }

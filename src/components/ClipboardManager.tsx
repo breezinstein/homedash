@@ -7,6 +7,7 @@ import {
   Copy,
   Edit2,
   GripVertical,
+  MoreHorizontal,
   Pin,
   PinOff,
   Plus,
@@ -16,13 +17,22 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { Button } from '@ui-sdk/react/button';
+import { Dialog, DialogBackdrop, DialogClose, DialogContent, DialogDescription, DialogTitle } from '@ui-sdk/react/dialog';
+import { Field, FieldLabel } from '@ui-sdk/react/field';
+import { Input } from '@ui-sdk/react/input';
+import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@ui-sdk/react/menu';
+import {
+  ScrollArea,
+  ScrollAreaScrollbar,
+  ScrollAreaThumb,
+  ScrollAreaViewport,
+} from '@ui-sdk/react/scroll-area';
+import { Textarea } from '@ui-sdk/react/textarea';
 import { useDashboard } from '../context/DashboardContext';
 import type { Clip } from '../types';
-import { ModalShell, useConfirm, useToast } from './ui';
-
-interface ClipboardManagerProps {
-  onClose: () => void;
-}
+import { useConfirm, useToast } from './ui';
+import { PageHeader, PagePanel } from './shell/PageHeader';
 
 type EditorState =
   | { mode: 'idle' }
@@ -48,7 +58,7 @@ function formatRelative(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-export function ClipboardManager({ onClose }: ClipboardManagerProps) {
+export function ClipboardManager() {
   const {
     clips,
     addClip,
@@ -69,22 +79,6 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Esc inside the editor cancels the editor first. ModalShell's Esc
-  // handler is suppressed while we're editing (see `dismissOnEscape` below)
-  // so the second press will dismiss the modal.
-  useEffect(() => {
-    if (editor.mode === 'idle') return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.stopPropagation();
-      setEditor({ mode: 'idle' });
-      setLabelDraft('');
-      setContentDraft('');
-    };
-    document.addEventListener('keydown', handler, { capture: true });
-    return () => document.removeEventListener('keydown', handler, { capture: true } as EventListenerOptions);
-  }, [editor.mode]);
 
   useEffect(() => {
     return () => {
@@ -159,15 +153,9 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
   const handleShare = async (clip: Clip) => {
     if (!canWebShare) return;
     try {
-      await (navigator as Navigator).share({
-        title: clip.label,
-        text: clip.content,
-      });
+      await (navigator as Navigator).share({ title: clip.label, text: clip.content });
     } catch (err) {
-      // AbortError when the user dismisses the share sheet — ignore.
-      if ((err as DOMException)?.name !== 'AbortError') {
-        toast.error('Share failed');
-      }
+      if ((err as DOMException)?.name !== 'AbortError') toast.error('Share failed');
     }
   };
 
@@ -232,288 +220,221 @@ export function ClipboardManager({ onClose }: ClipboardManagerProps) {
   };
 
   return (
-    <ModalShell
-      onClose={onClose}
-      ariaLabel="Multi-clipboard"
-      dismissOnBackdrop={editor.mode === 'idle'}
-      dismissOnEscape={editor.mode === 'idle'}
-    >
-      <div className="bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)] w-full max-w-3xl shadow-2xl max-h-[90vh] sm:max-h-[85vh] flex flex-col">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 sm:p-4 border-b border-[var(--color-border)]">
-        <div className="flex items-center gap-2">
-          <ClipboardIcon className="w-5 h-5 text-[var(--color-primary)]" />
-          <h2 id="clipboard-title" className="text-base sm:text-lg font-semibold text-[var(--color-text-primary)]">
-            Multi-Clipboard
-          </h2>
-          <span className="text-xs text-[var(--color-text-secondary)] hidden sm:inline">
-            ({clips.length})
-          </span>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PageHeader
+        title="Clipboard"
+        description={`${clips.length} saved ${clips.length === 1 ? 'clip' : 'clips'}, synced with the dashboard config.`}
+        actions={
+          <Button className="ui-btn" data-variant="primary" data-size="sm" onClick={openCreator}>
+            <Plus className="size-3.5" aria-hidden="true" /> New clip
+          </Button>
+        }
+      />
+      <PagePanel>
+        <div className="ui-panel-head gap-3">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--color-text-secondary)]" aria-hidden="true" />
+            <Input
+              className="ui-input pl-9"
+              value={query}
+              onValueChange={setQuery}
+              placeholder="Search clips…"
+              aria-label="Search clips"
+            />
+          </div>
+          <span className="ui-chip tabular-nums">{filteredClips.length}</span>
         </div>
-        <button
-          onClick={onClose}
-          className="p-2 -m-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-background)] active:bg-[var(--color-border)] rounded-lg transition-colors"
-          title="Close (Esc)"
-          aria-label="Close clipboard"
-        >
-          <X className="w-5 h-5" />
-        </button>
-      </div>
 
-      {/* Toolbar */}
-      <div className="flex flex-col sm:flex-row gap-2 p-3 sm:p-4 border-b border-[var(--color-border)]">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--color-text-secondary)] pointer-events-none" />
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search clips..."
-            className="form-control w-full pl-9 pr-8 py-2 bg-[var(--color-background)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)]"
-          />
-          {query && (
-            <button
-              onClick={() => setQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
-              aria-label="Clear search"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-        <button
-          onClick={openCreator}
-          disabled={editor.mode === 'creating'}
-          className="flex items-center justify-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/70 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Plus className="w-4 h-4" />
-          New Clip
-        </button>
-      </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <ScrollAreaViewport className="p-4">
+            <div className="space-y-3">
+              {filteredClips.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="mb-3 grid size-14 place-items-center rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--surface-sunken)]">
+                    <ClipboardIcon className="size-6 text-[var(--color-text-secondary)]" aria-hidden="true" />
+                  </div>
+                  <p className="text-sm font-medium text-[var(--color-text-primary)]">
+                    {clips.length === 0 ? 'No clips yet' : 'No matches'}
+                  </p>
+                  <p className="mt-1 max-w-sm text-xs text-[var(--color-text-secondary)]">
+                    {clips.length === 0
+                      ? 'Save snippets, commands and addresses, then copy them anywhere with one click.'
+                      : `Nothing matches “${query}”.`}
+                  </p>
+                  {clips.length === 0 && (
+                    <Button className="ui-btn mt-4" data-variant="primary" data-size="sm" onClick={openCreator}>
+                      <Plus className="size-3.5" aria-hidden="true" /> Add your first clip
+                    </Button>
+                  )}
+                </div>
+              )}
 
-      {/* Body */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3">
-        {/* Editor form */}
-        {editor.mode !== 'idle' && (
-          <div className="p-3 sm:p-4 bg-[var(--color-background)] rounded-xl border border-[var(--color-primary)]/40 space-y-3">
-            <div>
-              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-                Label
-              </label>
-              <input
-                type="text"
-                value={labelDraft}
-                onChange={(e) => setLabelDraft(e.target.value)}
-                autoFocus
-                placeholder="e.g. SSH command, API token, address..."
-                className="form-control w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)]"
-              />
+              {filteredClips.map((clip, visibleIdx) => {
+                const isCopied = copiedId === clip.id;
+                const isDragging = draggedId === clip.id;
+                const isDragOver = dragOverId === clip.id;
+                const canonicalIdx = clips.findIndex(c => c.id === clip.id);
+                const canMoveUp = canonicalIdx > 0;
+                const canMoveDown = canonicalIdx !== -1 && canonicalIdx < clips.length - 1;
+
+                return (
+                  <div
+                    key={clip.id}
+                    draggable={!query}
+                    onDragStart={(e) => handleDragStart(e, clip.id)}
+                    onDragOver={(e) => handleDragOver(e, clip.id)}
+                    onDrop={(e) => handleDrop(e, clip.id)}
+                    onDragEnd={handleDragEnd}
+                    className={`group rounded-[var(--radius-md)] border bg-[var(--surface-sunken)] transition-colors ${
+                      isDragOver
+                        ? 'border-[var(--color-primary)] ring-2 ring-[color-mix(in_srgb,var(--color-primary)_30%,transparent)]'
+                        : clip.pinned
+                          ? 'border-[var(--accent-line)]'
+                          : 'border-[var(--color-border)]'
+                    } ${isDragging ? 'opacity-50' : ''}`}
+                  >
+                    <div className="flex items-start gap-2 p-3">
+                      {!query && (
+                        <span className="hidden cursor-grab pt-1 text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100 sm:block" title="Drag to reorder">
+                          <GripVertical className="size-4" aria-hidden="true" />
+                        </span>
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          {clip.pinned && <Pin className="size-3.5 shrink-0 text-[var(--color-accent)]" aria-label="Pinned" />}
+                          <h3 className="truncate text-[0.8125rem] font-semibold text-[var(--color-text-primary)]">{clip.label}</h3>
+                          <span className="shrink-0 text-[11px] text-[var(--color-text-secondary)]">{formatRelative(clip.updatedAt)}</span>
+                        </div>
+                        <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--color-surface)] p-2 font-mono text-xs text-[var(--color-text-secondary)]">
+                          {clip.content}
+                        </pre>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap items-center gap-1">
+                        <Button
+                          className="ui-btn"
+                          data-variant={isCopied ? 'secondary' : 'primary'}
+                          data-size="sm"
+                          onClick={() => handleCopy(clip)}
+                          title="Copy to clipboard"
+                        >
+                          {isCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+                          {isCopied ? 'Copied' : 'Copy'}
+                        </Button>
+                        <Menu
+                          onAction={(action) => {
+                            if (action === 'share') void handleShare(clip);
+                            if (action === 'pin') toggleClipPin(clip.id);
+                            if (action === 'up') moveClip(clip, -1);
+                            if (action === 'down') moveClip(clip, 1);
+                            if (action === 'edit') openEditor(clip);
+                            if (action === 'delete') void handleDelete(clip);
+                          }}
+                        >
+                          <MenuTrigger
+                            aria-label={`Actions for ${clip.label}`}
+                            className="ui-btn"
+                            data-variant="ghost"
+                            data-size="icon"
+                          >
+                            <MoreHorizontal className="size-4" aria-hidden="true" />
+                          </MenuTrigger>
+                          <MenuContent className="ui-popup">
+                            {canWebShare && (
+                              <MenuItem value="share" className="ui-menu-item">
+                                <Share2 className="size-4" aria-hidden="true" /> Share clip
+                              </MenuItem>
+                            )}
+                            <MenuItem value="pin" className="ui-menu-item">
+                              {clip.pinned
+                                ? <PinOff className="size-4" aria-hidden="true" />
+                                : <Pin className="size-4" aria-hidden="true" />}
+                              {clip.pinned ? 'Unpin' : 'Pin to top'}
+                            </MenuItem>
+                            <MenuItem value="up" className="ui-menu-item" disabled={!canMoveUp}>
+                              <ArrowUp className="size-4" aria-hidden="true" /> Move up
+                            </MenuItem>
+                            <MenuItem value="down" className="ui-menu-item" disabled={!canMoveDown}>
+                              <ArrowDown className="size-4" aria-hidden="true" /> Move down
+                            </MenuItem>
+                            <MenuItem value="edit" className="ui-menu-item">
+                              <Edit2 className="size-4" aria-hidden="true" /> Edit clip
+                            </MenuItem>
+                            <MenuSeparator className="ui-menu-separator" />
+                            <MenuItem value="delete" className="ui-menu-item" data-tone="danger">
+                              <Trash2 className="size-4" aria-hidden="true" /> Delete clip
+                            </MenuItem>
+                          </MenuContent>
+                        </Menu>
+                      </div>
+                    </div>
+                    <span className="sr-only">Clip {visibleIdx + 1} of {filteredClips.length}</span>
+                  </div>
+                );
+              })}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-[var(--color-text-secondary)] mb-1">
-                Content
-              </label>
-              <textarea
-                value={contentDraft}
-                onChange={(e) => setContentDraft(e.target.value)}
-                rows={5}
-                placeholder="Paste anything — multiline text, commands, snippets..."
-                className="form-control w-full px-3 py-2 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg text-sm font-mono text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] resize-y"
-              />
+          </ScrollAreaViewport>
+          <ScrollAreaScrollbar orientation="vertical">
+            <ScrollAreaThumb />
+          </ScrollAreaScrollbar>
+        </ScrollArea>
+      </PagePanel>
+
+      {editor.mode !== 'idle' && (
+        <Dialog open onOpenChange={(open) => { if (!open) cancelEditor(); }}>
+          <DialogBackdrop className="ui-dialog-backdrop" />
+          <DialogContent className="ui-dialog" data-size="md">
+            <div className="ui-dialog-head">
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="ui-dialog-title">
+                  {editor.mode === 'creating' ? 'New clip' : 'Edit clip'}
+                </DialogTitle>
+                <DialogDescription className="ui-dialog-description">
+                  Snippets, commands and addresses, synced with the dashboard config.
+                </DialogDescription>
+              </div>
+              <DialogClose aria-label="Close" className="ui-dialog-close">
+                <X className="size-4" aria-hidden="true" />
+              </DialogClose>
             </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={cancelEditor}
-                className="px-3 py-1.5 bg-[var(--color-surface)] text-[var(--color-text-primary)] rounded-lg hover:bg-[var(--color-border)] active:bg-[var(--color-border)]/80 transition-colors text-sm"
-              >
+            <div className="ui-dialog-body space-y-3">
+              <Field className="ui-field">
+                <FieldLabel className="ui-label">Label</FieldLabel>
+                <Input
+                  className="ui-input"
+                  value={labelDraft}
+                  onValueChange={setLabelDraft}
+                  autoFocus
+                  placeholder="e.g. SSH command, API token, address…"
+                />
+              </Field>
+              <Field className="ui-field">
+                <FieldLabel className="ui-label">Content</FieldLabel>
+                <Textarea
+                  className="ui-textarea font-mono"
+                  value={contentDraft}
+                  onValueChange={setContentDraft}
+                  rows={6}
+                  placeholder="Paste anything — multiline text, commands, snippets…"
+                />
+              </Field>
+            </div>
+            <div className="ui-dialog-foot">
+              <DialogClose className="ui-btn" data-variant="secondary">
                 Cancel
-              </button>
-              <button
-                type="button"
+              </DialogClose>
+              <Button
+                className="ui-btn"
+                data-variant="primary"
                 onClick={saveEditor}
                 disabled={!contentDraft}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/70 transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <Save className="w-3.5 h-3.5" />
-                {editor.mode === 'creating' ? 'Add Clip' : 'Save Changes'}
-              </button>
+                <Save className="size-3.5" aria-hidden="true" />
+                {editor.mode === 'creating' ? 'Add clip' : 'Save changes'}
+              </Button>
             </div>
-          </div>
-        )}
-
-        {/* Empty / no-results state */}
-        {filteredClips.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="w-16 h-16 mb-4 rounded-2xl bg-[var(--color-background)] flex items-center justify-center">
-              <ClipboardIcon className="w-8 h-8 text-[var(--color-text-secondary)]" />
-            </div>
-            {clips.length === 0 ? (
-              <>
-                <p className="text-[var(--color-text-primary)] font-medium mb-1">
-                  No clips yet
-                </p>
-                <p className="text-sm text-[var(--color-text-secondary)] mb-4">
-                  Save snippets, commands, addresses — copy them anywhere with one click.
-                </p>
-                <button
-                  onClick={openCreator}
-                  className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--color-primary)] text-white rounded-lg hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/70 transition-colors text-sm"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add Your First Clip
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="text-[var(--color-text-primary)] font-medium mb-1">No matches</p>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  Nothing matches "{query}"
-                </p>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Clip list */}
-        {filteredClips.map((clip, visibleIdx) => {
-          const isCopied = copiedId === clip.id;
-          const isDragging = draggedId === clip.id;
-          const isDragOver = dragOverId === clip.id;
-          const canonicalIdx = clips.findIndex(c => c.id === clip.id);
-          const canMoveUp = !query && canonicalIdx > 0;
-          const canMoveDown = !query && canonicalIdx !== -1 && canonicalIdx < clips.length - 1;
-          return (
-            <div
-              key={clip.id}
-              draggable={!query}
-              onDragStart={(e) => handleDragStart(e, clip.id)}
-              onDragOver={(e) => handleDragOver(e, clip.id)}
-              onDrop={(e) => handleDrop(e, clip.id)}
-              onDragEnd={handleDragEnd}
-              className={`group p-3 sm:p-4 bg-[var(--color-background)] rounded-xl border transition-all ${
-                isDragOver
-                  ? 'border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/30'
-                  : clip.pinned
-                    ? 'border-[var(--color-accent)]/50'
-                    : 'border-[var(--color-border)]'
-              } ${isDragging ? 'opacity-50' : ''}`}
-            >
-              <div className="flex items-start gap-2">
-                {!query && (
-                  <div className="hidden sm:flex flex-col items-center gap-0.5 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <div
-                      className="text-[var(--color-text-secondary)] cursor-grab active:cursor-grabbing"
-                      title="Drag to reorder"
-                    >
-                      <GripVertical className="w-4 h-4" />
-                    </div>
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    {clip.pinned && (
-                      <Pin className="w-3.5 h-3.5 text-[var(--color-accent)] flex-shrink-0" />
-                    )}
-                    <h3 className="font-medium text-[var(--color-text-primary)] truncate">
-                      {clip.label}
-                    </h3>
-                    <span className="text-xs text-[var(--color-text-secondary)] flex-shrink-0">
-                      {formatRelative(clip.updatedAt)}
-                    </span>
-                  </div>
-                  <pre className="text-xs sm:text-sm text-[var(--color-text-secondary)] font-mono whitespace-pre-wrap break-words max-h-40 overflow-y-auto bg-[var(--color-surface)] rounded-lg p-2 border border-[var(--color-border)]">
-                    {clip.content}
-                  </pre>
-                  {/* Mobile reorder row — visible only when not searching */}
-                  {!query && (
-                    <div className="flex sm:hidden items-center gap-2 mt-2">
-                      <button
-                        onClick={() => moveClip(clip, -1)}
-                        disabled={!canMoveUp}
-                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:bg-[var(--color-border)] rounded-lg text-xs disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                        aria-label="Move clip up"
-                      >
-                        <ArrowUp className="w-3.5 h-3.5" />
-                        Up
-                      </button>
-                      <button
-                        onClick={() => moveClip(clip, 1)}
-                        disabled={!canMoveDown}
-                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-surface)] active:bg-[var(--color-border)] rounded-lg text-xs disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                        aria-label="Move clip down"
-                      >
-                        <ArrowDown className="w-3.5 h-3.5" />
-                        Down
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div className="flex flex-col sm:flex-row items-center gap-1 flex-shrink-0">
-                  <button
-                    onClick={() => handleCopy(clip)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors active:scale-95 ${
-                      isCopied
-                        ? 'bg-[var(--color-success)] text-white'
-                        : 'bg-[var(--color-primary)] text-white hover:bg-[var(--color-primary)]/80 active:bg-[var(--color-primary)]/70'
-                    }`}
-                    title="Copy to clipboard"
-                  >
-                    {isCopied ? (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Copied</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-3.5 h-3.5" />
-                        <span className="hidden sm:inline">Copy</span>
-                      </>
-                    )}
-                  </button>
-                  {canWebShare && (
-                    <button
-                      onClick={() => handleShare(clip)}
-                      className="p-2 -m-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 active:bg-[var(--color-primary)]/20 rounded-lg transition-colors"
-                      title="Share"
-                      aria-label="Share clip"
-                    >
-                      <Share2 className="w-4 h-4" />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => toggleClipPin(clip.id)}
-                    className="p-2 -m-0.5 text-[var(--color-text-secondary)] hover:text-[var(--color-accent)] hover:bg-[var(--color-accent)]/10 active:bg-[var(--color-accent)]/20 rounded-lg transition-colors"
-                    title={clip.pinned ? 'Unpin' : 'Pin to top'}
-                    aria-label={clip.pinned ? 'Unpin clip' : 'Pin clip'}
-                  >
-                    {clip.pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
-                  </button>
-                  <button
-                    onClick={() => openEditor(clip)}
-                    className="p-2 -m-0.5 text-[var(--color-primary)] hover:bg-[var(--color-primary)]/10 active:bg-[var(--color-primary)]/20 rounded-lg transition-colors"
-                    title="Edit"
-                    aria-label="Edit clip"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(clip)}
-                    className="p-2 -m-0.5 text-[var(--color-error)] hover:bg-[var(--color-error)]/10 active:bg-[var(--color-error)]/20 rounded-lg transition-colors"
-                    title="Delete"
-                    aria-label="Delete clip"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-              {/* visibleIdx reserved for future a11y announcements */}
-              <span className="sr-only">Clip {visibleIdx + 1} of {filteredClips.length}</span>
-            </div>
-          );
-        })}
-      </div>
-      </div>
-    </ModalShell>
+          </DialogContent>
+        </Dialog>
+      )}
+    </div>
   );
 }
