@@ -1,16 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  Clock,
-  Container,
-  Cpu,
-  HardDrive,
-  MemoryStick,
-  Server,
-  Settings2,
-} from 'lucide-react';
-import { Button } from '@ui-sdk/react/button';
-import { Meter, MeterIndicator, MeterTrack, MeterValue } from '@ui-sdk/react/meter';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Clock, Container, Cpu, HardDrive, MemoryStick, Search, Server, Settings2 } from 'lucide-react';
 import {
   SegmentedControl,
   SegmentedControlIndicator,
@@ -19,45 +8,41 @@ import {
 import { configApi } from '../api/configApi';
 import { useDashboard } from '../context/DashboardContext';
 import type { ServerStats as ServerStatsData } from '../types';
+import { usageLevel } from '../lib/levels';
 import { PageHeader, PagePanel } from './shell/PageHeader';
+import { Button, EmptyState, InlineAlert, Input, KeyValueList, LevelMeter, LiveBadge, SelectField, StatTile } from './ui';
 
 interface ServerStatsProps {
-  /** Jumps to Settings → Remote servers. */
+  /** Jumps to Settings → Servers. */
   onManage?: () => void;
 }
 
 const POLL_INTERVAL_MS = 3000;
 const LOCAL_ID = 'local';
+const SEGMENTED_MAX = 4;
 
-function formatBytes(bytes: number | null): string {
-  if (bytes === null || !Number.isFinite(bytes)) return '—';
+type Sort = 'cpu' | 'memory' | 'name';
+
+function formatBytes(bytes: number | null | undefined): string {
+  if (bytes == null || !Number.isFinite(bytes)) return '—';
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
-/** Utilisation reads as warning above 75% and danger above 90%. */
-function usageColor(percent: number | null): string {
-  if (percent === null) return 'var(--color-text-secondary)';
-  if (percent >= 90) return 'var(--color-error)';
-  if (percent >= 75) return 'var(--color-warning)';
-  return 'var(--color-primary)';
+function percent(p: number | null | undefined): string {
+  return p == null ? '—' : `${p.toFixed(p < 10 ? 1 : 0)}%`;
 }
 
-function percentLabel(percent: number | null): string {
-  return percent === null ? '—' : `${percent.toFixed(1)}%`;
-}
-
-// Renders live stats for a single server, polling on an interval. `serverUrl`
-// is undefined for the local host (uses /api/stats) or a base URL for a remote
-// Glances instance (proxied via /api/stats/remote). `username`/`password` carry
-// optional Basic-auth credentials for protected Glances instances.
-function StatsView({ serverUrl, username, password }: { serverUrl?: string; username?: string; password?: string }) {
+/** Live readings for one server: local (/api/stats) or a Glances endpoint through the proxy. */
+function StatsView({ serverUrl, username, password, paused }: { serverUrl?: string; username?: string; password?: string; paused: boolean }) {
   const [stats, setStats] = useState<ServerStatsData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<Sort>('cpu');
   const mountedRef = useRef(true);
 
   const fetchStats = useCallback(async () => {
@@ -70,7 +55,7 @@ function StatsView({ serverUrl, username, password }: { serverUrl?: string; user
       setError(null);
     } catch (e) {
       if (!mountedRef.current) return;
-      setError(e instanceof Error ? e.message : 'Unable to reach the server for stats.');
+      setError(e instanceof Error ? e.message : 'The server did not answer.');
     } finally {
       if (mountedRef.current) setLoading(false);
     }
@@ -78,54 +63,47 @@ function StatsView({ serverUrl, username, password }: { serverUrl?: string; user
 
   useEffect(() => {
     mountedRef.current = true;
-    fetchStats();
-    const id = setInterval(fetchStats, POLL_INTERVAL_MS);
-    return () => {
-      mountedRef.current = false;
-      clearInterval(id);
-    };
+    void fetchStats();
+    return () => { mountedRef.current = false; };
   }, [fetchStats]);
 
-  const cpuDetail = stats
-    ? `${stats.cpu.cores ?? '?'} cores${
-        typeof stats.cpu.load['1m'] === 'number' &&
-        typeof stats.cpu.load['5m'] === 'number' &&
-        typeof stats.cpu.load['15m'] === 'number'
-          ? ` · load ${stats.cpu.load['1m']!.toFixed(2)}, ${stats.cpu.load['5m']!.toFixed(2)}, ${stats.cpu.load['15m']!.toFixed(2)}`
-          : ''
-      }`
-    : '';
-  const memDetail = stats
-    ? `${formatBytes(stats.memory.used)} / ${formatBytes(stats.memory.total)} used`
-    : '';
-  const diskDetail = stats
-    ? stats.disk.total === null
-      ? 'Not available on this platform'
-      : `${formatBytes(stats.disk.used)} / ${formatBytes(stats.disk.total)} used · ${formatBytes(stats.disk.free)} free`
-    : '';
+  useEffect(() => {
+    if (paused) return;
+    const id = setInterval(() => { if (!document.hidden) void fetchStats(); }, POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [fetchStats, paused]);
+
+  const containers = useMemo(() => {
+    const list = [...(stats?.containers ?? [])];
+    const q = query.trim().toLowerCase();
+    const filtered = q ? list.filter((c) => c.name.toLowerCase().includes(q) || c.image.toLowerCase().includes(q)) : list;
+    filtered.sort((a, b) =>
+      sort === 'name' ? a.name.localeCompare(b.name)
+        : sort === 'memory' ? (b.memoryUsage ?? -1) - (a.memoryUsage ?? -1)
+        : (b.cpuPercent ?? -1) - (a.cpuPercent ?? -1));
+    return filtered;
+  }, [stats?.containers, query, sort]);
 
   if (loading && !stats) {
     return (
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-hidden="true">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-[104px] animate-pulse rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--surface-sunken)]" />
+          <div key={i} className="h-[118px] animate-pulse rounded-[var(--radius-md)] border border-[var(--color-border)] bg-[var(--surface-sunken)]" />
         ))}
       </div>
     );
   }
 
   if (error && !stats) {
-    return (
-      <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-error)_35%,transparent)] bg-[var(--danger-soft)] px-3 py-2 text-[var(--color-error)]">
-        <AlertTriangle className="size-4 shrink-0" aria-hidden="true" />
-        <span className="text-sm">{error}</span>
-      </div>
-    );
+    return <InlineAlert tone="danger" title="Can't read this server">{error}</InlineAlert>;
   }
-
   if (!stats) return null;
 
-  const systemRows: Array<[string, string]> = [
+  const load = stats.cpu.load;
+  const loadText = typeof load['1m'] === 'number'
+    ? `load ${load['1m']!.toFixed(2)}, ${load['5m']?.toFixed(2) ?? '—'}, ${load['15m']?.toFixed(2) ?? '—'}`
+    : null;
+  const systemRows: [string, string][] = [
     ['Hostname', stats.system.hostname],
     ['OS', `${stats.system.type}${stats.system.release ? ` (${stats.system.release})` : ''}`],
     ['Platform', [stats.system.platform, stats.system.arch].filter(Boolean).join(' · ')],
@@ -134,118 +112,96 @@ function StatsView({ serverUrl, username, password }: { serverUrl?: string; user
   if (stats.cpu.model) systemRows.push(['CPU model', stats.cpu.model]);
   if (stats.system.nodeVersion) systemRows.push(['Node', stats.system.nodeVersion]);
   if (stats.system.glancesVersion) systemRows.push(['Glances', stats.system.glancesVersion]);
+  const upSince = stats.uptime.seconds != null
+    ? new Date(stats.timestamp - stats.uptime.seconds * 1000).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : null;
 
   return (
     <div className="space-y-4">
       {error && (
-        <div className="flex items-center gap-2 rounded-[var(--radius-md)] border border-[color-mix(in_srgb,var(--color-warning)_35%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)] px-3 py-2 text-[var(--color-warning)]">
-          <AlertTriangle className="size-3.5 shrink-0" aria-hidden="true" />
-          <span className="text-xs">{error} (showing last known values)</span>
-        </div>
+        <InlineAlert tone="warning">
+          {error} Showing the last readings from {new Date(stats.timestamp).toLocaleTimeString()}.
+        </InlineAlert>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {([
-          { icon: Cpu, label: 'CPU', percent: stats.cpu.percent, detail: cpuDetail },
-          { icon: MemoryStick, label: 'Memory', percent: stats.memory.percent, detail: memDetail },
-          { icon: HardDrive, label: 'Disk', percent: stats.disk.percent, detail: diskDetail },
-        ] as const).map(({ icon: Icon, label, percent, detail }) => (
-          <div key={label} className="ui-stat">
-            <div className="ui-stat-head">
-              <Icon className="size-4 text-[var(--color-text-secondary)]" aria-hidden="true" />
-              <span className="text-[0.8125rem] font-semibold">{label}</span>
-            </div>
-            <Meter
-              value={percent ?? 0}
-              min={0}
-              max={100}
-              format={{ style: 'percent', maximumFractionDigits: 1 }}
-              aria-label={label}
-            >
-              <MeterValue>{percentLabel(percent)}</MeterValue>
-              <MeterTrack>
-                <MeterIndicator style={{ backgroundColor: usageColor(percent) }} />
-              </MeterTrack>
-            </Meter>
-            <p className="ui-stat-detail">{detail}</p>
-          </div>
-        ))}
-
-        <div className="ui-stat">
-          <div className="ui-stat-head">
-            <Clock className="size-4 text-[var(--color-text-secondary)]" aria-hidden="true" />
-            <span className="text-[0.8125rem] font-semibold">Uptime</span>
-          </div>
-          <p className="text-xl font-semibold tabular-nums text-[var(--color-text-primary)]">
-            {stats.uptime.formatted ?? '—'}
-          </p>
-          <p className="ui-stat-detail">
-            {stats.source === 'glances' ? 'Remote Glances instance' : 'This host'}
-          </p>
-        </div>
+        <StatTile label="CPU" icon={Cpu} value={percent(stats.cpu.percent)} level={usageLevel(stats.cpu.percent)} detail={[stats.cpu.cores ? `${stats.cpu.cores} cores` : null, loadText].filter(Boolean).join(' · ')}>
+          <LevelMeter label="CPU" value={stats.cpu.percent} className="ui-meter-bare" />
+        </StatTile>
+        <StatTile label="Memory" icon={MemoryStick} value={percent(stats.memory.percent)} level={usageLevel(stats.memory.percent, 85, 95)} detail={`${formatBytes(stats.memory.used)} of ${formatBytes(stats.memory.total)} used`}>
+          <LevelMeter label="Memory" value={stats.memory.percent} level={usageLevel(stats.memory.percent, 85, 95)} className="ui-meter-bare" />
+        </StatTile>
+        <StatTile
+          label="Disk"
+          icon={HardDrive}
+          value={percent(stats.disk.percent)}
+          level={usageLevel(stats.disk.percent)}
+          chip={usageLevel(stats.disk.percent) === 'critical' ? <span className="ui-chip" data-tone="danger">Nearly full</span> : usageLevel(stats.disk.percent) === 'warn' ? <span className="ui-chip" data-tone="warning">High</span> : null}
+          detail={stats.disk.total === null ? 'Not reported on this platform' : `${formatBytes(stats.disk.used)} of ${formatBytes(stats.disk.total)} · ${formatBytes(stats.disk.free)} free`}
+        >
+          <LevelMeter label="Disk" value={stats.disk.percent} className="ui-meter-bare" />
+        </StatTile>
+        <StatTile label="Uptime" icon={Clock} value={stats.uptime.formatted ?? '—'} detail={upSince ? `Up since ${upSince}` : stats.source === 'glances' ? 'Glances endpoint' : 'This host'} />
       </div>
 
-      <section className="ui-panel-section">
-        <div className="ui-panel-section-head">
-          <Server className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
-          System
-        </div>
-        <div>
-          {systemRows.map(([label, value]) => (
-            <div key={label} className="ui-row justify-between">
-              <span className="text-xs text-[var(--color-text-secondary)]">{label}</span>
-              <span className="break-all text-right text-xs font-medium">{value}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {stats.containers && (
-        <section className="ui-panel-section">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.35fr)]">
+        <section className="ui-panel-section self-start">
           <div className="ui-panel-section-head">
-            <Container className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
-            Containers
-            <span className="ui-chip ml-auto tabular-nums">{stats.containers.length}</span>
+            <Server className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
+            System
           </div>
-          {stats.containers.length === 0 ? (
-            <p className="px-3 py-4 text-xs text-[var(--color-text-secondary)]">No running containers.</p>
-          ) : (
-            <div>
-              {stats.containers.map((container, index) => {
-                const running = /running|up/i.test(container.status);
-                return (
-                  <div key={`${container.name}-${index}`} className="ui-row justify-between">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className="size-2 shrink-0 rounded-full"
-                          style={{ backgroundColor: running ? 'var(--color-success)' : 'var(--color-text-secondary)' }}
-                          title={container.status}
-                        />
-                        <span className="truncate text-[0.8125rem] font-medium">{container.name}</span>
-                      </div>
-                      <p className="ui-row-dim truncate">{container.image}</p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-4 text-right tabular-nums">
-                      <div>
-                        <p className="text-xs font-medium">{percentLabel(container.cpuPercent)}</p>
-                        <p className="text-[10px] text-[var(--color-text-secondary)]">CPU</p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-medium">{formatBytes(container.memoryUsage)}</p>
-                        <p className="text-[10px] text-[var(--color-text-secondary)]">MEM</p>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <KeyValueList items={systemRows} />
         </section>
-      )}
+
+        {stats.containers && (
+          <section className="ui-panel-section min-w-0">
+            <div className="ui-panel-section-head flex-wrap">
+              <Container className="size-3.5 text-[var(--color-text-secondary)]" aria-hidden="true" />
+              Containers
+              <span className="ui-chip tabular-nums">{stats.containers.length}</span>
+              <span className="ml-auto flex flex-wrap items-center gap-2">
+                <span className="relative">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-text-secondary)]" aria-hidden="true" />
+                  <Input value={query} onValueChange={setQuery} placeholder="Filter" aria-label="Filter containers" className="h-8 w-40 pl-8 text-xs" />
+                </span>
+                <SegmentedControl aria-label="Sort containers by" className="ui-seg" value={sort} onValueChange={(v) => { if (v) setSort(v as Sort); }}>
+                  <SegmentedControlIndicator />
+                  <SegmentedControlItem value="cpu" className="ui-seg-item">CPU</SegmentedControlItem>
+                  <SegmentedControlItem value="memory" className="ui-seg-item">Memory</SegmentedControlItem>
+                  <SegmentedControlItem value="name" className="ui-seg-item">Name</SegmentedControlItem>
+                </SegmentedControl>
+              </span>
+            </div>
+            {stats.containers.length === 0 ? (
+              <EmptyState title="No running containers" compact />
+            ) : containers.length === 0 ? (
+              <EmptyState title={`Nothing matches “${query}”`} compact />
+            ) : (
+              <ul>
+                {containers.map((c) => {
+                  const running = /running|up/i.test(c.status);
+                  return (
+                    <li key={`${c.name}-${c.image}`} className="ui-row">
+                      <span className="ui-status-dot" data-on={running || undefined} role="img" aria-label={c.status} />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[0.8125rem] font-medium">{c.name}</p>
+                        <p className="ui-row-dim truncate font-mono">{c.image}</p>
+                      </div>
+                      <div className="w-28 shrink-0">
+                        <LevelMeter label="CPU" value={c.cpuPercent} valueText={percent(c.cpuPercent)} />
+                      </div>
+                      <span className="w-16 shrink-0 text-right text-xs tabular-nums text-[var(--color-text-secondary)]">{formatBytes(c.memoryUsage)}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
+      </div>
 
       <p className="pb-1 text-center text-[10px] text-[var(--color-text-secondary)]">
-        Updated {new Date(stats.timestamp).toLocaleTimeString()} · refreshing every {POLL_INTERVAL_MS / 1000}s
+        Last reading {new Date(stats.timestamp).toLocaleTimeString()}
       </p>
     </div>
   );
@@ -254,57 +210,57 @@ function StatsView({ serverUrl, username, password }: { serverUrl?: string; user
 export function ServerStats({ onManage }: ServerStatsProps) {
   const { servers } = useDashboard();
   const [selectedId, setSelectedId] = useState<string>(LOCAL_ID);
+  const [paused, setPaused] = useState(false);
 
-  // If the selected remote server is deleted, fall back to local.
   useEffect(() => {
-    if (selectedId !== LOCAL_ID && !servers.some(s => s.id === selectedId)) {
-      setSelectedId(LOCAL_ID);
-    }
+    if (selectedId !== LOCAL_ID && !servers.some((s) => s.id === selectedId)) setSelectedId(LOCAL_ID);
   }, [servers, selectedId]);
 
-  const selectedServer = servers.find(s => s.id === selectedId);
-  const selectedUrl = selectedId === LOCAL_ID ? undefined : selectedServer?.url;
+  const selected = servers.find((s) => s.id === selectedId);
+  const options = [{ value: LOCAL_ID, label: 'This host' }, ...servers.map((s) => ({ value: s.id, label: s.name }))];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PageHeader
         title="Server stats"
-        description="Live CPU, memory, disk and containers for this host or a Glances endpoint."
+        description="CPU, memory, disk and containers for this host or any Glances server."
         actions={
-          onManage ? (
-            <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={onManage}>
-              <Settings2 className="size-3.5" aria-hidden="true" /> Manage servers
-            </Button>
-          ) : null
+          <>
+            <LiveBadge intervalMs={POLL_INTERVAL_MS} paused={paused} onPausedChange={setPaused} />
+            {onManage ? (
+              <Button variant="ghost" size="sm" onClick={onManage}>
+                <Settings2 className="size-3.5" aria-hidden="true" /> Manage servers
+              </Button>
+            ) : null}
+          </>
         }
       />
       <PagePanel fill={false}>
         <div className="ui-panel-head gap-2 overflow-x-auto">
-          <SegmentedControl
-            aria-label="Server"
-            className="ui-seg"
-            value={selectedId}
-            onValueChange={(value) => { if (value) setSelectedId(value); }}
-          >
-            <SegmentedControlIndicator />
-            <SegmentedControlItem value={LOCAL_ID} className="ui-seg-item">
-              <Server className="size-3.5" aria-hidden="true" /> This host
-            </SegmentedControlItem>
-            {servers.map((server) => (
-              <SegmentedControlItem key={server.id} value={server.id} className="ui-seg-item">
-                {server.name}
-              </SegmentedControlItem>
-            ))}
-          </SegmentedControl>
+          {options.length <= SEGMENTED_MAX + 1 ? (
+            <SegmentedControl aria-label="Server" className="ui-seg" value={selectedId} onValueChange={(v) => { if (v) setSelectedId(v); }}>
+              <SegmentedControlIndicator />
+              {options.map((o) => (
+                <SegmentedControlItem key={o.value} value={o.value} className="ui-seg-item">
+                  {o.value === LOCAL_ID ? <Server className="size-3.5" aria-hidden="true" /> : null}
+                  {o.label}
+                </SegmentedControlItem>
+              ))}
+            </SegmentedControl>
+          ) : (
+            <div className="w-64">
+              <SelectField ariaLabel="Server" value={selectedId} onValueChange={setSelectedId} options={options} />
+            </div>
+          )}
+          {selected?.monitor ? <span className="ui-chip" data-tone="info">On the monitor</span> : null}
         </div>
-
         <div className="p-4">
-          {/* Remount StatsView per server so polling resets cleanly. */}
           <StatsView
             key={selectedId}
-            serverUrl={selectedUrl}
-            username={selectedServer?.username}
-            password={selectedServer?.password}
+            serverUrl={selected?.url}
+            username={selected?.username}
+            password={selected?.password}
+            paused={paused}
           />
         </div>
       </PagePanel>

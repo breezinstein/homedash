@@ -4396,4 +4396,105 @@ select {
 }
 .ui-row[data-disabled] { opacity: 0.65; }
 
+.ui-meter-bare .ui-meter-head {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.ui-status-dot { width: 8px; height: 8px; flex: none; border-radius: 999px; background-color: var(--text-tertiary); }
+.ui-status-dot[data-on] { background-color: var(--color-success); }
+.ui-status-dot[data-tone="warning"] { background-color: var(--color-warning); }
+.ui-status-dot[data-tone="danger"] { background-color: var(--color-error); }
+
+.ui-kv-columns { display: grid; grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr)); column-gap: 1.25rem; }
+.ui-kv-columns .ui-kv-row { grid-template-columns: minmax(0, 1fr) auto; border-top: 0; border-bottom: 1px solid var(--border-soft); }
+
+/* Files: columns, drop zone, upload queue */
+.ui-file-cols {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 5.5rem 7.5rem 32px;
+  align-items: center;
+  gap: 0.75rem;
+}
+@media (max-width: 640px) {
+  .ui-file-cols { grid-template-columns: 28px minmax(0, 1fr) 4.5rem 32px; }
+  .ui-file-cols > :nth-child(4) { display: none; }
+}
+.ui-file-head {
+  padding: 0 0.625rem 0.35rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.ui-file-meta { font-size: 0.6875rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+[data-slot="listbox-item-icon"][data-kind="folder"] { color: var(--color-accent); }
+[data-slot="listbox-item"] [data-slot="listbox-item-icon"] { color: var(--color-primary); }
+.ui-dropzone { position: relative; display: flex; flex: 1; min-height: 0; flex-direction: column; outline: none; }
+.ui-dropzone-hint {
+  position: absolute;
+  inset: 0.75rem;
+  display: none;
+  place-items: center;
+  align-content: center;
+  gap: 0.5rem;
+  border: 2px dashed var(--color-primary);
+  border-radius: var(--radius-md);
+  background-color: color-mix(in srgb, var(--color-surface) 82%, transparent);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-primary);
+  pointer-events: none;
+}
+[data-slot="file-input"][data-dragging] .ui-dropzone-hint { display: grid; }
+.ui-dropzone:focus-visible { outline: 2px solid var(--ring); outline-offset: -2px; }
+.ui-uploads { list-style: none; margin: 0; padding: 0.5rem 1rem; display: flex; flex-direction: column; gap: 0.4rem; border-bottom: 1px solid var(--border-soft); }
+.ui-upload { display: flex; align-items: flex-start; gap: 0.6rem; }
+
+.ui-clip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr)); gap: 0.75rem; align-items: start; }
+
+/* Notifications: topic list beside a timeline */
+.ui-notif { display: flex; flex: 1; min-height: 0; flex-direction: column; }
+@media (min-width: 768px) { .ui-notif { flex-direction: row; } }
+.ui-notif-topics { padding: 0.75rem; border-bottom: 1px solid var(--border-soft); overflow-y: auto; }
+@media (min-width: 768px) { .ui-notif-topics { width: 15rem; flex-shrink: 0; border-bottom: 0; border-right: 1px solid var(--border-soft); } }
+.ui-day {
+  margin-bottom: 0.4rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+.ui-timeline { display: flex; flex-direction: column; outline: none; }
+.ui-tl-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr);
+  column-gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-radius: var(--radius-sm);
+}
+.ui-tl-item:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.ui-tl-marker {
+  width: 10px;
+  height: 10px;
+  margin-top: 0.3rem;
+  border: 2px solid var(--text-tertiary);
+  border-radius: 999px;
+  background-color: var(--color-surface);
+  position: relative;
+  z-index: 1;
+}
+.ui-tl-marker[data-tone="info"] { border-color: var(--color-primary); }
+.ui-tl-marker[data-tone="warning"] { border-color: var(--color-warning); }
+.ui-tl-marker[data-tone="danger"] { border-color: var(--color-error); }
+.ui-tl-connector { position: absolute; left: 4.5px; top: 1.15rem; bottom: 0; width: 1px; background-color: var(--border-soft); }
+.ui-tl-item:last-child .ui-tl-connector, .ui-tl-item[data-last] .ui-tl-connector { display: none; }
+.ui-tl-time { display: block; margin-bottom: 0.3rem; font-size: 0.6875rem; color: var(--color-text-secondary); font-variant-numeric: tabular-nums; }
+
 }

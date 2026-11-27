@@ -1,6 +1,5 @@
-import { useState, useEffect, useRef, useCallback, type ChangeEvent } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  AlertCircle,
   ChevronRight,
   Download,
   File,
@@ -13,8 +12,8 @@ import {
   RefreshCw,
   Share2,
   Trash2,
+  Search,
   Upload,
-  X,
 } from 'lucide-react';
 import {
   listDirectory,
@@ -25,12 +24,13 @@ import {
   type FileScope,
 } from '../api/filesApi';
 import type { CopypartyListing, CopypartyFile, CopypartyDir } from '../types';
-import { useConfirm, useToast } from './ui';
+import { EmptyState, InlineAlert, Input, useConfirm, useToast } from './ui';
 import { PageHeader, PagePanel } from './shell/PageHeader';
 import { Button } from '@ui-sdk/react/button';
 import { Listbox, ListboxItem, ListboxItemIcon } from '@ui-sdk/react/listbox';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@ui-sdk/react/menu';
 import { Progress, ProgressIndicator, ProgressTrack } from '@ui-sdk/react/progress';
+import { FileInput, FileInputDropzone, FileInputTrigger } from '@ui-sdk/react/file-input';
 import {
   ScrollArea,
   ScrollAreaScrollbar,
@@ -57,6 +57,14 @@ function formatBytes(bytes: number): string {
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`;
+}
+
+interface UploadItem {
+  id: string;
+  name: string;
+  size: number;
+  pct: number;
+  error?: string;
 }
 
 function formatDate(ts: number): string {
@@ -134,8 +142,9 @@ function ScopePane({ scope }: ScopePaneProps) {
   const [listing, setListing] = useState<CopypartyListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploads, setUploads] = useState<UploadItem[]>([]);
+  const [query, setQuery] = useState('');
+  const uploading = uploads.some((u) => u.pct < 100 && !u.error);
 
   const load = useCallback(
     async (path: string) => {
@@ -157,30 +166,38 @@ function ScopePane({ scope }: ScopePaneProps) {
     load(currentPath);
   }, [currentPath, load]);
 
-  const navigate = (path: string) => setCurrentPath(path);
+  const navigate = (path: string) => {
+    setQuery('');
+    setCurrentPath(path);
+  };
 
   // Strip the leading slash and any trailing slash, then split — gives us a
   // clean array for the breadcrumb regardless of how `currentPath` was set.
   const breadcrumbs = currentPath.replace(/^\/+|\/+$/g, '').split('/').filter(Boolean);
   const scopeRootLabel = scope === 'public' ? 'Public' : 'Private';
 
-  const handleUpload = async (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadProgress(0);
+  // Uploads run one after another into the folder that was open when they were added.
+  const enqueueUploads = async (files: File[]) => {
+    if (files.length === 0) return;
+    const target = currentPath;
+    const batch = files.map((f, n) => ({ id: `${Date.now()}-${n}-${f.name}`, name: f.name, size: f.size, pct: 0 }));
+    setUploads((prev) => [...prev.filter((u) => u.pct < 100 || u.error), ...batch]);
     setError(null);
-    try {
-      await uploadFile(scope, currentPath, file, setUploadProgress);
-      await load(currentPath);
-      toast.success(`Uploaded ${file.name}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Upload failed';
-      setError(msg);
-      toast.error(msg);
-    } finally {
-      setUploadProgress(null);
-      if (fileInputRef.current) fileInputRef.current.value = '';
+    let done = 0;
+    for (const [n, file] of files.entries()) {
+      const id = batch[n].id;
+      try {
+        await uploadFile(scope, target, file, (pct) => setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, pct } : u))));
+        setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, pct: 100 } : u)));
+        done++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Upload failed';
+        setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, error: msg } : u)));
+      }
     }
+    await load(target);
+    if (done) toast.success(done === 1 ? `Uploaded ${batch[0].name}` : `Uploaded ${done} files`);
+    window.setTimeout(() => setUploads((prev) => prev.filter((u) => u.pct < 100 || u.error)), 2500);
   };
 
   const handleDelete = async (path: string, kind: 'file' | 'folder', displayName: string) => {
@@ -272,9 +289,11 @@ function ScopePane({ scope }: ScopePaneProps) {
     }
   };
 
-  const dirs = listing?.dirs ?? [];
-  const files = listing?.files ?? [];
-  const isEmpty = Boolean(listing) && dirs.length === 0 && files.length === 0;
+  const q = query.trim().toLowerCase();
+  const dirs = useMemo(() => (listing?.dirs ?? []).filter((d) => !q || d.n.toLowerCase().includes(q)), [listing, q]);
+  const files = useMemo(() => (listing?.files ?? []).filter((f) => !q || f.n.toLowerCase().includes(q)), [listing, q]);
+  const isEmpty = Boolean(listing) && (listing?.dirs.length ?? 0) === 0 && (listing?.files.length ?? 0) === 0;
+  const noMatches = Boolean(listing) && !isEmpty && dirs.length === 0 && files.length === 0;
 
   const openEntry = (value: string | null) => {
     if (!value) return;
@@ -288,7 +307,13 @@ function ScopePane({ scope }: ScopePaneProps) {
   };
 
   return (
-    <>
+    <FileInput
+      multiple
+      disabled={!authenticated || uploading}
+      value={[]}
+      onValueChange={(next) => { void enqueueUploads(next); }}
+      className="flex min-h-0 flex-1 flex-col"
+    >
       <div className="ui-panel-head gap-3">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
           <Button
@@ -319,6 +344,12 @@ function ScopePane({ scope }: ScopePaneProps) {
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {listing && !isEmpty && (
+            <span className="relative hidden sm:block">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-[var(--color-text-secondary)]" aria-hidden="true" />
+              <Input value={query} onValueChange={setQuery} placeholder="Search this folder" aria-label="Search this folder" className="h-8 w-48 pl-8 text-xs" />
+            </span>
+          )}
           <Button
             className="ui-btn"
             data-variant="ghost"
@@ -331,57 +362,53 @@ function ScopePane({ scope }: ScopePaneProps) {
             <RefreshCw className={`size-4 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
           </Button>
           {authenticated && (
-            <>
-              <Button
-                className="ui-btn"
-                data-variant="primary"
-                data-size="sm"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={uploadProgress !== null}
-              >
-                <Upload className="size-3.5" aria-hidden="true" /> Upload
-              </Button>
-              <input ref={fileInputRef} type="file" className="hidden" onChange={handleUpload} />
-            </>
+            <FileInputTrigger className="ui-btn" data-variant="primary" data-size="sm">
+              <Upload className="size-3.5" aria-hidden="true" /> Upload
+            </FileInputTrigger>
           )}
         </div>
       </div>
 
-      {uploadProgress !== null && (
-        <div className="border-b border-[var(--border-soft)] px-4 py-2">
-          <Progress
-            value={uploadProgress}
-            min={0}
-            max={100}
-            format={{ style: 'percent', maximumFractionDigits: 0 }}
-            aria-label="Upload progress"
-          >
-            <ProgressTrack>
-              <ProgressIndicator />
-            </ProgressTrack>
-          </Progress>
-        </div>
+      {uploads.length > 0 && (
+        <ul className="ui-uploads" aria-label="Uploads">
+          {uploads.map((u) => (
+            <li key={u.id} className="ui-upload">
+              <Upload className="size-3.5 shrink-0 text-[var(--color-text-secondary)]" aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-baseline justify-between gap-2 text-xs">
+                  <span className="truncate font-medium">{u.name}</span>
+                  <span className="shrink-0 tabular-nums text-[var(--color-text-secondary)]">
+                    {u.error ? 'Failed' : u.pct >= 100 ? 'Done' : `${formatBytes((u.size * u.pct) / 100)} of ${formatBytes(u.size)}`}
+                  </span>
+                </span>
+                {u.error ? (
+                  <span className="block text-[11px] text-[var(--color-error)]">{u.error}</span>
+                ) : (
+                  <Progress value={u.pct} min={0} max={100} aria-label={`Uploading ${u.name}`} className="mt-1">
+                    <ProgressTrack><ProgressIndicator /></ProgressTrack>
+                  </Progress>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
 
       {error && (
-        <div className="flex items-center gap-2 border-b border-[color-mix(in_srgb,var(--color-error)_35%,transparent)] bg-[var(--danger-soft)] px-4 py-2 text-[var(--color-error)]">
-          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
-          <span className="min-w-0 flex-1 truncate text-xs">{error}</span>
-          <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={() => load(currentPath)}>
-            Retry
-          </Button>
-          <Button
-            className="ui-btn"
-            data-variant="ghost"
-            data-size="icon"
-            onClick={() => setError(null)}
-            aria-label="Dismiss error"
-          >
-            <X className="size-3.5" aria-hidden="true" />
-          </Button>
-        </div>
+        <InlineAlert
+          tone="danger"
+          className="mx-3 mt-3"
+          actions={
+            <Button className="ui-btn" data-variant="ghost" data-size="sm" onClick={() => load(currentPath)}>
+              Try again
+            </Button>
+          }
+        >
+          {error}
+        </InlineAlert>
       )}
 
+      <Dropzone enabled={authenticated} folder={breadcrumbs[breadcrumbs.length - 1] ?? scopeRootLabel}>
       <ScrollArea className="min-h-0 flex-1">
         <ScrollAreaViewport className="p-3">
           {loading && !listing && (
@@ -395,24 +422,25 @@ function ScopePane({ scope }: ScopePaneProps) {
           )}
 
           {!loading && isEmpty && (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <div className="mb-3 grid size-14 place-items-center rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--surface-sunken)]">
-                <Folder className="size-6 text-[var(--color-text-secondary)]" aria-hidden="true" />
-              </div>
-              <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                This {scope} folder is empty
-              </p>
-              <p className="mt-1 max-w-xs text-xs text-[var(--color-text-secondary)]">
-                {!authenticated
-                  ? 'No public shares yet.'
-                  : scope === 'public'
-                    ? 'Publish something from Private, or upload directly here.'
-                    : 'Use Upload to add files.'}
-              </p>
+            <EmptyState
+              icon={Folder}
+              title={`This ${scope} folder is empty`}
+              description={!authenticated ? 'Nothing has been shared yet.' : scope === 'public' ? 'Publish something from Private, or drop files here.' : 'Drop files here or use Upload.'}
+            />
+          )}
+          {noMatches && <EmptyState icon={Search} title={`Nothing here matches “${query}”`} compact />}
+
+          {listing && !isEmpty && !noMatches && (
+            <div className="ui-file-cols ui-file-head" aria-hidden="true">
+              <span />
+              <span>Name</span>
+              <span className="text-right">Size</span>
+              <span>Modified</span>
+              <span />
             </div>
           )}
 
-          {listing && !isEmpty && (
+          {listing && !isEmpty && !noMatches && (
             <Listbox
               aria-label={`${scopeRootLabel} folder contents`}
               className="ui-listbox"
@@ -422,14 +450,13 @@ function ScopePane({ scope }: ScopePaneProps) {
               {dirs.map((dir: CopypartyDir) => {
                 const path = currentPath + dir.n + '/';
                 return (
-                  <ListboxItem key={`dir:${dir.n}`} value={`dir:${path}`} className="ui-list-item">
-                    <ListboxItemIcon>
-                      <Folder className="size-4 text-[var(--color-accent)]" aria-hidden="true" />
+                  <ListboxItem key={`dir:${dir.n}`} value={`dir:${path}`} className="ui-list-item ui-file-cols">
+                    <ListboxItemIcon data-kind="folder">
+                      <Folder className="size-4" aria-hidden="true" />
                     </ListboxItemIcon>
-                    <span className="min-w-0 flex-1 truncate text-[0.8125rem] font-medium">{dir.n}</span>
-                    <span className="shrink-0 text-[11px] text-[var(--color-text-secondary)]">
-                      {dir.ts > 0 ? formatDate(dir.ts) : 'Folder'}
-                    </span>
+                    <span className="min-w-0 truncate text-[0.8125rem] font-medium">{dir.n}</span>
+                    <span className="ui-file-meta text-right">Folder</span>
+                    <span className="ui-file-meta">{dir.ts > 0 ? formatDate(dir.ts) : '—'}</span>
                     <Menu
                       onAction={(action) => {
                         if (action === 'delete') void handleDelete(path, 'folder', dir.n);
@@ -470,15 +497,13 @@ function ScopePane({ scope }: ScopePaneProps) {
               {files.map((file: CopypartyFile) => {
                 const path = currentPath + file.n;
                 return (
-                  <ListboxItem key={`file:${file.n}`} value={`file:${path}`} className="ui-list-item">
+                  <ListboxItem key={`file:${file.n}`} value={`file:${path}`} className="ui-list-item ui-file-cols">
                     <ListboxItemIcon>
-                      <File className="size-4 text-[var(--color-primary)]" aria-hidden="true" />
+                      <File className="size-4" aria-hidden="true" />
                     </ListboxItemIcon>
-                    <span className="min-w-0 flex-1 truncate text-[0.8125rem]">{file.n}</span>
-                    <span className="shrink-0 text-[11px] tabular-nums text-[var(--color-text-secondary)]">
-                      {formatBytes(file.sz)}
-                      {file.ts > 0 ? ` · ${formatDate(file.ts)}` : ''}
-                    </span>
+                    <span className="min-w-0 truncate text-[0.8125rem]">{file.n}</span>
+                    <span className="ui-file-meta text-right">{formatBytes(file.sz)}</span>
+                    <span className="ui-file-meta">{file.ts > 0 ? formatDate(file.ts) : '—'}</span>
                     <Menu
                       onAction={(action) => {
                         if (action === 'share') void handleShare(path, file.n);
@@ -538,6 +563,21 @@ function ScopePane({ scope }: ScopePaneProps) {
           <ScrollAreaThumb />
         </ScrollAreaScrollbar>
       </ScrollArea>
-    </>
+      </Dropzone>
+    </FileInput>
+  );
+}
+
+/** Lets files dropped or pasted on the list upload into the open folder. */
+function Dropzone({ enabled, folder, children }: { enabled: boolean; folder: string; children: React.ReactNode }) {
+  if (!enabled) return <div className="flex min-h-0 flex-1 flex-col">{children}</div>;
+  return (
+    <FileInputDropzone className="ui-dropzone" aria-label={`Drop files to upload to ${folder}`}>
+      {children}
+      <div className="ui-dropzone-hint" aria-hidden="true">
+        <Upload className="size-5" />
+        Drop to upload to {folder}
+      </div>
+    </FileInputDropzone>
   );
 }
