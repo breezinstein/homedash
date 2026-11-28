@@ -4,6 +4,7 @@ import { createAgent } from '@ui-sdk/react/agent';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import type { HostSnapshot, MonitorOverview } from '../../types';
 import { MonitorView } from './MonitorView';
+import { AppShell } from '../../components/shell/AppShell';
 
 function host(id: string, name: string, cpu: number, disk: number, status: HostSnapshot['status'] = 'ok'): HostSnapshot {
   return {
@@ -42,15 +43,17 @@ const overview: MonitorOverview = {
   tabRotationSeconds: 15,
 };
 
+let current: MonitorOverview = overview;
 vi.mock('../monitorApi', () => ({
-  fetchOverview: vi.fn(async () => overview),
-  fetchAlerts: vi.fn(async () => overview.alerts),
+  fetchOverview: vi.fn(async () => current),
+  fetchAlerts: vi.fn(async () => current.alerts),
 }));
 
 const agent = createAgent();
 
 describe('MonitorView', () => {
   beforeEach(() => {
+    current = { ...overview, timestamp: Date.now() };
     localStorage.clear();
     window.history.replaceState(null, '', '/monitor');
   });
@@ -126,5 +129,54 @@ describe('MonitorView', () => {
     const result = await agent.act({ steps: [{ ref: 'Monitor sections', action: 'setValue', args: ['power'] }] });
     expect(result.ok, result.error?.message).toBe(true);
     expect(screen.getByRole('tab', { name: 'Power' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  test('Kiosk hides the sidebar for now and restores it without changing the saved choice', async () => {
+    localStorage.setItem('homedash-sidebar-mode', 'rail');
+    render(
+      <AppShell tools={[]} view="monitor" onNavigate={() => {}} categories={[]} authEnabled={false} authenticated onSignIn={() => {}} onSignOut={() => {}} onOpenPalette={() => {}} notifications={null} serviceCount={0}>
+        <MonitorView onOpenSettings={() => {}} />
+      </AppShell>,
+    );
+    await userEvent.click(await screen.findByRole('button', { name: 'Kiosk' }));
+    expect(screen.getByRole('button', { name: /^Open sidebar/ })).toBeTruthy();
+    expect(localStorage.getItem('homedash-sidebar-mode')).toBe('rail');
+    await userEvent.click(screen.getByRole('button', { name: 'Exit kiosk' }));
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeTruthy();
+    expect(localStorage.getItem('homedash-sidebar-mode')).toBe('rail');
+  });
+
+  test('a stopped poller reads as off, not as a live status', async () => {
+    current = { ...overview, running: false, timestamp: Date.now() - 600_000 };
+    render(<MonitorView onOpenSettings={() => {}} />);
+    expect(await screen.findByText('Monitor is off')).toBeTruthy();
+    expect(screen.getByText("The monitor isn't running")).toBeTruthy();
+    expect(screen.queryByText(/Degraded/)).toBeNull();
+  });
+
+  test('an old snapshot from a running poller reads as stale', async () => {
+    current = { ...overview, running: true, timestamp: Date.now() - 120_000 };
+    render(<MonitorView onOpenSettings={() => {}} />);
+    expect(await screen.findByText('Stale')).toBeTruthy();
+    expect(screen.getByText('No fresh data from the poller')).toBeTruthy();
+  });
+
+  test('Docker counts running containers and names the host of each problem', async () => {
+    current = {
+      ...overview,
+      timestamp: Date.now(),
+      docker: {
+        status: 'ok', total: 10, running: 7, healthy: 5, unhealthy: 2, restarting: 0,
+        problems: [
+          { name: 'glances', image: 'nicolargo/glances', state: 'running', health: 'unhealthy', host: { id: 'a', name: 'alpha' } },
+          { name: 'glances', image: 'nicolargo/glances', state: 'running', health: 'unhealthy', host: { id: 'b', name: 'bravo' } },
+        ],
+      },
+    };
+    render(<MonitorView onOpenSettings={() => {}} />);
+    expect(await screen.findByRole('meter', { name: 'Running containers' })).toBeTruthy();
+    const rail = screen.getByRole('complementary', { name: 'Alerts' });
+    expect(within(rail).getByText('glances on alpha is unhealthy')).toBeTruthy();
+    expect(within(rail).getByText('glances on bravo is unhealthy')).toBeTruthy();
   });
 });

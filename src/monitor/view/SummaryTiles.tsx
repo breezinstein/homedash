@@ -47,9 +47,10 @@ function PowerTile({ overview }: { overview: MonitorOverview | null }) {
 function DockerTile({ overview }: { overview: MonitorOverview | null }) {
   const d = overview?.docker;
   if (!d || d.total === 0) return <NotConfigured label="Docker" icon={Box} />;
-  const issues = d.unhealthy + d.restarting;
-  const healthyPct = d.total ? ((d.total - issues) / d.total) * 100 : null;
-  const names = d.problems.slice(0, 2).map((p) => p.name).join(', ');
+  const issues = d.problems.length;
+  const runningPct = d.total ? (d.running / d.total) * 100 : null;
+  const stopped = d.total - d.running;
+  const names = d.problems.slice(0, 2).map((p) => (p.host ? `${p.name} on ${p.host.name}` : p.name)).join(', ');
   return (
     <StatTile
       label="Docker"
@@ -57,8 +58,8 @@ function DockerTile({ overview }: { overview: MonitorOverview | null }) {
       chip={issues ? <Chip tone="warning">{issues} unhealthy</Chip> : <Chip tone="success">Healthy</Chip>}
       value={d.running}
       unit={`/ ${d.total} running`}
-      aside={<RingMeter label="Healthy containers" value={healthyPct} level={issues ? 'warn' : 'ok'} />}
-      detail={issues ? `${names}${d.problems.length > 2 ? ` +${d.problems.length - 2}` : ''}` : `${d.healthy} report a health check`}
+      aside={<RingMeter label="Running containers" value={runningPct} level={issues || stopped ? 'warn' : 'ok'} />}
+      detail={issues ? `${names}${d.problems.length > 2 ? ` +${d.problems.length - 2}` : ''}` : stopped ? `${stopped} stopped` : `${d.healthy} report a health check`}
     />
   );
 }

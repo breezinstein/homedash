@@ -100,7 +100,10 @@ export function ServerTab({ hosts }: { hosts: HostSnapshot[] }) {
         {visible.map((h) => <HostCard key={h.host.id} host={h} />)}
       </div>
       {ordered.length > MAX_VISIBLE && (
-        <p className="mv-empty">+{ordered.length - MAX_VISIBLE} more hosts, all healthier than the ones shown.</p>
+        <p className="mv-empty">
+          +{ordered.length - MAX_VISIBLE} more hosts
+          {sort === 'attention' ? ', all healthier than the ones shown.' : ' further down the alphabet. Order by “Needs attention first” to see problems first.'}
+        </p>
       )}
     </div>
   );

@@ -940,3 +940,11 @@ test('the self-signed bypass only applies to https URLs', async () => {
   assert.equal(needsTlsBypass('https://10.1.2.1', false), false);
   assert.equal(needsTlsBypass('not a url', true), false);
 });
+
+test('the overview says whether the poller is running and never reports ok before a poll', () => {
+  const m = new MonitorManager(() => ({ monitoring: { enabled: false } }), null);
+  const o = m.getOverview();
+  assert.equal(o.running, false);
+  assert.equal(o.globalStatus, 'unknown');
+  assert.equal(o.timestamp, 0);
+});

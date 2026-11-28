@@ -52,8 +52,15 @@ export function mergeServerLists(config, now = new Date()) {
     return result;
   }
 
+  // Alert rules point at monitor host ids (that is what the poller reports),
+  // so whenever a host ends up under another id its rules follow it.
   const renamedIds = new Map();
-  const usedIds = new Set(servers.map((s) => s.id));
+  const taken = (id, exceptIdx) => servers.some((s, k) => k !== exceptIdx && s.id === id);
+  const fresh = (base, exceptIdx) => {
+    let id = base || `srv-${Math.random().toString(36).slice(2, 10)}`;
+    while (taken(id, exceptIdx)) id = `${id}-m`;
+    return id;
+  };
 
   for (const host of hosts) {
     if (!host || typeof host.url !== 'string' || !host.url) continue;
@@ -62,32 +69,32 @@ export function mergeServerLists(config, now = new Date()) {
     const docker = {};
     if (host.dockerSocket) docker.dockerSocket = host.dockerSocket;
     if (host.dockerUrl) docker.dockerUrl = host.dockerUrl;
+    const hostHasLogin = Boolean(host.username || host.password);
 
     if (idx >= 0) {
       const existing = servers[idx];
-      const hasServerLogin = Boolean(existing.username || existing.password);
-      if (hasServerLogin && !sameLogin(existing, host)) result.conflicts.push(host.name || existing.name || host.url);
-      // The monitor host's id wins: alert rules and the poll snapshot use it.
-      const id = host.id || existing.id;
+      const serverHasLogin = Boolean(existing.username || existing.password);
+      // Only a monitor login replaces the server's; a host without one keeps
+      // the working credentials Server stats already had.
+      if (hostHasLogin && serverHasLogin && !sameLogin(existing, host)) {
+        result.conflicts.push(host.name || existing.name || host.url);
+      }
+      // The monitor host's id wins unless another server already has it.
+      const id = fresh(host.id || existing.id, idx);
       if (existing.id && existing.id !== id) renamedIds.set(existing.id, id);
-      usedIds.delete(existing.id);
-      usedIds.add(id);
-      servers[idx] = {
-        ...existing,
-        ...docker,
-        id,
-        name: host.name || existing.name,
-        username: host.username || undefined,
-        password: host.password || undefined,
-        monitor: true,
-      };
-      if (!servers[idx].username) delete servers[idx].username;
-      if (!servers[idx].password) delete servers[idx].password;
+      if (host.id && host.id !== id) renamedIds.set(host.id, id);
+      const merged = { ...existing, ...docker, id, name: host.name || existing.name, monitor: true };
+      if (hostHasLogin) {
+        delete merged.username;
+        delete merged.password;
+        if (host.username) merged.username = host.username;
+        if (host.password) merged.password = host.password;
+      }
+      servers[idx] = merged;
       result.merged++;
     } else {
-      let id = host.id || `srv-${Math.random().toString(36).slice(2, 10)}`;
-      while (usedIds.has(id)) id = `${id}-m`;
-      usedIds.add(id);
+      const id = fresh(host.id, -1);
+      if (host.id && host.id !== id) renamedIds.set(host.id, id);
       const added = {
         id,
         name: host.name || host.url,

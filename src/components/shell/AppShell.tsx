@@ -33,7 +33,8 @@ export type SidebarMode = 'expanded' | 'rail' | 'hidden';
 
 interface ShellContextValue {
   mode: SidebarMode;
-  setMode: (mode: SidebarMode) => void;
+  /** `persist: false` changes the sidebar for now only, like Kiosk, leaving the saved choice alone. */
+  setMode: (mode: SidebarMode, opts?: { persist?: boolean }) => void;
 }
 
 const ShellContext = createContext<ShellContextValue>({ mode: 'expanded', setMode: () => {} });
@@ -221,10 +222,13 @@ export function AppShell({
   const paletteHint = useShortcutHint('mod+k');
   const sidebarHint = useShortcutHint('[');
 
-  const setMode = useCallback((next: SidebarMode) => {
-    explicitRef.current = true;
+  const setMode = useCallback((next: SidebarMode, opts: { persist?: boolean } = {}) => {
+    const persist = opts.persist ?? true;
+    if (persist) {
+      explicitRef.current = true;
+      storeMode(next);
+    }
     if (next !== 'hidden') lastDockedRef.current = next;
-    storeMode(next);
     setModeState(next);
     setNavOpen(false);
   }, []);

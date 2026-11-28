@@ -1921,7 +1921,8 @@ function aggregateDocker(hosts) {
   const allContainers = [];
   for (const h of hosts) {
     if (!Array.isArray(h.containers)) continue;
-    for (const c of h.containers) allContainers.push(c);
+    // Container names repeat across hosts (glances, cadvisor…), so keep the host.
+    for (const c of h.containers) allContainers.push(h.host ? { ...c, host: { id: h.host.id, name: h.host.name } } : c);
   }
 
   const total = allContainers.length;
@@ -2451,7 +2452,9 @@ export class MonitorManager {
   }
 
   getOverview() {
-    return this._cache || emptyOverview();
+    // `running` lets the page tell a live snapshot from one left behind after
+    // the poller stopped; the cache is still served so the last state is visible.
+    return { ...(this._cache || emptyOverview()), running: this._running };
   }
 
   getAlerts() {
@@ -2494,8 +2497,8 @@ export class MonitorManager {
 
 function emptyOverview() {
   return {
-    timestamp: Date.now(),
-    globalStatus: 'ok',
+    timestamp: 0,
+    globalStatus: 'unknown',
     hosts: [],
     solar: null,
     docker: { status: 'ok', total: 0, running: 0, healthy: 0, unhealthy: 0, restarting: 0, problems: [] },

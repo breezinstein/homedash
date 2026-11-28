@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CategorySection } from './components';
@@ -13,7 +13,7 @@ import { useBrowserNotifications } from './components/notifications/useBrowserNo
 import { NotificationsBell } from './components/notifications/NotificationsBell';
 import { useShortcut } from '@ui-sdk/react/shortcuts';
 import { formatRoute, parseRoute, type View } from './lib/route';
-import { canLeave } from './lib/navGuard';
+import { canLeave, guardPopState } from './lib/navGuard';
 import { useFiringAlerts } from './monitor/useFiringAlerts';
 import type { Service } from './types';
 import type { SectionKey as SettingsSection } from './components/SettingsView';
@@ -114,6 +114,9 @@ function Dashboard() {
 
   const canEdit = authenticated;
 
+  // The path the app last settled on, to put back when a guard keeps the person on the page.
+  const pathRef = useRef(window.location.pathname);
+
   const navigate = useCallback(async (next: string, section?: string) => {
     const target = next as View;
     if (ADMIN_VIEWS.includes(target) && !authenticated) {
@@ -125,15 +128,24 @@ function Dashboard() {
     setSettingsSection(target === 'settings' ? section : undefined);
     const path = formatRoute({ view: target, section: target === 'settings' ? section : undefined }, initialRoute.base);
     if (path !== window.location.pathname) window.history.pushState(null, '', path);
+    pathRef.current = path;
     window.scrollTo({ top: 0 });
   }, [authenticated]);
 
   // Back and forward move between views.
   useEffect(() => {
     const onPop = () => {
-      const route = parseRoute(window.location.pathname);
-      setView(route.view);
-      setSettingsSection(route.section);
+      const target = window.location.pathname;
+      void guardPopState(
+        pathRef.current,
+        () => {
+          const route = parseRoute(target);
+          pathRef.current = target;
+          setView(route.view);
+          setSettingsSection(route.section);
+        },
+        (stay) => window.history.pushState(null, '', stay),
+      );
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
@@ -146,7 +158,7 @@ function Dashboard() {
     setShowLoginModal(true);
     setIsEditMode(false);
     setView('dashboard');
-    window.history.replaceState(null, '', formatRoute({ view: 'dashboard' }, initialRoute.base));
+    window.history.replaceState(null, '', formatRoute({ view: 'dashboard' }, initialRoute.base)); pathRef.current = window.location.pathname;
     setShowServiceModal(false);
     setShowCategoryModal(false);
     setPaletteOpen(false);
@@ -156,7 +168,7 @@ function Dashboard() {
   useEffect(() => {
     if (authEnabled && !authenticated && ADMIN_VIEWS.includes(view)) {
       setView('dashboard');
-      window.history.replaceState(null, '', formatRoute({ view: 'dashboard' }, initialRoute.base));
+      window.history.replaceState(null, '', formatRoute({ view: 'dashboard' }, initialRoute.base)); pathRef.current = window.location.pathname;
     }
   }, [authEnabled, authenticated, view]);
 
@@ -459,6 +471,7 @@ function Dashboard() {
               onSectionChange={(section) => {
                 const path = formatRoute({ view: 'settings', section }, initialRoute.base);
                 if (path !== window.location.pathname) window.history.replaceState(null, '', path);
+                pathRef.current = path;
               }}
             />
           )}

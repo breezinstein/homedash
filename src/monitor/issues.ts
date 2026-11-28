@@ -40,7 +40,8 @@ export function collectIssues(o: MonitorOverview | null): MonitorIssue[] {
 
   for (const c of o.docker?.problems ?? []) {
     const what = c.health === 'unhealthy' ? 'is unhealthy' : c.state === 'restarting' ? 'keeps restarting' : `is ${c.state}`;
-    issues.push({ id: `docker:${c.name}`, title: `${c.name} ${what}`, detail: c.image, tone: 'warning' });
+    const where = c.host ? ` on ${c.host.name}` : '';
+    issues.push({ id: `docker:${c.host?.id ?? ''}:${c.name}`, title: `${c.name}${where} ${what}`, detail: c.image, tone: 'warning' });
   }
 
   for (const key of Object.keys(SOURCE_LABEL) as (keyof typeof SOURCE_LABEL)[]) {

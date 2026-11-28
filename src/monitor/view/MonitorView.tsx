@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { SidebarMode } from '../../components/shell/AppShell';
 import { Globe, Home, Maximize2, Minimize2, Server, Settings2, Tv, Zap } from 'lucide-react';
 import { Tabs, TabsList, TabsPanel, TabsTab, TabsTabIcon } from '@ui-sdk/react/tabs';
 import { IconButton, InlineAlert, recordSamples } from '../../components/ui';
@@ -40,6 +41,15 @@ function Clock() {
   );
 }
 
+function useNow(intervalMs: number): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
+    return () => window.clearInterval(id);
+  }, [intervalMs]);
+  return now;
+}
+
 function useFullscreen(): [boolean, () => void, () => void] {
   const [on, setOn] = useState(() => !!document.fullscreenElement);
   useEffect(() => {
@@ -59,7 +69,21 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
   const [fullscreen, enterFullscreen, exitFullscreen] = useFullscreen();
   const rotationSeconds = overview?.tabRotationSeconds ?? 15;
   const { activeTab, switchTab, remainingSeconds, isPaused } = useTabRotation({ rotationSeconds });
-  const kiosk = mode === 'hidden' && fullscreen;
+  // The sidebar mode before Kiosk, restored on exit without touching the saved choice.
+  const [kioskFrom, setKioskFrom] = useState<SidebarMode | null>(null);
+  const kiosk = kioskFrom !== null;
+  const now = useNow(5000);
+
+  // Leaving full screen with Escape ends kiosk too. Full screen starts a moment
+  // after Kiosk is pressed, so only a true → false change counts.
+  const wasFullscreen = useRef(fullscreen);
+  useEffect(() => {
+    if (wasFullscreen.current && !fullscreen && kioskFrom !== null) {
+      setMode(kioskFrom, { persist: false });
+      setKioskFrom(null);
+    }
+    wasFullscreen.current = fullscreen;
+  }, [fullscreen, kioskFrom, setMode]);
 
   // Feed the last-hour trends once per snapshot.
   useEffect(() => {
@@ -77,7 +101,12 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
     recordSamples(at, values);
   }, [overview]);
 
-  const status = error ? 'unknown' : overview?.globalStatus ?? 'unknown';
+  const pollMs = overview?.pollIntervalMs ?? 10000;
+  const snapshotAt = overview?.timestamp || null;
+  const off = !error && overview?.running === false;
+  const stale = !error && !off && !!overview && (!snapshotAt || now - snapshotAt > Math.max(30_000, pollMs * 3));
+  const snapshotTime = snapshotAt ? new Date(snapshotAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null;
+  const status = error || off || stale ? 'unknown' : overview?.globalStatus ?? 'unknown';
   const firing = overview?.alerts?.firing ?? [];
   const issues = useMemo(() => collectIssues(overview), [overview]);
   const updated = lastUpdated?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -106,11 +135,13 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
         : 'Waiting for data…';
 
   const toggleKiosk = () => {
-    if (kiosk) {
+    if (kioskFrom !== null) {
+      setMode(kioskFrom, { persist: false });
+      setKioskFrom(null);
       exitFullscreen();
-      setMode('expanded');
     } else {
-      setMode('hidden');
+      setKioskFrom(mode);
+      setMode('hidden', { persist: false });
       enterFullscreen();
     }
   };
@@ -131,8 +162,8 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
           {!isLoading && (
             <span className="ui-chip mv-status" data-tone={STATUS_TONE[status]}>
               <span className="ui-live-dot" aria-hidden="true" />
-              {error ? 'Offline' : STATUS_TEXT[status]}
-              {!error && firing.length > 0 ? ` · ${firing.length} firing` : !error && issues.length > 0 && status !== 'ok' ? ` · ${issues.length} to check` : ''}
+              {error ? 'Offline' : off ? 'Monitor is off' : stale ? 'Stale' : STATUS_TEXT[status]}
+              {error || off || stale ? '' : firing.length > 0 ? ` · ${firing.length} firing` : issues.length > 0 && status !== 'ok' ? ` · ${issues.length} to check` : ''}
             </span>
           )}
           <IconButton label="Monitor settings" onClick={onOpenSettings}>
@@ -144,7 +175,12 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
           </Button>
           <div className="mv-clock">
             <Clock />
-            <span className="mv-clock-sub">{error ? (updated ? `stale · ${updated}` : 'disconnected') : `polled every ${pollSeconds}s`}</span>
+            <span className="mv-clock-sub">
+              {error ? (updated ? `stale · ${updated}` : 'disconnected')
+                : off ? 'not polling'
+                : stale ? (snapshotTime ? `last poll ${snapshotTime}` : 'no poll yet')
+                : `polled every ${pollSeconds}s`}
+            </span>
           </div>
         </div>
       </header>
@@ -154,7 +190,17 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
           {updated ? `Everything below is from ${updated}. It will refresh on its own once the connection is back.` : error}
         </InlineAlert>
       )}
-      {banner && !error && (
+      {off && (
+        <InlineAlert tone="info" title="The monitor isn't running" actions={<Button size="sm" variant="secondary" onClick={onOpenSettings}>Open settings</Button>}>
+          {snapshotTime ? `What you see is the last poll, from ${snapshotTime}. ` : ''}Turn it on in Settings → Monitor → General.
+        </InlineAlert>
+      )}
+      {stale && (
+        <InlineAlert tone="warning" title="No fresh data from the poller">
+          {snapshotTime ? `The newest snapshot is from ${snapshotTime}, older than three poll intervals. Values below may be out of date.` : 'The poller hasn\'t finished a poll yet.'}
+        </InlineAlert>
+      )}
+      {banner && !error && !off && !stale && (
         <InlineAlert
           tone="danger"
           title={stripHtml(banner.message) || banner.name}

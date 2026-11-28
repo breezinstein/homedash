@@ -123,3 +123,23 @@ test('issues explain a degraded monitor: down sources, hosts, containers and Arr
   assert.equal(issues[3].detail, 'Indexer down');
   assert.deepEqual(collectIssues(null), []);
 });
+
+import { guardPopState, setNavGuard } from './src/lib/navGuard.ts';
+
+test('Back/Forward asks the guard and puts the page back when the person stays', async () => {
+  const restored = [];
+  let applied = 0;
+  setNavGuard(async () => false);
+  assert.equal(await guardPopState('/settings/monitor-general', () => applied++, (p) => restored.push(p)), false);
+  assert.equal(applied, 0);
+  assert.deepEqual(restored, ['/settings/monitor-general']);
+
+  setNavGuard(async () => true);
+  assert.equal(await guardPopState('/settings/monitor-general', () => applied++, (p) => restored.push(p)), true);
+  assert.equal(applied, 1);
+  assert.equal(restored.length, 1);
+
+  setNavGuard(null);
+  assert.equal(await guardPopState('/x', () => applied++, () => restored.push('no')), true);
+  assert.equal(applied, 2);
+});

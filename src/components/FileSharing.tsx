@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   ChevronRight,
   Download,
@@ -14,6 +14,7 @@ import {
   Trash2,
   Search,
   Upload,
+  X,
 } from 'lucide-react';
 import {
   listDirectory,
@@ -24,7 +25,7 @@ import {
   type FileScope,
 } from '../api/filesApi';
 import type { CopypartyListing, CopypartyFile, CopypartyDir } from '../types';
-import { EmptyState, InlineAlert, Input, useConfirm, useToast } from './ui';
+import { EmptyState, IconButton, InlineAlert, Input, useConfirm, useToast } from './ui';
 import { PageHeader, PagePanel } from './shell/PageHeader';
 import { Button } from '@ui-sdk/react/button';
 import { Listbox, ListboxItem, ListboxItemIcon } from '@ui-sdk/react/listbox';
@@ -162,7 +163,9 @@ function ScopePane({ scope }: ScopePaneProps) {
     [scope],
   );
 
+  const currentPathRef = useRef(currentPath);
   useEffect(() => {
+    currentPathRef.current = currentPath;
     load(currentPath);
   }, [currentPath, load]);
 
@@ -183,20 +186,22 @@ function ScopePane({ scope }: ScopePaneProps) {
     const batch = files.map((f, n) => ({ id: `${Date.now()}-${n}-${f.name}`, name: f.name, size: f.size, pct: 0 }));
     setUploads((prev) => [...prev.filter((u) => u.pct < 100 || u.error), ...batch]);
     setError(null);
-    let done = 0;
+    const uploaded: string[] = [];
     for (const [n, file] of files.entries()) {
       const id = batch[n].id;
       try {
         await uploadFile(scope, target, file, (pct) => setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, pct } : u))));
         setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, pct: 100 } : u)));
-        done++;
+        uploaded.push(file.name);
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Upload failed';
         setUploads((prev) => prev.map((u) => (u.id === id ? { ...u, error: msg } : u)));
       }
     }
-    await load(target);
-    if (done) toast.success(done === 1 ? `Uploaded ${batch[0].name}` : `Uploaded ${done} files`);
+    // Someone may have opened another folder while this ran; don't overwrite it.
+    if (currentPathRef.current === target) await load(target);
+    if (uploaded.length) toast.success(uploaded.length === 1 ? `Uploaded ${uploaded[0]}` : `Uploaded ${uploaded.length} files`);
+    // Finished rows clear on their own; failures stay until dismissed.
     window.setTimeout(() => setUploads((prev) => prev.filter((u) => u.pct < 100 || u.error)), 2500);
   };
 
@@ -382,13 +387,18 @@ function ScopePane({ scope }: ScopePaneProps) {
                   </span>
                 </span>
                 {u.error ? (
-                  <span className="block text-[11px] text-[var(--color-error)]">{u.error}</span>
+                  <span className="block text-[11px] text-[var(--color-error)]" role="alert">{u.error}</span>
                 ) : (
                   <Progress value={u.pct} min={0} max={100} aria-label={`Uploading ${u.name}`} className="mt-1">
                     <ProgressTrack><ProgressIndicator /></ProgressTrack>
                   </Progress>
                 )}
               </span>
+              {u.error ? (
+                <IconButton label={`Dismiss ${u.name}`} onClick={() => setUploads((prev) => prev.filter((x) => x.id !== u.id))}>
+                  <X className="size-3.5" />
+                </IconButton>
+              ) : null}
             </li>
           ))}
         </ul>

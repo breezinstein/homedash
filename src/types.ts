@@ -297,6 +297,8 @@ export interface ContainerHealth {
   state: 'running' | 'exited' | 'restarting' | 'paused' | 'dead' | 'other';
   health: 'healthy' | 'unhealthy' | 'starting' | 'none';
   uptime?: string | null;
+  /** Set on DockerSummary.problems, where containers from every host are pooled. */
+  host?: { id: string; name: string };
 }
 
 export interface HostSnapshot {
@@ -637,8 +639,11 @@ export interface AlertInstance {
 }
 
 export interface MonitorOverview {
+  /** When the poller took this snapshot; 0 before the first poll. */
   timestamp: number;
-  globalStatus: 'ok' | 'degraded' | 'critical';
+  globalStatus: 'ok' | 'degraded' | 'critical' | 'unknown';
+  /** False when the poller is stopped; the last snapshot is still served. */
+  running?: boolean;
   hosts: HostSnapshot[];
   solar: SolarSnapshot | null;
   docker: DockerSummary;

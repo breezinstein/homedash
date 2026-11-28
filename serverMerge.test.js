@@ -102,3 +102,36 @@ test('monitoredHosts and the auto alert rules read the merged list', () => {
   ensureAutoAlertRules(none);
   assert.ok(!(none.monitoring.alerts || []).some((r) => r.id === 'auto-host-down'));
 });
+
+test('a monitor host without a login keeps the server login, with no conflict', () => {
+  const config = {
+    servers: [{ id: 's1', name: 'nas', url: 'http://nas.lan:61208', username: 'svc', password: 'secret' }],
+    monitoring: { glancesHosts: [{ id: 'h1', name: 'nas', url: 'http://nas.lan:61208' }] },
+  };
+  const r = mergeServerLists(config, NOW);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(config.servers[0].username, 'svc');
+  assert.equal(config.servers[0].password, 'secret');
+});
+
+test('an overlap whose monitor id belongs to another server gets a fresh id, and rules follow', () => {
+  const config = {
+    servers: [
+      { id: 's1', name: 'a', url: 'http://a.lan' },
+      { id: 'h1', name: 'b', url: 'http://b.lan' },
+    ],
+    monitoring: {
+      glancesHosts: [{ id: 'h1', name: 'a', url: 'http://a.lan' }],
+      alerts: [{ id: 'r1', host: 'h1' }, { id: 'r2', host: 's1' }],
+    },
+  };
+  mergeServerLists(config, NOW);
+  const ids = config.servers.map((s) => s.id);
+  assert.equal(new Set(ids).size, 2, `duplicate ids: ${ids}`);
+  const merged = config.servers.find((s) => s.url === 'http://a.lan');
+  assert.equal(merged.monitor, true);
+  assert.notEqual(merged.id, 'h1');
+  assert.equal(config.servers.find((s) => s.url === 'http://b.lan').id, 'h1');
+  // Rules were evaluated against monitor host ids, so both now point at the merged entry.
+  assert.deepEqual(config.monitoring.alerts.map((r) => r.host), [merged.id, merged.id]);
+});
