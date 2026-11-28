@@ -251,8 +251,8 @@ test('resolveMetric supports homeassistant and ntopng sources', () => {
 
 test('ensureAutoAlertRules adds sensible rules for configured services and dedupes', () => {
   const config = {
+    servers: [{ id: 'h1', name: 'one', url: 'http://x', monitor: true }],
     monitoring: {
-      glancesHosts: [{ id: 'h1', name: 'one', url: 'http://x' }],
       docker: { enabled: true },
       solar: { enabled: true },
       media: [{ id: 'm1' }],
@@ -931,4 +931,34 @@ test('MonitorManager.refreshCertificates bypasses the throttle, merges subset, a
   const all = await manager.refreshCertificates(undefined, mon);
   assert.equal(all.items.length, 2);
   assert.ok(all.items.every((c) => c.status === 'error'));
+});
+
+test('the self-signed bypass only applies to https URLs', async () => {
+  const { needsTlsBypass } = await import('./monitor.js');
+  assert.equal(needsTlsBypass('http://10.1.2.1:3000', true), false);
+  assert.equal(needsTlsBypass('https://10.1.2.1', true), true);
+  assert.equal(needsTlsBypass('https://10.1.2.1', false), false);
+  assert.equal(needsTlsBypass('not a url', true), false);
+});
+
+test('the overview says whether the poller is running and never reports ok before a poll', () => {
+  const m = new MonitorManager(() => ({ monitoring: { enabled: false } }), null);
+  const o = m.getOverview();
+  assert.equal(o.running, false);
+  assert.equal(o.globalStatus, 'unknown');
+  assert.equal(o.timestamp, 0);
+});
+
+test('reconfigure starts the poller when monitoring is switched on, and stops it when switched off', () => {
+  const cfg = { monitoring: { enabled: false, pollIntervalSeconds: 60 } };
+  const m = new MonitorManager(() => cfg, null);
+  m.start();
+  assert.equal(m.getOverview().running, false);
+  cfg.monitoring.enabled = true;
+  m.reconfigure();
+  assert.equal(m.getOverview().running, true);
+  cfg.monitoring.enabled = false;
+  m.reconfigure();
+  assert.equal(m.getOverview().running, false);
+  m.stop();
 });

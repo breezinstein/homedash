@@ -151,29 +151,21 @@ html[data-theme="stargate-light"] {
 /* Gold/teal corner brackets on the main card surfaces. */
 html[data-theme^="stargate"] main .grid > div > a,
 html[data-theme^="stargate"] main .grid > div > div[draggable="true"],
-html[data-theme^="stargate"] .card,
-html[data-theme^="stargate"] .node-card,
-html[data-theme^="stargate"] .net-v2-card,
-html[data-theme^="stargate"] .streams-panel,
-html[data-theme^="stargate"] .media-card,
-html[data-theme^="stargate"] .solar-summary-card,
-html[data-theme^="stargate"] .alerts-card,
-html[data-theme^="stargate"] .ms-card,
-html[data-theme^="stargate"] .ms-entity-card {
+html[data-theme^="stargate"] .mv .ui-tile,
+html[data-theme^="stargate"] .mv-host,
+html[data-theme^="stargate"] .mv-card,
+html[data-theme^="stargate"] .mv-tabs,
+html[data-theme^="stargate"] .mv-rail {
   position: relative;
 }
 
 html[data-theme^="stargate"] main .grid > div > a::before,
 html[data-theme^="stargate"] main .grid > div > div[draggable="true"]::before,
-html[data-theme^="stargate"] .card::before,
-html[data-theme^="stargate"] .node-card::before,
-html[data-theme^="stargate"] .net-v2-card::before,
-html[data-theme^="stargate"] .streams-panel::before,
-html[data-theme^="stargate"] .media-card::before,
-html[data-theme^="stargate"] .solar-summary-card::before,
-html[data-theme^="stargate"] .alerts-card::before,
-html[data-theme^="stargate"] .ms-card::before,
-html[data-theme^="stargate"] .ms-entity-card::before {
+html[data-theme^="stargate"] .mv .ui-tile::before,
+html[data-theme^="stargate"] .mv-host::before,
+html[data-theme^="stargate"] .mv-card::before,
+html[data-theme^="stargate"] .mv-tabs::before,
+html[data-theme^="stargate"] .mv-rail::before {
   content: "";
   position: absolute;
   top: 0;
@@ -188,15 +180,11 @@ html[data-theme^="stargate"] .ms-entity-card::before {
 
 html[data-theme^="stargate"] main .grid > div > a::after,
 html[data-theme^="stargate"] main .grid > div > div[draggable="true"]::after,
-html[data-theme^="stargate"] .card::after,
-html[data-theme^="stargate"] .node-card::after,
-html[data-theme^="stargate"] .net-v2-card::after,
-html[data-theme^="stargate"] .streams-panel::after,
-html[data-theme^="stargate"] .media-card::after,
-html[data-theme^="stargate"] .solar-summary-card::after,
-html[data-theme^="stargate"] .alerts-card::after,
-html[data-theme^="stargate"] .ms-card::after,
-html[data-theme^="stargate"] .ms-entity-card::after {
+html[data-theme^="stargate"] .mv .ui-tile::after,
+html[data-theme^="stargate"] .mv-host::after,
+html[data-theme^="stargate"] .mv-card::after,
+html[data-theme^="stargate"] .mv-tabs::after,
+html[data-theme^="stargate"] .mv-rail::after {
   content: "";
   position: absolute;
   right: 0;
@@ -210,10 +198,10 @@ html[data-theme^="stargate"] .ms-entity-card::after {
 }
 
 /* The active monitor tab reads as an illuminated chevron. */
-html[data-theme^="stargate"] .monitor-shell .tab.active {
+html[data-theme^="stargate"] .mv-tab[data-selected] {
   box-shadow: inset 0 -2px 0 var(--theme-accent) !important;
 }
-html[data-theme^="stargate"] .monitor-shell .status-pill {
+html[data-theme^="stargate"] .mv-status {
   border-radius: 2px !important;
   letter-spacing: 0.12em;
 }

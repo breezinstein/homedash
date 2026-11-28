@@ -1,9 +1,4 @@
-/**
- * Shared formatting helpers for the /monitor page. Centralising these here
- * keeps the kiosk cards consistent (a throughput number reads the same way in
- * the network panel and the top cards) and avoids copy-paste drift between
- * components that previously each declared their own private copy.
- */
+/** Formatting shared by the monitor view, so a reading looks the same in every tab. */
 
 /** Format a byte-rate (bytes/sec) as bits/sec, e.g. "12.5 Mbps". */
 export function formatBitRate(bytesPerSec: number | null): string {
@@ -91,20 +86,17 @@ export function runtimeLabel(charging: boolean): string {
   return charging ? 'Time to full' : 'Time to depleted';
 }
 
-/** Solar "battery runtime" label plus its warning colour. */
-export function formatRuntime(mins: number | null): { text: string; color: string } {
-  if (mins == null || !Number.isFinite(mins)) return { text: '—', color: 'var(--mon-text-faint)' };
+/** Battery runtime as "1d 4h", "2h 10m" or "45m". */
+export function formatRuntime(mins: number | null): { text: string } {
+  if (mins == null || !Number.isFinite(mins)) return { text: '—' };
   const total = Math.max(0, Math.round(mins));
-  if (total < 1) return { text: '<1m', color: 'var(--mon-danger)' };
+  if (total < 1) return { text: '<1m' };
   const d = Math.floor(total / 1440);
   const h = Math.floor((total % 1440) / 60);
   const m = total % 60;
-  let text: string;
-  if (d > 0) text = `${d}d ${h}h`;
-  else if (h > 0) text = `${h}h ${m}m`;
-  else text = `${m}m`;
-  const color = total < 120 ? 'var(--mon-danger)' : total < 240 ? 'var(--mon-warn)' : 'var(--mon-ok)';
-  return { text, color };
+  if (d > 0) return { text: `${d}d ${h}h` };
+  if (h > 0) return { text: `${h}h ${m}m` };
+  return { text: `${m}m` };
 }
 
 /** Download ETA from seconds, e.g. "2h 14m left". */

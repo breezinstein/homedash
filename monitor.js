@@ -15,6 +15,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import https from 'https';
 import tls from 'tls';
+import { monitoredHosts } from './serverMerge.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -216,8 +217,15 @@ async function fetchJson(url, username, password) {
   }
 }
 
+// The self-signed bypass needs Node's https module, which only speaks TLS. A
+// plain http:// URL with "allow self-signed" ticked must still use fetch.
+export function needsTlsBypass(url, insecureTls) {
+  if (!insecureTls) return false;
+  try { return new URL(url).protocol === 'https:'; } catch { return false; }
+}
+
 async function fetchOpnsenseJson(url, headers, insecureTls) {
-  if (!insecureTls) {
+  if (!needsTlsBypass(url, insecureTls)) {
     const response = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     return response.ok ? response.json() : null;
   }
@@ -951,7 +959,7 @@ export async function fetchOpnsense(opnConfigs) {
       }
     };
 
-    if (!o.insecureTls) {
+    if (!needsTlsBypass(url, o.insecureTls === true)) {
       try {
         const res = await fetch(url, {
           method: 'POST',
@@ -1261,7 +1269,7 @@ export async function fetchNtopng(ntopConfigs) {
   async function doGet(path, hdrs) {
     const url = `${base}${path}`;
     try {
-      if (!insecureTls) {
+      if (!needsTlsBypass(url, insecureTls)) {
         const res = await fetch(url, { headers: hdrs, redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (res.status < 200 || res.status >= 300) return { ok: false, status: res.status };
         const ct = res.headers.get('content-type') || '';
@@ -1724,7 +1732,7 @@ export async function fetchHomeAssistant(haConfigs) {
   async function haGet(path) {
     const url = `${base}${path}`;
     try {
-      if (!insecureTls) {
+      if (!needsTlsBypass(url, insecureTls)) {
         const res = await fetch(url, { headers, redirect: 'manual', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
         if (res.status < 200 || res.status >= 300) return { ok: false, status: res.status };
         const ct = res.headers.get('content-type') || '';
@@ -1913,7 +1921,8 @@ function aggregateDocker(hosts) {
   const allContainers = [];
   for (const h of hosts) {
     if (!Array.isArray(h.containers)) continue;
-    for (const c of h.containers) allContainers.push(c);
+    // Container names repeat across hosts (glances, cadvisor…), so keep the host.
+    for (const c of h.containers) allContainers.push(h.host ? { ...c, host: { id: h.host.id, name: h.host.name } } : c);
   }
 
   const total = allContainers.length;
@@ -2130,14 +2139,14 @@ function buildAlertMessage(rule, value, host) {
 // explicitly deleted.
 // ---------------------------------------------------------------------------
 
-export function buildAutoAlertRules(mon) {
+export function buildAutoAlertRules(mon, hosts = []) {
   const rules = [];
   const add = (id, name, source, metric, operator, threshold, severity, forSeconds, notify, host) => {
     rules.push({ id, name, enabled: true, source, metric, operator, threshold, severity, forSeconds, notify: !!notify, host });
   };
   const has = arr => Array.isArray(arr) && arr.length > 0;
 
-  if (has(mon?.glancesHosts)) {
+  if (has(hosts)) {
     add('auto-host-down', 'Host down', 'reachability', 'reachable', '==', 0, 'critical', 120, true);
     add('auto-host-cpu', 'High CPU', 'glances', 'cpu.percent', '>=', 90, 'warning', 300);
     add('auto-host-memory', 'High memory', 'glances', 'memory.percent', '>=', 95, 'warning', 300);
@@ -2192,7 +2201,7 @@ export function ensureAutoAlertRules(config) {
   const alerts = Array.isArray(mon.alerts) ? mon.alerts : [];
   const suppressed = new Set(Array.isArray(mon.suppressedAutoAlerts) ? mon.suppressedAutoAlerts : []);
   const existingKeys = new Set(alerts.map(a => `${a.source}|${a.metric}|${a.host || ''}`));
-  const toAdd = buildAutoAlertRules(mon).filter(r => {
+  const toAdd = buildAutoAlertRules(mon, monitoredHosts(config)).filter(r => {
     if (suppressed.has(r.id)) return false;
     const key = `${r.source}|${r.metric}|${r.host || ''}`;
     return !existingKeys.has(key);
@@ -2300,10 +2309,11 @@ export class MonitorManager {
     console.log('Monitor: poller stopped');
   }
 
+  // Follow the saved config: start() does nothing while monitoring is
+  // disabled, so turning it on in Settings starts the poller without a restart.
   reconfigure() {
-    const wasRunning = this._running;
     this.stop();
-    if (wasRunning) this.start();
+    this.start();
   }
 
   async _tick() {
@@ -2330,7 +2340,7 @@ export class MonitorManager {
     const interval = Math.max(2, Math.min(60, Number(mon.pollIntervalSeconds) || 10)) * 1000;
 
     // Fan out
-    const hostCfgs = Array.isArray(mon.glancesHosts) ? mon.glancesHosts : [];
+    const hostCfgs = monitoredHosts(cfg);
     const [hostResults, solarResult, mediaResult, usenetResult, arrResult, seerrResult, opnsenseResult, ntopngResult, homeAssistantResult, certificateResult] = await Promise.all([
       Promise.all(hostCfgs.map(h => fetchGlancesHost(h))),
       fetchSolar(cfg),
@@ -2443,7 +2453,9 @@ export class MonitorManager {
   }
 
   getOverview() {
-    return this._cache || emptyOverview();
+    // `running` lets the page tell a live snapshot from one left behind after
+    // the poller stopped; the cache is still served so the last state is visible.
+    return { ...(this._cache || emptyOverview()), running: this._running };
   }
 
   getAlerts() {
@@ -2486,8 +2498,8 @@ export class MonitorManager {
 
 function emptyOverview() {
   return {
-    timestamp: Date.now(),
-    globalStatus: 'ok',
+    timestamp: 0,
+    globalStatus: 'unknown',
     hosts: [],
     solar: null,
     docker: { status: 'ok', total: 0, running: 0, healthy: 0, unhealthy: 0, restarting: 0, problems: [] },

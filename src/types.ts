@@ -22,6 +22,14 @@ export interface Metadata {
   configHash: string;
   restoredFrom?: string;
   restoredAt?: string;
+  /** Written once by the server when it folded the monitor's Glances hosts into `servers`. */
+  serverMerge?: {
+    at: string;
+    merged: number;
+    added: number;
+    conflicts: string[];
+    dismissed: boolean;
+  };
 }
 
 export interface Colors {
@@ -132,6 +140,10 @@ export interface RemoteServer {
   username?: string;
   password?: string;
   createdAt: string;
+  /** The monitor polls this server. */
+  monitor?: boolean;
+  dockerSocket?: string;
+  dockerUrl?: string;
 }
 
 export interface Clip {
@@ -260,7 +272,8 @@ export interface AlertRule {
 export interface MonitoringConfig {
   enabled: boolean;
   pollIntervalSeconds: number;
-  glancesHosts: MonitoredHost[];
+  /** Before the server-list merge; the server folds it into `servers` on load. */
+  glancesHosts?: MonitoredHost[];
   solar: { enabled: boolean };
   docker: { enabled: boolean };
   media: MonitoredMedia[];
@@ -284,6 +297,8 @@ export interface ContainerHealth {
   state: 'running' | 'exited' | 'restarting' | 'paused' | 'dead' | 'other';
   health: 'healthy' | 'unhealthy' | 'starting' | 'none';
   uptime?: string | null;
+  /** Set on DockerSummary.problems, where containers from every host are pooled. */
+  host?: { id: string; name: string };
 }
 
 export interface HostSnapshot {
@@ -624,8 +639,11 @@ export interface AlertInstance {
 }
 
 export interface MonitorOverview {
+  /** When the poller took this snapshot; 0 before the first poll. */
   timestamp: number;
-  globalStatus: 'ok' | 'degraded' | 'critical';
+  globalStatus: 'ok' | 'degraded' | 'critical' | 'unknown';
+  /** False when the poller is stopped; the last snapshot is still served. */
+  running?: boolean;
   hosts: HostSnapshot[];
   solar: SolarSnapshot | null;
   docker: DockerSummary;

@@ -88,43 +88,42 @@ html[data-theme="winxp"] textarea {
   color: #000000 !important;
 }
 
-/* Luna-style controls in Monitor Settings. */
-html[data-theme="winxp"] .ms-btn,
-html[data-theme="winxp"] .ms-icon-btn,
-html[data-theme="winxp"] .ms-add-btn {
+/* Luna-style controls in the monitor and Settings. */
+html[data-theme="winxp"] :is(.mv, .ui-settings-panel) .ui-btn {
   border: 1px solid #7f9db9 !important;
   border-radius: 3px !important;
   background: linear-gradient(180deg, #ffffff, #ece9d8) !important;
   color: #000000 !important;
   box-shadow: inset 0 1px 0 #ffffff !important;
 }
-html[data-theme="winxp"] .ms-btn-primary {
+html[data-theme="winxp"] :is(.mv, .ui-settings-panel) .ui-btn[data-variant="primary"] {
   background: linear-gradient(180deg, #3a93ff, #0054e3) !important;
   border-color: #0054e3 !important;
   color: #ffffff !important;
 }
-html[data-theme="winxp"] .ms-btn-primary:hover:not(:disabled) {
+html[data-theme="winxp"] :is(.mv, .ui-settings-panel) .ui-btn[data-variant="primary"]:hover:not([data-disabled]) {
   background: linear-gradient(180deg, #5aaaff, #1a6ae8) !important;
 }
 
-html[data-theme="winxp"] .monitor-shell .tab.active {
+html[data-theme="winxp"] .mv-tab[data-selected] {
   background: linear-gradient(180deg, #3a93ff, #0054e3) !important;
+  color: #ffffff !important;
   box-shadow: inset 0 1px 0 #8fc7ff !important;
 }
 
-html[data-theme="winxp"] .ms-toggle-track {
+html[data-theme="winxp"] :is(.mv, .ui-settings-panel) .ui-switch {
   border-radius: 3px !important;
   background: #ffffff !important;
   border-color: #7f9db9 !important;
 }
-html[data-theme="winxp"] .ms-toggle-wrap[data-checked="true"] .ms-toggle-track {
+html[data-theme="winxp"] :is(.mv, .ui-settings-panel) .ui-switch[data-checked] {
   background: linear-gradient(180deg, #7fce3a, #3c9b39) !important;
   border-color: #2e7d32 !important;
 }
-html[data-theme="winxp"] .ms-toggle-thumb {
+html[data-theme="winxp"] :is(.mv, .ui-settings-panel) .ui-switch [data-slot="switch-thumb"] {
   border-radius: 2px !important;
 }
 
-html[data-theme="winxp"] .monitor-shell .status-pill {
+html[data-theme="winxp"] .mv-status {
   border-radius: 3px !important;
 }

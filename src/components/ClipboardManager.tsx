@@ -29,6 +29,11 @@ import {
   ScrollAreaViewport,
 } from '@ui-sdk/react/scroll-area';
 import { Textarea } from '@ui-sdk/react/textarea';
+import {
+  SegmentedControl,
+  SegmentedControlIndicator,
+  SegmentedControlItem,
+} from '@ui-sdk/react/segmented-control';
 import { useDashboard } from '../context/DashboardContext';
 import type { Clip } from '../types';
 import { useConfirm, useToast } from './ui';
@@ -75,6 +80,7 @@ export function ClipboardManager() {
   const [labelDraft, setLabelDraft] = useState('');
   const [contentDraft, setContentDraft] = useState('');
   const [query, setQuery] = useState('');
+  const [show, setShow] = useState<'all' | 'pinned'>('all');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
@@ -98,11 +104,13 @@ export function ClipboardManager() {
 
   const filteredClips = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return sortedClips;
-    return sortedClips.filter(c =>
+    const scoped = show === 'pinned' ? sortedClips.filter((c) => c.pinned) : sortedClips;
+    if (!q) return scoped;
+    return scoped.filter(c =>
       c.label.toLowerCase().includes(q) || c.content.toLowerCase().includes(q)
     );
-  }, [sortedClips, query]);
+  }, [sortedClips, query, show]);
+  const pinnedCount = clips.filter((c) => c.pinned).length;
 
   const openCreator = () => {
     setLabelDraft('');
@@ -242,24 +250,28 @@ export function ClipboardManager() {
               aria-label="Search clips"
             />
           </div>
-          <span className="ui-chip tabular-nums">{filteredClips.length}</span>
+          <SegmentedControl aria-label="Show" className="ui-seg shrink-0" value={show} onValueChange={(v) => { if (v) setShow(v as 'all' | 'pinned'); }}>
+            <SegmentedControlIndicator />
+            <SegmentedControlItem value="all" className="ui-seg-item">All <span className="tabular-nums text-[var(--text-tertiary)]">{clips.length}</span></SegmentedControlItem>
+            <SegmentedControlItem value="pinned" className="ui-seg-item">Pinned <span className="tabular-nums text-[var(--text-tertiary)]">{pinnedCount}</span></SegmentedControlItem>
+          </SegmentedControl>
         </div>
 
-        <ScrollArea className="min-h-0 flex-1">
+        <ScrollArea className="min-h-0 flex-1" aria-label="Saved clips">
           <ScrollAreaViewport className="p-4">
-            <div className="space-y-3">
+            <div className="ui-clip-grid">
               {filteredClips.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 text-center">
+                <div className="col-span-full flex flex-col items-center justify-center py-16 text-center">
                   <div className="mb-3 grid size-14 place-items-center rounded-[var(--radius-lg)] border border-[var(--color-border)] bg-[var(--surface-sunken)]">
                     <ClipboardIcon className="size-6 text-[var(--color-text-secondary)]" aria-hidden="true" />
                   </div>
                   <p className="text-sm font-medium text-[var(--color-text-primary)]">
-                    {clips.length === 0 ? 'No clips yet' : 'No matches'}
+                    {clips.length === 0 ? 'No clips yet' : show === 'pinned' && !query ? 'Nothing pinned yet' : 'No matches'}
                   </p>
                   <p className="mt-1 max-w-sm text-xs text-[var(--color-text-secondary)]">
                     {clips.length === 0
                       ? 'Save snippets, commands and addresses, then copy them anywhere with one click.'
-                      : `Nothing matches “${query}”.`}
+                      : show === 'pinned' && !query ? 'Pin a clip from its menu to keep it at the top.' : `Nothing matches “${query}”.`}
                   </p>
                   {clips.length === 0 && (
                     <Button className="ui-btn mt-4" data-variant="primary" data-size="sm" onClick={openCreator}>
@@ -293,79 +305,81 @@ export function ClipboardManager() {
                           : 'border-[var(--color-border)]'
                     } ${isDragging ? 'opacity-50' : ''}`}
                   >
-                    <div className="flex items-start gap-2 p-3">
-                      {!query && (
-                        <span className="hidden cursor-grab pt-1 text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100 sm:block" title="Drag to reorder">
-                          <GripVertical className="size-4" aria-hidden="true" />
-                        </span>
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="mb-1 flex flex-wrap items-center gap-2">
-                          {clip.pinned && <Pin className="size-3.5 shrink-0 text-[var(--color-accent)]" aria-label="Pinned" />}
-                          <h3 className="truncate text-[0.8125rem] font-semibold text-[var(--color-text-primary)]">{clip.label}</h3>
-                          <span className="shrink-0 text-[11px] text-[var(--color-text-secondary)]">{formatRelative(clip.updatedAt)}</span>
+                    <div className="flex h-full flex-col gap-2 p-3">
+                      <div className="flex items-start gap-2">
+                        {!query && (
+                          <span className="hidden cursor-grab pt-1 text-[var(--text-tertiary)] opacity-0 transition-opacity group-hover:opacity-100 sm:block" title="Drag to reorder">
+                            <GripVertical className="size-4" aria-hidden="true" />
+                          </span>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            {clip.pinned && <Pin className="size-3.5 shrink-0 text-[var(--color-accent)]" aria-label="Pinned" />}
+                            <h3 className="truncate text-[0.8125rem] font-semibold text-[var(--color-text-primary)]">{clip.label}</h3>
+                          </div>
+                          <p className="text-[11px] text-[var(--color-text-secondary)]">{formatRelative(clip.updatedAt)}</p>
                         </div>
-                        <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--color-surface)] p-2 font-mono text-xs text-[var(--color-text-secondary)]">
+                        <div className="flex shrink-0 flex-wrap items-center gap-1">
+                          <Button
+                            className="ui-btn"
+                            data-variant={isCopied ? 'secondary' : 'primary'}
+                            data-size="sm"
+                            onClick={() => handleCopy(clip)}
+                            title="Copy to clipboard"
+                          >
+                            {isCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+                            <span className="sr-only sm:not-sr-only">{isCopied ? 'Copied' : 'Copy'}</span>
+                          </Button>
+                          <Menu
+                            onAction={(action) => {
+                              if (action === 'share') void handleShare(clip);
+                              if (action === 'pin') toggleClipPin(clip.id);
+                              if (action === 'up') moveClip(clip, -1);
+                              if (action === 'down') moveClip(clip, 1);
+                              if (action === 'edit') openEditor(clip);
+                              if (action === 'delete') void handleDelete(clip);
+                            }}
+                          >
+                            <MenuTrigger
+                              aria-label={`Actions for ${clip.label}`}
+                              className="ui-btn"
+                              data-variant="ghost"
+                              data-size="icon"
+                            >
+                              <MoreHorizontal className="size-4" aria-hidden="true" />
+                            </MenuTrigger>
+                            <MenuContent className="ui-popup">
+                              {canWebShare && (
+                                <MenuItem value="share" className="ui-menu-item">
+                                  <Share2 className="size-4" aria-hidden="true" /> Share clip
+                                </MenuItem>
+                              )}
+                              <MenuItem value="pin" className="ui-menu-item">
+                                {clip.pinned
+                                  ? <PinOff className="size-4" aria-hidden="true" />
+                                  : <Pin className="size-4" aria-hidden="true" />}
+                                {clip.pinned ? 'Unpin' : 'Pin to top'}
+                              </MenuItem>
+                              <MenuItem value="up" className="ui-menu-item" disabled={!canMoveUp}>
+                                <ArrowUp className="size-4" aria-hidden="true" /> Move up
+                              </MenuItem>
+                              <MenuItem value="down" className="ui-menu-item" disabled={!canMoveDown}>
+                                <ArrowDown className="size-4" aria-hidden="true" /> Move down
+                              </MenuItem>
+                              <MenuItem value="edit" className="ui-menu-item">
+                                <Edit2 className="size-4" aria-hidden="true" /> Edit clip
+                              </MenuItem>
+                              <MenuSeparator className="ui-menu-separator" />
+                              <MenuItem value="delete" className="ui-menu-item" data-tone="danger">
+                                <Trash2 className="size-4" aria-hidden="true" /> Delete clip
+                              </MenuItem>
+                            </MenuContent>
+                          </Menu>
+                        </div>
+                      </div>
+                      <pre className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded-[var(--radius-sm)] border border-[var(--border-soft)] bg-[var(--color-surface)] p-2 font-mono text-xs text-[var(--color-text-secondary)]">
                           {clip.content}
                         </pre>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center gap-1">
-                        <Button
-                          className="ui-btn"
-                          data-variant={isCopied ? 'secondary' : 'primary'}
-                          data-size="sm"
-                          onClick={() => handleCopy(clip)}
-                          title="Copy to clipboard"
-                        >
-                          {isCopied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
-                          {isCopied ? 'Copied' : 'Copy'}
-                        </Button>
-                        <Menu
-                          onAction={(action) => {
-                            if (action === 'share') void handleShare(clip);
-                            if (action === 'pin') toggleClipPin(clip.id);
-                            if (action === 'up') moveClip(clip, -1);
-                            if (action === 'down') moveClip(clip, 1);
-                            if (action === 'edit') openEditor(clip);
-                            if (action === 'delete') void handleDelete(clip);
-                          }}
-                        >
-                          <MenuTrigger
-                            aria-label={`Actions for ${clip.label}`}
-                            className="ui-btn"
-                            data-variant="ghost"
-                            data-size="icon"
-                          >
-                            <MoreHorizontal className="size-4" aria-hidden="true" />
-                          </MenuTrigger>
-                          <MenuContent className="ui-popup">
-                            {canWebShare && (
-                              <MenuItem value="share" className="ui-menu-item">
-                                <Share2 className="size-4" aria-hidden="true" /> Share clip
-                              </MenuItem>
-                            )}
-                            <MenuItem value="pin" className="ui-menu-item">
-                              {clip.pinned
-                                ? <PinOff className="size-4" aria-hidden="true" />
-                                : <Pin className="size-4" aria-hidden="true" />}
-                              {clip.pinned ? 'Unpin' : 'Pin to top'}
-                            </MenuItem>
-                            <MenuItem value="up" className="ui-menu-item" disabled={!canMoveUp}>
-                              <ArrowUp className="size-4" aria-hidden="true" /> Move up
-                            </MenuItem>
-                            <MenuItem value="down" className="ui-menu-item" disabled={!canMoveDown}>
-                              <ArrowDown className="size-4" aria-hidden="true" /> Move down
-                            </MenuItem>
-                            <MenuItem value="edit" className="ui-menu-item">
-                              <Edit2 className="size-4" aria-hidden="true" /> Edit clip
-                            </MenuItem>
-                            <MenuSeparator className="ui-menu-separator" />
-                            <MenuItem value="delete" className="ui-menu-item" data-tone="danger">
-                              <Trash2 className="size-4" aria-hidden="true" /> Delete clip
-                            </MenuItem>
-                          </MenuContent>
-                        </Menu>
-                      </div>
                     </div>
                     <span className="sr-only">Clip {visibleIdx + 1} of {filteredClips.length}</span>
                   </div>

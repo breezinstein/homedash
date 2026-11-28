@@ -21,3 +21,14 @@ Before writing or changing UI code:
 The dashboard shell lives in `src/components/shell/AppShell.tsx`; the Ctrl+K palette in
 `src/components/CommandPalette.tsx`. Theme colours are written to `--color-*` and the
 document is tagged with `data-theme-type` by `src/lib/themeType.ts`.
+
+Every view has a path (`src/lib/route.ts`): `/monitor`, `/files`, `/settings/<section>`.
+The sidebar is expanded, a 72 px rail, or hidden behind a floating button (`useShell()`
+from `AppShell` switches it). The monitor view is `src/monitor/view/`; its settings are
+the `monitor-*` sections of `SettingsView`, which stage edits in `MonitorDraftProvider`
+and save on Save/Ctrl+S. Shared readings use `StatTile`, `LevelMeter`, `RingMeter`,
+`Sparkline`, `InlineAlert`, `KeyValueList` and `LiveBadge` from `src/components/ui/`, with
+thresholds in `src/lib/levels.ts`. Theme files hook the monitor through `.mv-*` classes.
+
+`npm test` runs the node suites, then the Vitest component tests (`src/**/*.test.tsx`,
+setup in `src/testing/setup.ts`). Every interface gets the ui-sdk agent test.

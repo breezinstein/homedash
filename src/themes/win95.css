@@ -102,51 +102,49 @@ html[data-theme="win95"] textarea {
   box-shadow: none !important;
 }
 
-/* Classic raised controls in Monitor Settings. */
-html[data-theme="win95"] .ms-btn,
-html[data-theme="win95"] .ms-icon-btn,
-html[data-theme="win95"] .ms-add-btn {
+/* Classic raised controls in the monitor and Settings. */
+html[data-theme="win95"] :is(.mv, .ui-settings-panel) .ui-btn {
   border: 2px outset #c0c0c0 !important;
   border-radius: 0 !important;
   background: #c0c0c0 !important;
   color: #000000 !important;
   box-shadow: none !important;
 }
-html[data-theme="win95"] .ms-btn-primary {
+html[data-theme="win95"] :is(.mv, .ui-settings-panel) .ui-btn[data-variant="primary"] {
   background: #000080 !important;
   color: #ffffff !important;
   border: 2px outset #c0c0c0 !important;
 }
-html[data-theme="win95"] .ms-btn-primary:hover:not(:disabled) {
+html[data-theme="win95"] :is(.mv, .ui-settings-panel) .ui-btn[data-variant="primary"]:hover:not([data-disabled]) {
   background: #0000a0 !important;
 }
-html[data-theme="win95"] .ms-btn-danger { color: #800000 !important; }
-html[data-theme="win95"] .ms-btn-success { color: #008000 !important; }
+html[data-theme="win95"] :is(.mv, .ui-settings-panel) .ui-btn:is([data-variant="danger"], [data-variant="outline-danger"]) { color: #800000 !important; }
 
-html[data-theme="win95"] .ms-toggle-track {
+html[data-theme="win95"] :is(.mv, .ui-settings-panel) .ui-switch {
   border-radius: 0 !important;
   border: 2px inset #c0c0c0 !important;
   background: #c0c0c0 !important;
 }
-html[data-theme="win95"] .ms-toggle-wrap[data-checked="true"] .ms-toggle-track {
+html[data-theme="win95"] :is(.mv, .ui-settings-panel) .ui-switch[data-checked] {
   background: #008000 !important;
   border-color: #404040 !important;
 }
-html[data-theme="win95"] .ms-toggle-thumb {
+html[data-theme="win95"] :is(.mv, .ui-settings-panel) .ui-switch [data-slot="switch-thumb"] {
   border-radius: 0 !important;
   background: #ffffff !important;
 }
 
 /* Square every pill/badge and status dot in the Win95 vocabulary. */
 html[data-theme="win95"] .rounded-full,
-html[data-theme="win95"] .status-pill-dot,
-html[data-theme="win95"] .stream-dot,
-html[data-theme="win95"] .net-iface-dot,
-html[data-theme="win95"] .docker-count-swatch,
-html[data-theme="win95"] .ms-nav-dot {
+html[data-theme="win95"] .ui-live-dot,
+html[data-theme="win95"] .ui-status-dot,
+html[data-theme="win95"] .ui-settings-dot,
+html[data-theme="win95"] .mv-dot,
+html[data-theme="win95"] .mv-tl-marker,
+html[data-theme="win95"] .ui-tl-marker {
   border-radius: 0 !important;
 }
 
-html[data-theme="win95"] .monitor-shell .tab.active {
+html[data-theme="win95"] .mv-tab[data-selected] {
   box-shadow: inset 0 0 0 2px #ffffff !important;
 }

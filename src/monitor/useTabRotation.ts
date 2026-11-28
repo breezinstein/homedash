@@ -82,6 +82,8 @@ export function useTabRotation({
       if (e.ctrlKey || e.metaKey || e.altKey) return; // browser shortcuts / OS binds
       if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
       if (isEditableTarget(e.target)) return;
+      // The tab list moves its own selection with the arrow keys.
+      if (e.target instanceof Element && e.target.closest('[role="tablist"], [role="listbox"], [role="slider"], [role="radiogroup"]')) return;
       e.preventDefault();
       const idx = TAB_ORDER.indexOf(activeTab);
       const delta = e.key === 'ArrowRight' ? 1 : -1;

@@ -16,6 +16,8 @@ import { useAuth } from './AuthContext';
 import { BackupsProvider } from './BackupsContext';
 import { defaultNotifications, NotificationsProvider } from './NotificationsContext';
 
+type ServerExtras = Partial<Pick<RemoteServer, 'monitor' | 'dockerSocket' | 'dockerUrl'>>;
+
 interface DashboardContextType {
   config: DashboardConfig;
   setConfig: (config: DashboardConfig) => void;
@@ -51,8 +53,8 @@ interface DashboardContextType {
   reorderClips: (newOrder: Clip[]) => void;
   copyClipToSystemClipboard: (content: string) => Promise<boolean>;
   servers: RemoteServer[];
-  addServer: (name: string, url: string, username?: string, password?: string) => void;
-  updateServer: (id: string, patch: Partial<Pick<RemoteServer, 'name' | 'url' | 'username' | 'password'>>) => void;
+  addServer: (name: string, url: string, username?: string, password?: string, extra?: ServerExtras) => void;
+  updateServer: (id: string, patch: Partial<Pick<RemoteServer, 'name' | 'url' | 'username' | 'password' | 'monitor' | 'dockerSocket' | 'dockerUrl'>>) => void;
   deleteServer: (id: string) => void;
   inverters: InverterServer[];
   addInverter: (name: string, url: string, username?: string, password?: string) => void;
@@ -87,7 +89,6 @@ const defaultConfig: DashboardConfig = {
   monitoring: {
     enabled: false,
     pollIntervalSeconds: 10,
-    glancesHosts: [],
     solar: { enabled: false },
     docker: { enabled: true },
     media: [],
@@ -297,7 +298,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Inject the user's custom CSS into the document so it overrides theme
-    // variables. Shared with /monitor (see useMonitorTheme).
+    // variables. The monitor view lives in the same tree, so it follows too.
     applyCustomCss(config.settings?.customCSS);
   }, [config.settings?.customCSS]);
 
@@ -513,7 +514,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     setConfig({ ...configRef.current, servers: next });
   }, [setConfig]);
 
-  const addServer = useCallback((name: string, url: string, username?: string, password?: string) => {
+  const addServer = useCallback((name: string, url: string, username?: string, password?: string, extra: ServerExtras = {}) => {
     const newServer: RemoteServer = {
       id: newId(),
       name: name.trim() || 'Untitled Server',
@@ -521,11 +522,14 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
       ...(username ? { username: username.trim() } : {}),
       ...(password ? { password } : {}),
       createdAt: new Date().toISOString(),
+      monitor: extra.monitor ?? false,
+      ...(extra.dockerSocket?.trim() ? { dockerSocket: extra.dockerSocket.trim() } : {}),
+      ...(extra.dockerUrl?.trim() ? { dockerUrl: extra.dockerUrl.trim() } : {}),
     };
     setServers([...(configRef.current.servers ?? []), newServer]);
   }, [setServers]);
 
-  const updateServer = useCallback((id: string, patch: Partial<Pick<RemoteServer, 'name' | 'url' | 'username' | 'password'>>) => {
+  const updateServer = useCallback((id: string, patch: Partial<Pick<RemoteServer, 'name' | 'url' | 'username' | 'password' | 'monitor' | 'dockerSocket' | 'dockerUrl'>>) => {
     const next = (configRef.current.servers ?? []).map(s =>
       s.id === id
         ? {
@@ -534,6 +538,9 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
             ...(patch.url !== undefined ? { url: patch.url.trim() } : {}),
             ...(patch.username !== undefined ? { username: patch.username.trim() || undefined } : {}),
             ...(patch.password !== undefined ? { password: patch.password || undefined } : {}),
+            ...(patch.monitor !== undefined ? { monitor: patch.monitor } : {}),
+            ...(patch.dockerSocket !== undefined ? { dockerSocket: patch.dockerSocket.trim() || undefined } : {}),
+            ...(patch.dockerUrl !== undefined ? { dockerUrl: patch.dockerUrl.trim() || undefined } : {}),
           }
         : s
     );
