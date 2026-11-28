@@ -948,3 +948,17 @@ test('the overview says whether the poller is running and never reports ok befor
   assert.equal(o.globalStatus, 'unknown');
   assert.equal(o.timestamp, 0);
 });
+
+test('reconfigure starts the poller when monitoring is switched on, and stops it when switched off', () => {
+  const cfg = { monitoring: { enabled: false, pollIntervalSeconds: 60 } };
+  const m = new MonitorManager(() => cfg, null);
+  m.start();
+  assert.equal(m.getOverview().running, false);
+  cfg.monitoring.enabled = true;
+  m.reconfigure();
+  assert.equal(m.getOverview().running, true);
+  cfg.monitoring.enabled = false;
+  m.reconfigure();
+  assert.equal(m.getOverview().running, false);
+  m.stop();
+});

@@ -1,4 +1,5 @@
 import { act, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { createAgent } from '@ui-sdk/react/agent';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -178,5 +179,39 @@ describe('MonitorView', () => {
     const rail = screen.getByRole('complementary', { name: 'Alerts' });
     expect(within(rail).getByText('glances on alpha is unhealthy')).toBeTruthy();
     expect(within(rail).getByText('glances on bravo is unhealthy')).toBeTruthy();
+  });
+
+  test('leaving the monitor mid-kiosk gives the rest of the app its sidebar back', async () => {
+    localStorage.setItem('homedash-sidebar-mode', 'rail');
+    function Harness() {
+      const [onMonitor, setOnMonitor] = useState(true);
+      return (
+        <AppShell tools={[]} view={onMonitor ? 'monitor' : 'settings'} onNavigate={() => setOnMonitor(false)} categories={[]} authEnabled={false} authenticated onSignIn={() => {}} onSignOut={() => {}} onOpenPalette={() => {}} notifications={null} serviceCount={0}>
+          {onMonitor ? <MonitorView onOpenSettings={() => setOnMonitor(false)} /> : <p>Settings page</p>}
+        </AppShell>
+      );
+    }
+    render(<Harness />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Kiosk' }));
+    expect(screen.getByRole('button', { name: /^Open sidebar/ })).toBeTruthy();
+    await userEvent.click(screen.getByRole('button', { name: 'Monitor settings' }));
+    expect(screen.getByText('Settings page')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Open sidebar/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Expand sidebar' })).toBeTruthy();
+    expect(localStorage.getItem('homedash-sidebar-mode')).toBe('rail');
+  });
+
+  test('warnings with an ok server status read as needing attention', async () => {
+    current = {
+      ...overview,
+      timestamp: Date.now(),
+      globalStatus: 'ok',
+      hosts: [host('a', 'alpha', 20, 30)],
+      alerts: { firing: [], recentlyResolved: [] },
+      arr: { status: 'ok', queue: [], instances: [{ name: '', type: 'sonarr', status: 'ok', queueCount: 0, wantedCount: 0, healthOk: false, healthWarnings: ['Indexer down'] }] },
+    };
+    render(<MonitorView onOpenSettings={() => {}} />);
+    expect(await screen.findByText('Needs attention · 1 to check')).toBeTruthy();
+    expect(screen.queryByText(/All systems normal/)).toBeNull();
   });
 });

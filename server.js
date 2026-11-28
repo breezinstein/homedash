@@ -193,7 +193,6 @@ const defaultConfig = {
   monitoring: {
     enabled: false,
     pollIntervalSeconds: 10,
-    glancesHosts: [],
     solar: { enabled: false },
     docker: { enabled: true },
     media: [],
@@ -261,7 +260,7 @@ refreshConfigCache();
   await notificationManager.load();
   if (configCache.config === null) await refreshConfigCache();
   let dirty = false;
-  if (configCache.config && Array.isArray(configCache.config.monitoring?.glancesHosts)) {
+  if (configCache.config && (configCache.config.monitoring?.glancesHosts?.length ?? 0) > 0) {
     // One-time merge of the monitor's Glances hosts into `servers`. Keep the
     // pre-merge document as a backup so the old layout can be restored.
     try {

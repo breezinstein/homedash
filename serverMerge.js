@@ -28,10 +28,6 @@ export function monitoredHosts(config) {
   return servers.filter((s) => s && s.monitor === true && typeof s.url === 'string' && s.url);
 }
 
-function sameLogin(a, b) {
-  return (a.username || '') === (b.username || '') && (a.password || '') === (b.password || '');
-}
-
 /**
  * Fold `monitoring.glancesHosts` into `servers`. Mutates `config`.
  * Returns what happened so callers can log it and decide whether to persist.
@@ -76,7 +72,10 @@ export function mergeServerLists(config, now = new Date()) {
       const serverHasLogin = Boolean(existing.username || existing.password);
       // Only a monitor login replaces the server's; a host without one keeps
       // the working credentials Server stats already had.
-      if (hostHasLogin && serverHasLogin && !sameLogin(existing, host)) {
+      // Field by field: a monitor username or password replaces the server's
+      // own, and anything the monitor host leaves out keeps the working value.
+      const differs = (field) => Boolean(host[field]) && Boolean(existing[field]) && host[field] !== existing[field];
+      if (hostHasLogin && serverHasLogin && (differs('username') || differs('password'))) {
         result.conflicts.push(host.name || existing.name || host.url);
       }
       // The monitor host's id wins unless another server already has it.
@@ -84,12 +83,8 @@ export function mergeServerLists(config, now = new Date()) {
       if (existing.id && existing.id !== id) renamedIds.set(existing.id, id);
       if (host.id && host.id !== id) renamedIds.set(host.id, id);
       const merged = { ...existing, ...docker, id, name: host.name || existing.name, monitor: true };
-      if (hostHasLogin) {
-        delete merged.username;
-        delete merged.password;
-        if (host.username) merged.username = host.username;
-        if (host.password) merged.password = host.password;
-      }
+      if (host.username) merged.username = host.username;
+      if (host.password) merged.password = host.password;
       servers[idx] = merged;
       result.merged++;
     } else {

@@ -30,6 +30,7 @@ Element.prototype.checkVisibility = () => true;
 Element.prototype.getClientRects = () => [] as unknown as DOMRectList;
 document.elementFromPoint = () => null;
 document.elementsFromPoint = () => [];
+window.scrollTo = () => {};
 globalThis.ResizeObserver ??= class {
   observe() {}
   unobserve() {}

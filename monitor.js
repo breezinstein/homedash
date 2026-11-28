@@ -2309,10 +2309,11 @@ export class MonitorManager {
     console.log('Monitor: poller stopped');
   }
 
+  // Follow the saved config: start() does nothing while monitoring is
+  // disabled, so turning it on in Settings starts the poller without a restart.
   reconfigure() {
-    const wasRunning = this._running;
     this.stop();
-    if (wasRunning) this.start();
+    this.start();
   }
 
   async _tick() {

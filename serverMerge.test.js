@@ -135,3 +135,14 @@ test('an overlap whose monitor id belongs to another server gets a fresh id, and
   // Rules were evaluated against monitor host ids, so both now point at the merged entry.
   assert.deepEqual(config.monitoring.alerts.map((r) => r.host), [merged.id, merged.id]);
 });
+
+test('a username-only monitor entry keeps the server password', () => {
+  const config = {
+    servers: [{ id: 's1', name: 'nas', url: 'http://nas.lan', username: 'svc', password: 'secret' }],
+    monitoring: { glancesHosts: [{ id: 'h1', name: 'nas', url: 'http://nas.lan', username: 'svc' }] },
+  };
+  const r = mergeServerLists(config, NOW);
+  assert.deepEqual(r.conflicts, []);
+  assert.equal(config.servers[0].username, 'svc');
+  assert.equal(config.servers[0].password, 'secret');
+});

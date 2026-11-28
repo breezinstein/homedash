@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { DashboardProvider, useDashboard } from './context/DashboardContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { CategorySection } from './components';
@@ -12,8 +12,8 @@ import { EditModeToggle } from './components/ui/EditModeToggle';
 import { useBrowserNotifications } from './components/notifications/useBrowserNotifications';
 import { NotificationsBell } from './components/notifications/NotificationsBell';
 import { useShortcut } from '@ui-sdk/react/shortcuts';
-import { formatRoute, parseRoute, type View } from './lib/route';
-import { canLeave, guardPopState } from './lib/navGuard';
+import type { View } from './lib/route';
+import { useViewRoute } from './lib/useViewRoute';
 import { useFiringAlerts } from './monitor/useFiringAlerts';
 import type { Service } from './types';
 import type { SectionKey as SettingsSection } from './components/SettingsView';
@@ -46,7 +46,6 @@ const NotificationsPanel = lazy(() => import('./components/notifications/Notific
 const LoginModal = lazy(() => import('./components/LoginModal').then(m => ({ default: m.LoginModal })));
 const MonitorView = lazy(() => import('./monitor/view/MonitorView').then(m => ({ default: m.MonitorView })));
 
-const initialRoute = parseRoute(window.location.pathname);
 
 const ADMIN_VIEWS: View[] = ['stats', 'inverter', 'clipboard', 'notifications', 'settings'];
 
@@ -100,7 +99,6 @@ function Dashboard() {
   } = useDashboard();
   const { authEnabled, authenticated, loginRequired, acknowledgeLoginRequired, logout } = useAuth();
 
-  const [view, setView] = useState<View>(initialRoute.view);
   const [editingServiceIndex, setEditingServiceIndex] = useState<number | null>(null);
   const [showServiceModal, setShowServiceModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -109,47 +107,14 @@ function Dashboard() {
   const [categoryDraggedOver, setCategoryDraggedOver] = useState<string | null>(null);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  const [settingsSection, setSettingsSection] = useState<string | undefined>(initialRoute.section);
   const alertCount = useFiringAlerts();
 
   const canEdit = authenticated;
 
-  // The path the app last settled on, to put back when a guard keeps the person on the page.
-  const pathRef = useRef(window.location.pathname);
-
-  const navigate = useCallback(async (next: string, section?: string) => {
-    const target = next as View;
-    if (ADMIN_VIEWS.includes(target) && !authenticated) {
-      setShowLoginModal(true);
-      return;
-    }
-    if (!(await canLeave())) return;
-    setView(target);
-    setSettingsSection(target === 'settings' ? section : undefined);
-    const path = formatRoute({ view: target, section: target === 'settings' ? section : undefined }, initialRoute.base);
-    if (path !== window.location.pathname) window.history.pushState(null, '', path);
-    pathRef.current = path;
-    window.scrollTo({ top: 0 });
-  }, [authenticated]);
-
-  // Back and forward move between views.
-  useEffect(() => {
-    const onPop = () => {
-      const target = window.location.pathname;
-      void guardPopState(
-        pathRef.current,
-        () => {
-          const route = parseRoute(target);
-          pathRef.current = target;
-          setView(route.view);
-          setSettingsSection(route.section);
-        },
-        (stay) => window.history.pushState(null, '', stay),
-      );
-    };
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, []);
+  const canOpen = useCallback((target: View) => !ADMIN_VIEWS.includes(target) || authenticated, [authenticated]);
+  const onBlocked = useCallback(() => setShowLoginModal(true), []);
+  const { view, section: settingsSection, navigate: go, reset, showSection, initialView } = useViewRoute({ canOpen, onBlocked });
+  const navigate = useCallback((next: string, section?: string) => { void go(next as View, section); }, [go]);
 
   // A 401 from any request flips loginRequired: surface the sign-in dialog and
   // drop every privileged surface so the page snaps back to an anonymous state.
@@ -157,20 +122,16 @@ function Dashboard() {
     if (!loginRequired) return;
     setShowLoginModal(true);
     setIsEditMode(false);
-    setView('dashboard');
-    window.history.replaceState(null, '', formatRoute({ view: 'dashboard' }, initialRoute.base)); pathRef.current = window.location.pathname;
+    reset('dashboard');
     setShowServiceModal(false);
     setShowCategoryModal(false);
     setPaletteOpen(false);
-  }, [loginRequired, setIsEditMode]);
+  }, [loginRequired, setIsEditMode, reset]);
 
   // Losing the session while on an admin view falls back to the dashboard.
   useEffect(() => {
-    if (authEnabled && !authenticated && ADMIN_VIEWS.includes(view)) {
-      setView('dashboard');
-      window.history.replaceState(null, '', formatRoute({ view: 'dashboard' }, initialRoute.base)); pathRef.current = window.location.pathname;
-    }
-  }, [authEnabled, authenticated, view]);
+    if (authEnabled && !authenticated && ADMIN_VIEWS.includes(view)) reset('dashboard');
+  }, [authEnabled, authenticated, view, reset]);
 
   useShortcut('mod+k', () => setPaletteOpen(true), { description: 'Search services and views' });
   useShortcut('mod+shift+c', () => navigate('clipboard'), { description: 'Clipboard' });
@@ -326,7 +287,7 @@ function Dashboard() {
       status={<SyncStatus />}
       serviceCount={config.services.length}
       alertCount={alertCount}
-      startHidden={initialRoute.view === 'monitor'}
+      startHidden={initialView === 'monitor'}
       notifications={
         <NotificationsBell
           onClick={authenticated ? () => navigate('notifications') : () => setShowLoginModal(true)}
@@ -468,11 +429,7 @@ function Dashboard() {
             <SettingsView
               key={settingsSection ?? 'default'}
               initialSection={settingsSection as SettingsSection | undefined}
-              onSectionChange={(section) => {
-                const path = formatRoute({ view: 'settings', section }, initialRoute.base);
-                if (path !== window.location.pathname) window.history.replaceState(null, '', path);
-                pathRef.current = path;
-              }}
+              onSectionChange={showSection}
             />
           )}
         </Suspense>

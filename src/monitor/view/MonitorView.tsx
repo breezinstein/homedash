@@ -25,8 +25,8 @@ const TABS: { key: MonitorTab; label: string; icon: typeof Home }[] = [
   { key: 'power', label: 'Power', icon: Zap },
 ];
 
-const STATUS_TEXT = { ok: 'All systems normal', degraded: 'Degraded', critical: 'Critical', unknown: 'Unknown' } as const;
-const STATUS_TONE = { ok: 'success', degraded: 'warning', critical: 'danger', unknown: undefined } as const;
+const STATUS_TEXT = { ok: 'All systems normal', attention: 'Needs attention', degraded: 'Degraded', critical: 'Critical', unknown: 'Unknown' } as const;
+const STATUS_TONE = { ok: 'success', attention: 'warning', degraded: 'warning', critical: 'danger', unknown: undefined } as const;
 
 function Clock() {
   const [now, setNow] = useState(() => new Date());
@@ -85,6 +85,16 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
     wasFullscreen.current = fullscreen;
   }, [fullscreen, kioskFrom, setMode]);
 
+  // Leaving the monitor mid-kiosk (floating button → Settings) must not strand
+  // the rest of the app hidden and full screen.
+  const kioskExit = useRef<() => void>(() => {});
+  kioskExit.current = () => {
+    if (kioskFrom === null) return;
+    setMode(kioskFrom, { persist: false });
+    exitFullscreen();
+  };
+  useEffect(() => () => kioskExit.current(), []);
+
   // Feed the last-hour trends once per snapshot.
   useEffect(() => {
     if (!overview) return;
@@ -106,9 +116,10 @@ export function MonitorView({ onOpenSettings }: { onOpenSettings: () => void }) 
   const off = !error && overview?.running === false;
   const stale = !error && !off && !!overview && (!snapshotAt || now - snapshotAt > Math.max(30_000, pollMs * 3));
   const snapshotTime = snapshotAt ? new Date(snapshotAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null;
-  const status = error || off || stale ? 'unknown' : overview?.globalStatus ?? 'unknown';
+  const serverStatus = error || off || stale ? 'unknown' : overview?.globalStatus ?? 'unknown';
   const firing = overview?.alerts?.firing ?? [];
   const issues = useMemo(() => collectIssues(overview), [overview]);
+  const status = serverStatus === 'ok' && issues.length > 0 ? 'attention' : serverStatus;
   const updated = lastUpdated?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const pollSeconds = Math.round((overview?.pollIntervalMs ?? 5000) / 1000);
   const banner = useMemo(() => {
